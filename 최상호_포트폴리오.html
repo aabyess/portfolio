@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>최상호 — Frontend Developer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Pretendard:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --white: #ffffff;
+      --bg: #f8f7f4;
+      --surface: #f2f0ec;
+      --border: #e8e5df;
+      --border-dark: #d4d0c8;
+      --text: #1a1917;
+      --muted: #8a877f;
+      --subtle: #b8b4ac;
+      --accent: #2563eb;
+      --accent-light: #eff6ff;
+      --green: #16a34a;
+      --serif: 'DM Serif Display', serif;
+      --sans: 'Pretendard', -apple-system, sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 15px;
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* NAV */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(248,247,244,0.92);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      max-width: 1080px; margin: 0 auto; padding: 0 40px;
+      height: 58px; display: flex; justify-content: space-between; align-items: center;
+    }
+    .nav-logo { font-family: var(--serif); font-size: 19px; color: var(--text); }
+    .nav-links { display: flex; gap: 28px; list-style: none; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 500; transition: color 0.15s; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-contact {
+      background: var(--text); color: var(--white) !important;
+      padding: 7px 18px; border-radius: 6px;
+    }
+    .nav-contact:hover { opacity: 0.8; }
+
+    /* LAYOUT */
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 0 40px; }
+
+    /* ── HERO ── */
+    #hero {
+      background: var(--white);
+      border-bottom: 1px solid var(--border);
+      padding: 150px 0 90px;
+    }
+    .hero-inner { max-width: 1080px; margin: 0 auto; padding: 0 40px; }
+
+    .hero-tag {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--accent); margin-bottom: 24px;
+    }
+    .hero-tag::before { content:''; width: 20px; height: 2px; background: var(--accent); border-radius:1px; }
+
+    h1 {
+      font-family: var(--serif);
+      font-size: clamp(44px, 5.5vw, 70px);
+      font-weight: 400; line-height: 1.1; letter-spacing: -1.5px;
+      color: var(--text); margin-bottom: 28px;
+    }
+    h1 em { font-style: italic; color: var(--accent); }
+
+    .hero-quote {
+      max-width: 600px;
+      font-size: 16px; color: var(--muted); line-height: 1.9;
+      font-weight: 400; margin-bottom: 44px;
+      border-left: 2px solid var(--accent);
+      padding-left: 20px;
+    }
+
+    .hero-actions { display: flex; gap: 12px; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 11px 22px; border-radius: 7px;
+      font-size: 14px; font-weight: 600; text-decoration: none;
+      transition: all 0.15s; border: none; cursor: pointer; font-family: var(--sans);
+    }
+    .btn-dark { background: var(--text); color: var(--white); }
+    .btn-dark:hover { background: #2a2a2a; }
+    .btn-outline { background: transparent; color: var(--text); border: 1.5px solid var(--border-dark); }
+    .btn-outline:hover { border-color: var(--text); }
+
+    /* ── PROJECTS ── */
+    #projects { padding: 96px 0; }
+
+    .sec-label { font-size: 11px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+    h2 { font-family: var(--serif); font-size: clamp(28px, 3.5vw, 40px); font-weight: 400; letter-spacing: -0.8px; color: var(--text); }
+    .sec-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 52px; }
+
+    /* Row */
+    .projects-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+    .proj-row {
+      background: var(--white);
+      border: 1.5px solid var(--border);
+      border-radius: 16px; overflow: hidden;
+      display: flex; flex-direction: column;
+      transition: box-shadow 0.25s, border-color 0.2s, transform 0.2s;
+    }
+    .proj-row:hover { box-shadow: 0 8px 36px rgba(0,0,0,0.08); border-color: var(--border-dark); transform: translateY(-3px); }
+
+    .proj-row-img {
+      overflow: hidden; border-bottom: 1.5px solid var(--border);
+      height: 520px; flex-shrink: 0;
+    }
+    .proj-row-img img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.3s; }
+    .proj-row-img video { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .proj-row:hover .proj-row-img img { transform: scale(1.02); }
+
+    .proj-row-body { padding: 36px 40px; display: flex; flex-direction: column; justify-content: space-between; flex: 1; }
+
+    /* Project content */
+    .proj-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+    .proj-period { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: 0.04em; }
+    .proj-badge {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      padding: 2px 8px; border-radius: 4px; background: var(--accent-light); color: var(--accent);
+    }
+
+    .proj-name { font-family: var(--serif); font-size: 28px; font-weight: 400; letter-spacing: -0.5px; color: var(--text); margin-bottom: 8px; line-height: 1.15; }
+    .proj-name-sm { font-family: var(--serif); font-size: 21px; font-weight: 400; letter-spacing: -0.3px; color: var(--text); margin-bottom: 6px; line-height: 1.2; }
+    .proj-desc { font-size: 14px; color: var(--muted); line-height: 1.75; margin-bottom: 18px; }
+
+    .proj-points { list-style: none; display: flex; flex-direction: column; gap: 5px; margin-bottom: 22px; }
+    .proj-points li { font-size: 13px; color: var(--muted); padding-left: 16px; position: relative; line-height: 1.65; }
+    .proj-points li::before { content: '—'; position: absolute; left: 0; color: var(--subtle); font-size: 11px; top: 2px; }
+
+    .proj-bottom { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px; }
+    .proj-stack { display: flex; flex-wrap: wrap; gap: 6px; }
+    .stack-tag { font-size: 11px; font-weight: 600; color: var(--muted); background: var(--surface); padding: 3px 10px; border-radius: 4px; border: 1px solid var(--border); }
+
+    .proj-links { display: flex; gap: 8px; }
+    .link-btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 12px; font-weight: 600; color: var(--muted); text-decoration: none;
+      border: 1.5px solid var(--border); padding: 5px 12px; border-radius: 6px;
+      transition: all 0.15s; white-space: nowrap;
+    }
+    .link-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+    .link-btn.live { background: var(--text); color: var(--white); border-color: var(--text); }
+    .link-btn.live:hover { background: #2a2a2a; border-color: #2a2a2a; color: var(--white); }
+
+    @media (max-width: 760px) {
+      .projects-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── CONTACT ── */
+    #contact {
+      background: var(--white);
+      border-top: 1px solid var(--border);
+      padding: 96px 0;
+    }
+    .contact-inner { max-width: 1080px; margin: 0 auto; padding: 0 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: start; }
+
+    .contact-title { font-family: var(--serif); font-size: 36px; font-weight: 400; letter-spacing: -0.8px; line-height: 1.2; color: var(--text); margin-bottom: 16px; }
+    .contact-title em { font-style: italic; color: var(--accent); }
+    .contact-desc { color: var(--muted); font-size: 15px; line-height: 1.8; }
+
+    .contact-list { display: flex; flex-direction: column; gap: 12px; }
+    .contact-item {
+      display: flex; align-items: center; gap: 14px;
+      padding: 18px 22px;
+      background: var(--bg); border: 1.5px solid var(--border); border-radius: 10px;
+      text-decoration: none; color: var(--text); transition: all 0.15s;
+    }
+    .contact-item:hover { border-color: var(--accent); background: var(--accent-light); }
+    .contact-item:hover .ci-label { color: var(--accent); }
+    .ci-icon { width: 36px; height: 36px; background: var(--white); border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 16px; border: 1px solid var(--border); }
+    .ci-info { flex: 1; }
+    .ci-type { font-size: 11px; font-weight: 700; color: var(--subtle); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 2px; }
+    .ci-label { font-size: 14px; font-weight: 500; color: var(--text); }
+
+    /* FOOTER */
+    footer { border-top: 1px solid var(--border); background: var(--bg); padding: 28px 0; }
+    .footer-inner { max-width: 1080px; margin: 0 auto; padding: 0 40px; display: flex; justify-content: space-between; align-items: center; }
+    .footer-logo { font-family: var(--serif); font-size: 17px; color: var(--text); }
+    .footer-text { font-size: 13px; color: var(--subtle); }
+
+    /* ANIMATION */
+    .fade-in { opacity: 0; transform: translateY(18px); transition: opacity 0.5s ease, transform 0.5s ease; }
+    .fade-in.visible { opacity: 1; transform: translateY(0); }
+
+    /* RESPONSIVE */
+    @media (max-width: 860px) {
+      .nav-links { display: none; }
+      .wrap, .nav-inner, .footer-inner { padding: 0 20px; }
+      #hero { padding: 100px 0 60px; }
+      .hero-inner { padding: 0 20px; }
+      #projects { padding: 64px 0; }
+      .proj-featured { grid-template-columns: 1fr; }
+      .proj-featured-img { border-left: none; border-top: 1.5px solid var(--border); min-height: 220px; }
+      .proj-row { grid-template-columns: 1fr; }
+      .proj-row-img { border-right: none; border-bottom: 1.5px solid var(--border); min-height: 180px; }
+      .contact-inner { grid-template-columns: 1fr; gap: 40px; padding: 0 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <div class="nav-logo">최상호</div>
+    <ul class="nav-links">
+      <li><a href="#projects">프로젝트</a></li>
+      <li><a href="#contact" class="nav-contact">연락하기</a></li>
+    </ul>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="hero-inner fade-in">
+    <div class="hero-tag">Frontend Developer</div>
+    <h1>사용자 경험을<br /><em>최우선으로</em> 생각하는<br />개발자입니다</h1>
+    <p class="hero-quote">
+      "왜 이렇게 불편하지?" 라는 질문이 저를 프론트엔드로 이끌었습니다.<br />
+      클릭 한 번, 로딩 한 순간도 사용자의 경험이라 생각하며 디테일을 챙기고,<br />
+      누구나 처음 써도 헤매지 않는 인터페이스를 만드는 개발자입니다.
+    </p>
+    <div class="hero-actions">
+      <a href="#projects" class="btn btn-dark">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
+        프로젝트 보기
+      </a>
+      <a href="https://github.com/aabyess" target="_blank" class="btn btn-outline">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECTS -->
+<section id="projects">
+  <div class="wrap">
+    <div class="sec-header fade-in">
+      <div>
+        <div class="sec-label">Projects</div>
+        <h2>프로젝트</h2>
+      </div>
+      <a href="https://github.com/aabyess" target="_blank" class="btn btn-outline" style="font-size:13px;padding:9px 18px;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+        GitHub 전체 보기
+      </a>
+    </div>
+
+    <div class="projects-grid">
+    <!-- RE:BOOT -->
+    <div class="proj-row fade-in">
+      <div class="proj-row-img">
+        <img src="images/reboot.png" alt="RE:BOOT 서비스 화면" />
+      </div>
+      <div class="proj-row-body">
+        <div>
+          <div class="proj-meta">
+            <span class="proj-period">2026.02 — 2026.04</span>
+            <span class="proj-badge">부트캠프 팀 프로젝트</span>
+          </div>
+          <div class="proj-name-sm">RE:BOOT</div>
+          <div class="proj-desc">번아웃과 자기관리를 테마로 한 모임/커뮤니티 플랫폼. 관심사 기반으로 모임을 탐색·참여·개설·관리하며 리뷰와 게시판으로 소통하는 서비스.</div>
+          <ul class="proj-points">
+            <li>자유게시판 Connect 영역 전체 CRUD 담당 — 목록 탐색부터 작성·수정·삭제까지 사용자가 끊기지 않고 이동할 수 있는 플로우 설계</li>
+            <li>좋아요 클릭 시 조회수가 3씩 증가하는 버그를 발견, API가 3중 호출되는 원인을 파악해 중복 요청을 제거하고 정상화</li>
+            <li>queryKey를 각 파일에서 문자열로 관리하던 방식에서 connectQueryKeys 객체로 중앙화해 캐시 불일치 해소 및 중복 API 호출 방지</li>
+            <li>좋아요 반응이 서버 응답 후 반영되어 0.5초 딜레이가 느껴지는 문제를 Optimistic Update로 해결해 즉각적인 UI 반응 구현</li>
+            <li>게시글 작성 중 이탈 시 모달로 경고해 사용자 실수로 인한 작성 내용 유실 방지</li>
+            <li>페이지네이션에서 데이터 패칭 완료 전 스크롤이 먼저 실행되는 문제를 shouldScroll 상태와 useEffect로 제어해 UX 개선</li>
+            <li>섹션마다 빈 상태·에러 상황이 다른 점을 고려해 섹션별 ErrorBoundary 적용, 일부 API 실패 시에도 전체 페이지 중단 없이 운영</li>
+          </ul>
+        </div>
+        <div class="proj-bottom">
+          <div class="proj-stack">
+            <span class="stack-tag">Next.js</span>
+            <span class="stack-tag">TypeScript</span>
+            <span class="stack-tag">TailwindCSS</span>
+            <span class="stack-tag">React Query</span>
+            <span class="stack-tag">Zustand</span>
+            <span class="stack-tag">Storybook</span>
+            <span class="stack-tag">Jest</span>
+
+          </div>
+          <div class="proj-links">
+            <a href="https://reboot-codeit.vercel.app/" target="_blank" class="link-btn live">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              라이브
+            </a>
+            <a href="https://github.com/aabyess/Reboot" target="_blank" class="link-btn">GitHub</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI 면접 준비 -->
+    <div class="proj-row fade-in">
+      <div class="proj-row-img">
+        <video src="images/interview.mp4" autoplay loop muted playsinline style="width:100%;height:100%;object-fit:cover;display:block;"></video>
+      </div>
+      <div class="proj-row-body">
+        <div>
+          <div class="proj-meta">
+            <span class="proj-period">2025.11 — 2025.12</span>
+            <span class="proj-badge">개인 프로젝트</span>
+          </div>
+          <div class="proj-name-sm">AI 기반 면접 준비 플랫폼</div>
+          <div class="proj-desc">이력서를 AI가 분석해 맞춤 면접 질문을 생성하고 답변 피드백과 커뮤니티 소통까지 제공하는 개발자 면접 준비 플랫폼.</div>
+          <ul class="proj-points">
+            <li>이력서/포트폴리오 입력 폼 구현 및 OpenAI API 연동 전체 담당</li>
+            <li>이력서 데이터를 프롬프트에 구조화해 OpenAI API로 맞춤 면접 질문 생성 기능 구현</li>
+            <li>AI 피드백 응답을 JSON으로 파싱해 구조·내용·키워드 항목별로 즉시 렌더링하는 피드백 시스템 구현</li>
+            <li>API 호출 비용 절감을 위해 사용자당 일일 요청 횟수를 50회로 제한하는 사용량 제어 로직 구현</li>
+            <li>면접 답변 공유 및 커뮤니티 피드백 기능 개발 (게시글 작성·조회·댓글)</li>
+          </ul>
+        </div>
+        <div class="proj-bottom">
+          <div class="proj-stack">
+            <span class="stack-tag">React</span>
+            <span class="stack-tag">Node.js</span>
+            <span class="stack-tag">OpenAI API</span>
+          </div>
+          <a href="https://github.com/aabyess/myeonjeop-mate" target="_blank" class="link-btn">GitHub</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- IGNIS -->
+    <div class="proj-row fade-in">
+      <div class="proj-row-img">
+        <img src="images/ignis.png" alt="IGNIS 사회공헌 플랫폼" />
+      </div>
+      <div class="proj-row-body">
+        <div>
+          <div class="proj-meta">
+            <span class="proj-period">2025.03 — 2025.10</span>
+            <span class="proj-badge">팀 프로젝트</span>
+          </div>
+          <div class="proj-name-sm">IGNIS — 사회공헌 플랫폼</div>
+          <div class="proj-desc">기부·펀딩·봉사 활동을 연결하는 온라인 사회공헌 플랫폼. 기부자·수혜자·재능 기부자가 직접 연결되는 투명한 시스템.</div>
+          <ul class="proj-points">
+            <li>홈에서 기부·펀딩·봉사 활동을 통합 조회하고, 각 도메인 페이지에서 참여·등록까지 이어지는 사용자 플로우 설계 및 구현</li>
+            <li>기부·펀딩·봉사 등록 폼에서 필수 항목 미입력 시 유효성 검사 메시지 표시로 사용자 실수 방지</li>
+            <li>React Router 기반 페이지 라우팅 구성 및 Ant Design 컴포넌트 활용해 일관된 UI 구현</li>
+            <li>Java Spring Boot 백엔드와 REST API 연동으로 기부자·수혜자·재능기부자 연결 플로우 구현</li>
+          </ul>
+        </div>
+        <div class="proj-bottom">
+          <div class="proj-stack">
+            <span class="stack-tag">React</span>
+            <span class="stack-tag">Vite</span>
+            <span class="stack-tag">React Router</span>
+            <span class="stack-tag">Ant Design</span>
+            <span class="stack-tag">Axios</span>
+          </div>
+          <a href="https://github.com/aabyess/Ignis.git" target="_blank" class="link-btn">GitHub</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOL Face Matcher -->
+    <div class="proj-row fade-in">
+      <div class="proj-row-img">
+        <img src="images/lol.png" alt="LOL Face Matcher" />
+      </div>
+      <div class="proj-row-body">
+        <div>
+          <div class="proj-meta">
+            <span class="proj-period">2025.03 — 2025.06</span>
+            <span class="proj-badge">개인 프로젝트</span>
+          </div>
+          <div class="proj-name-sm">LOL Face Matcher</div>
+          <div class="proj-desc">League of Legends 플레이어 얼굴을 인식해 유사한 챔피언을 매칭해주는 머신러닝 기반 웹 서비스.</div>
+          <ul class="proj-points">
+            <li>얼굴 사진 업로드 UI 및 매칭 결과 시각화 화면 구현, 결과 대기 중 로딩 처리 적용</li>
+            <li>Python OpenCV 기반 얼굴 특징 추출 및 코사인 유사도 알고리즘으로 성별을 고려한 닮은꼴 챔피언 매칭 기능 개발</li>
+            <li>얼굴 각도·조명 변화로 인한 인식률 저하 문제를 정면 정렬·조명 보정·데이터 증강 적용으로 개선</li>
+            <li>얼굴 업로드·특징 저장·추천 REST API 설계 및 MySQL DB 구조 설계</li>
+          </ul>
+        </div>
+        <div class="proj-bottom">
+          <div class="proj-stack">
+            <span class="stack-tag">React</span>
+            <span class="stack-tag">Node.js</span>
+            <span class="stack-tag">Python</span>
+            <span class="stack-tag">OpenCV</span>
+            <span class="stack-tag">MySQL</span>
+          </div>
+          <a href="https://github.com/aabyess/lol-face-matcher2" target="_blank" class="link-btn">GitHub</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lidge -->
+    <div class="proj-row fade-in">
+      <div class="proj-row-img">
+        <img src="images/lidge.png" alt="Lidge 협업 플랫폼" />
+      </div>
+      <div class="proj-row-body">
+        <div>
+          <div class="proj-meta">
+            <span class="proj-period">2024.03 — 2024.10</span>
+            <span class="proj-badge">팀 프로젝트</span>
+          </div>
+          <div class="proj-name-sm">Lidge — 멀티플레이어 협업 플랫폼</div>
+          <div class="proj-desc">웹 브라우저에서 여러 사용자가 캐릭터를 통해 실시간으로 협업할 수 있는 게임형 협업 플랫폼.</div>
+          <ul class="proj-points">
+            <li>Vue.js 기반 웹 클라이언트 UI 개발 및 Unity WebGL 연동</li>
+            <li>대용량 파일 전송 시 패킷 과부하 → 파일 분할 순차 전달로 해결</li>
+            <li>Firebase Authentication + Firestore 기반 팀 구성·역할 분배 구현</li>
+          </ul>
+        </div>
+        <div class="proj-bottom">
+          <div class="proj-stack">
+            <span class="stack-tag">Vue.js</span>
+            <span class="stack-tag">Unity WebGL</span>
+            <span class="stack-tag">Photon</span>
+            <span class="stack-tag">Firebase</span>
+          </div>
+          <a href="https://github.com/aabyess/LidgeWeb.git" target="_blank" class="link-btn">GitHub</a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  </div>
+</section>
+
+<!-- CONTACT -->
+<section id="contact">
+  <div class="contact-inner">
+    <div class="fade-in">
+      <div class="sec-label">Contact</div>
+      <div class="contact-title">함께 만들어갈<br /><em>기회를</em> 기다립니다</div>
+      <p class="contact-desc">새로운 기회와 협업에 열려 있습니다.<br />프론트엔드 포지션 제안이나 궁금한 점이 있다면<br />편하게 연락 주세요.</p>
+    </div>
+    <div class="contact-list fade-in" style="transition-delay:0.1s">
+      <a href="mailto:maeguming0000@gmail.com" class="contact-item">
+        <div class="ci-icon">✉️</div>
+        <div class="ci-info">
+          <div class="ci-type">Email</div>
+          <div class="ci-label">maeguming0000@gmail.com</div>
+        </div>
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </a>
+      <a href="tel:01033227250" class="contact-item">
+        <div class="ci-icon">📱</div>
+        <div class="ci-info">
+          <div class="ci-type">Phone</div>
+          <div class="ci-label">010-3322-7250</div>
+        </div>
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </a>
+      <a href="https://github.com/aabyess" target="_blank" class="contact-item">
+        <div class="ci-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="display:block"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+        </div>
+        <div class="ci-info">
+          <div class="ci-type">GitHub</div>
+          <div class="ci-label">github.com/aabyess</div>
+        </div>
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-logo">최상호</div>
+    <div class="footer-text">© 2026 Choi Sangho. Frontend Developer.</div>
+  </div>
+</footer>
+
+<script>
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+  }, { threshold: 0.08, rootMargin: '0px 0px -30px 0px' });
+  document.querySelectorAll('.fade-in').forEach((el, i) => {
+    el.style.transitionDelay = `${(i % 3) * 0.07}s`;
+    obs.observe(el);
+  });
+</script>
+</body>
+</html>
