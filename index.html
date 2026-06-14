@@ -270,40 +270,6 @@
     </div>
 
     <div class="projects-grid">
-    <!-- AI 면접 준비 (1순위 - AI 회사 지원) -->
-    <div class="proj-row fade-in">
-      <div class="proj-row-img">
-        <video src="images/interview.mp4" autoplay loop muted playsinline style="width:100%;height:100%;object-fit:cover;display:block;"></video>
-      </div>
-      <div class="proj-row-body">
-        <div>
-          <div class="proj-meta">
-            <span class="proj-period">2025.11 — 2025.12</span>
-            <span class="proj-badge">개인 프로젝트</span>
-          </div>
-          <div class="proj-name-sm">Myeonjeop-Mate — AI 기반 면접 준비 플랫폼</div>
-          <div class="proj-desc">이력서를 AI가 분석해 맞춤 면접 질문을 생성하고 답변 피드백과 커뮤니티 소통까지 제공하는 개발자 면접 준비 플랫폼. 기획부터 OpenAI API 연동까지 1인 개발.</div>
-          <ul class="proj-points">
-            <li>OpenAI API를 직접 연동해 이력서 내용을 분석하고 맞춤 면접 질문을 자동 생성하는 AI 서비스 전체를 1인으로 기획·개발</li>
-            <li>PDF.js, Mammoth로 PDF·Word 이력서 파일을 텍스트로 추출해 OpenAI 프롬프트에 구조화, 맞춤 면접 질문 3개 자동 생성</li>
-            <li>AI 피드백 응답을 JSON으로 파싱해 구조·내용·키워드·종합 평가·개선 예시 항목별로 즉시 렌더링하는 피드백 시스템 구현</li>
-            <li>API 호출 비용 절감을 위해 사용자당 일일 요청 횟수를 50회로 제한하는 사용량 제어 로직 구현</li>
-            <li>면접 답변 공유 및 커뮤니티 피드백 기능 개발 (게시글 작성·조회·댓글)</li>
-          </ul>
-        </div>
-        <div class="proj-bottom">
-          <div class="proj-stack">
-            <span class="stack-tag">React</span>
-            <span class="stack-tag">Node.js</span>
-            <span class="stack-tag">OpenAI API</span>
-            <span class="stack-tag">PDF.js</span>
-            <span class="stack-tag">Mammoth</span>
-          </div>
-          <a href="https://github.com/aabyess/myeonjeop-mate" target="_blank" class="link-btn">GitHub</a>
-        </div>
-      </div>
-    </div>
-
     <!-- RE:BOOT -->
     <div class="proj-row fade-in">
       <div class="proj-row-img">
@@ -363,9 +329,10 @@
           <div class="proj-desc">기부·펀딩·봉사 활동을 연결하는 온라인 사회공헌 플랫폼. 기부자·수혜자·재능 기부자가 직접 연결되는 투명한 시스템.</div>
           <ul class="proj-points">
             <li>홈에서 기부·펀딩·봉사 활동을 통합 조회하고, 각 도메인 페이지에서 참여·등록까지 이어지는 사용자 플로우 설계 및 구현</li>
+            <li>PortOne(KG이니시스) 결제 연동 구현 — 결제 완료 후 백엔드에 금액 검증 요청을 보내 서버 금액과 대조 후 승인하는 흐름 직접 설계, 결제 위변조 방지</li>
             <li>기부·펀딩·봉사 등록 폼에서 필수 항목 미입력 시 유효성 검사 메시지 표시로 사용자 실수 방지</li>
             <li>React Router 기반 페이지 라우팅 구성 및 Ant Design 컴포넌트 활용해 일관된 UI 구현</li>
-            <li>Java Spring Boot 백엔드와 REST API 연동으로 기부자·수혜자·재능기부자 연결 플로우 구현</li>
+            <li>REST API 연동으로 기부자·수혜자·재능기부자 연결 플로우 구현</li>
           </ul>
         </div>
         <div class="proj-bottom">
@@ -374,9 +341,41 @@
             <span class="stack-tag">Vite</span>
             <span class="stack-tag">React Router</span>
             <span class="stack-tag">Ant Design</span>
-            <span class="stack-tag">Axios</span>
           </div>
           <a href="https://github.com/aabyess/Ignis.git" target="_blank" class="link-btn">GitHub</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI 면접 준비 (1순위 - AI 회사 지원) -->
+    <div class="proj-row fade-in">
+      <div class="proj-row-img">
+        <video src="images/interview.mp4" autoplay loop muted playsinline style="width:100%;height:100%;object-fit:cover;display:block;"></video>
+      </div>
+      <div class="proj-row-body">
+        <div>
+          <div class="proj-meta">
+            <span class="proj-period">2025.11 — 2025.12</span>
+            <span class="proj-badge">개인 프로젝트</span>
+          </div>
+          <div class="proj-name-sm">Myeonjeop-Mate — AI 기반 면접 준비 플랫폼</div>
+          <div class="proj-desc">이력서를 AI가 분석해 맞춤 면접 질문을 생성하고 답변 피드백과 커뮤니티 소통까지 제공하는 개발자 면접 준비 플랫폼. 기획부터 OpenAI API 연동까지 1인 개발.</div>
+          <ul class="proj-points">
+            <li>OpenAI API를 직접 연동해 이력서 내용을 분석하고 맞춤 면접 질문을 자동 생성하는 AI 서비스 전체를 1인으로 기획·개발</li>
+            <li>PDF.js, Mammoth로 PDF·Word 이력서 파일을 텍스트로 추출해 OpenAI 프롬프트에 구조화, 맞춤 면접 질문 3개 자동 생성</li>
+            <li>AI 피드백 응답을 JSON으로 파싱해 구조·내용·키워드·종합 평가·개선 예시 항목별로 즉시 렌더링하는 피드백 시스템 구현</li>
+            <li>API 호출 비용 절감을 위해 사용자당 일일 요청 횟수를 50회로 제한하는 사용량 제어 로직 구현</li>
+            <li>면접 답변 공유 및 커뮤니티 피드백 기능 개발 (게시글 작성·조회·댓글)</li>
+          </ul>
+        </div>
+        <div class="proj-bottom">
+          <div class="proj-stack">
+            <span class="stack-tag">React</span>
+            <span class="stack-tag">OpenAI API</span>
+            <span class="stack-tag">PDF.js</span>
+            <span class="stack-tag">Mammoth</span>
+          </div>
+          <a href="https://github.com/aabyess/myeonjeop-mate" target="_blank" class="link-btn">GitHub</a>
         </div>
       </div>
     </div>
@@ -395,18 +394,19 @@
           <div class="proj-name-sm">LOL Face Matcher</div>
           <div class="proj-desc">League of Legends 플레이어 얼굴을 인식해 유사한 챔피언을 매칭해주는 머신러닝 기반 웹 서비스.</div>
           <ul class="proj-points">
-            <li>얼굴 사진 업로드 UI 및 매칭 결과 시각화 화면 구현, 결과 대기 중 로딩 처리 적용</li>
-            <li>Python OpenCV 기반 얼굴 특징 추출 및 코사인 유사도 알고리즘으로 성별을 고려한 닮은꼴 챔피언 매칭 기능 개발</li>
-            <li>얼굴 각도·조명 변화로 인한 인식률 저하 문제를 정면 정렬·조명 보정·데이터 증강 적용으로 개선</li>
-            <li>얼굴 업로드·특징 저장·추천 REST API 설계 및 MySQL DB 구조 설계</li>
+            <li>얼굴 사진 업로드 UI 및 Top 5 매칭 결과 시각화 화면 구현, 결과 대기 중 로딩 처리 적용</li>
+            <li>dlib 기반 모델에서 DeepFace(ArcFace)로 전환해 챔피언 이미지 170장 기준 임베딩 성공률 100% 달성</li>
+            <li>성별을 고려한 코사인 유사도 알고리즘으로 닮은꼴 챔피언 매칭 기능 개발</li>
+            <li>FastAPI ↔ React 간 CORS 문제 파악 및 해결</li>
+            <li>얼굴 업로드·특징 저장·추천 REST API 설계 및 DB 구조 설계</li>
           </ul>
         </div>
         <div class="proj-bottom">
           <div class="proj-stack">
             <span class="stack-tag">React</span>
-            <span class="stack-tag">Node.js</span>
+            <span class="stack-tag">FastAPI</span>
             <span class="stack-tag">Python</span>
-            <span class="stack-tag">OpenCV</span>
+            <span class="stack-tag">DeepFace</span>
             <span class="stack-tag">MySQL</span>
           </div>
           <a href="https://github.com/aabyess/lol-face-matcher2" target="_blank" class="link-btn">GitHub</a>
