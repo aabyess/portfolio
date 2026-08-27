@@ -14,10 +14,10 @@
       --border: #e8e5df;
       --border-dark: #d4d0c8;
       --text: #1a1917;
-      --muted: #8a877f;
+      --muted: #5f5c54;
       --subtle: #b8b4ac;
-      --accent: #2563eb;
-      --accent-light: #eff6ff;
+      --accent: #2c5282;
+      --accent-light: #e9eef3;
       --green: #16a34a;
       --serif: 'DM Serif Display', serif;
       --sans: 'Pretendard', -apple-system, sans-serif;
@@ -62,9 +62,67 @@
     #hero {
       background: var(--white);
       border-bottom: 1px solid var(--border);
-      padding: 150px 0 90px;
+      padding: 108px 0 56px;
     }
-    .hero-inner { max-width: 1080px; margin: 0 auto; padding: 0 40px; }
+    .hero-inner {
+      max-width: 1320px; margin: 0 auto; padding: 0 24px;
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 56px;
+    }
+    .hero-text { flex: 1; min-width: 0; }
+
+    .hero-side { flex-shrink: 0; width: 520px; margin-top: 32px; display: flex; flex-direction: column; gap: 16px; }
+    .hero-code {
+      --tbg: #1a1d23; --tbar: #21252c; --tborder: #2f333b;
+      --ttext: #e3e2dd; --tmuted: #6f7580; --tkey: #7aa2f7; --tstr: #9ece6a; --tprompt: #7aa2f7;
+      background: var(--tbg); border: 1px solid var(--tborder); border-radius: 12px;
+      overflow: hidden; box-shadow: 0 16px 46px rgba(10,12,16,0.28);
+    }
+    .term-cite {
+      background: var(--white); border: 1.5px solid var(--border); border-radius: 12px;
+      padding: 14px 18px; box-shadow: 0 8px 24px rgba(26,25,23,0.05);
+      opacity: 0; transition: opacity .3s ease;
+    }
+    .term-cite.visible { opacity: 1; }
+    .term-cite-name { font-size: 13.5px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+    .term-cite-desc { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin-bottom: 10px; }
+    .term-cite-text { font-family: var(--serif); font-style: italic; font-size: 13px; line-height: 1.5; color: var(--text); white-space: pre-line; }
+    .term-cite-code {
+      margin: 0; font-family: 'SF Mono', 'Menlo', 'Consolas', monospace; font-size: 11px; line-height: 1.55;
+      color: var(--text); white-space: pre; overflow-x: auto;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+    }
+    .term-cite-src { margin-top: 7px; font-size: 10.5px; color: var(--subtle); }
+    .hero-code-bar { display: flex; align-items: center; gap: 7px; padding: 10px 14px; border-bottom: 1px solid var(--tborder); background: var(--tbar); }
+    .hero-code-dot { width: 9px; height: 9px; border-radius: 50%; }
+    .hero-code-dot:nth-child(1) { background: #ec6a5f; }
+    .hero-code-dot:nth-child(2) { background: #f4bf4f; }
+    .hero-code-dot:nth-child(3) { background: #61c454; }
+    .hero-code-file { margin-left: 9px; font-size: 11.5px; color: var(--tmuted); font-weight: 500; font-family: 'SF Mono', 'Menlo', monospace; }
+    .hero-code-body {
+      margin: 0; padding: 16px 18px 18px; height: 490px;
+      font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+      font-size: 11.5px; line-height: 1.55; color: var(--ttext);
+      overflow-x: auto; overflow-y: hidden;
+    }
+    .term-splash { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; opacity: 0; animation: tl-in .35s ease both; animation-delay: .15s; }
+    .term-splash-icon {
+      flex-shrink: 0; width: 36px; height: 36px; border-radius: 8px;
+      background: var(--tbar); border: 1px solid var(--tborder);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 12.5px; color: var(--tkey);
+    }
+    .term-splash-title { font-weight: 700; color: var(--ttext); font-size: 12.5px; }
+    .term-splash-title .hc-comment { font-weight: 500; }
+    .term-splash-sub { color: var(--tmuted); font-size: 10.5px; margin-top: 2px; }
+    .tl { white-space: pre; opacity: 0; animation: tl-in .3s ease both; }
+    @keyframes tl-in { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: translateY(0); } }
+    .hc-prompt { color: var(--tprompt); font-weight: 700; }
+    .hc-comment { color: var(--tmuted); }
+    .hc-key { color: var(--tkey); }
+    .hc-str { color: var(--tstr); }
+    .hc-ai { color: var(--tstr); font-weight: 700; }
+    .hc-cursor { display: inline-block; width: 6px; height: 12px; background: var(--tprompt); vertical-align: -2px; animation: hc-blink 1s step-start infinite; }
+    @keyframes hc-blink { 50% { opacity: 0; } }
 
     .hero-tag {
       display: inline-flex; align-items: center; gap: 6px;
@@ -163,6 +221,13 @@
     .link-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
     .link-btn.live { background: var(--text); color: var(--white); border-color: var(--text); }
     .link-btn.live:hover { background: #2a2a2a; border-color: #2a2a2a; color: var(--white); }
+    .link-btn.pending { opacity: 0.5; cursor: default; pointer-events: none; }
+
+    .proj-row-img-placeholder {
+      display: flex; align-items: center; justify-content: center;
+      background: var(--surface); color: var(--subtle);
+      font-size: 13px; font-weight: 600; letter-spacing: 0.02em;
+    }
 
     @media (max-width: 760px) {
       .projects-grid { grid-template-columns: 1fr; }
@@ -209,7 +274,8 @@
       .nav-links { display: none; }
       .wrap, .nav-inner, .footer-inner { padding: 0 20px; }
       #hero { padding: 100px 0 60px; }
-      .hero-inner { padding: 0 20px; }
+      .hero-inner { padding: 0 20px; flex-direction: column; gap: 28px; }
+      .hero-side { width: 100%; }
       #projects { padding: 64px 0; }
       .proj-featured { grid-template-columns: 1fr; }
       .proj-featured-img { border-left: none; border-top: 1.5px solid var(--border); min-height: 220px; }
@@ -235,24 +301,51 @@
 <!-- HERO -->
 <section id="hero">
   <div class="hero-inner fade-in">
-    <div class="hero-tag">Developer</div>
-    <h1>도망치는 것이 두려워<br /><em>끝까지</em> 파고드는<br />개발자입니다</h1>
-    <p class="hero-quote">
-      "왜 이렇게 불편하지?"라는 질문 하나가 저를 개발의 세계로 이끌었습니다.<br />
-      문제를 모른 척 넘어갔다가 더 큰 결함이 될까봐, 사용자가 불편함을 느끼기 전에 먼저 발견하지 못할까봐 늘 두렵습니다.<br />
-      그 두려움이 저를 도망치지 못하게 만들었고, 원인을 찾을 때까지 끝까지 붙잡는 습관을 만들었습니다.<br />
-      이해될 때까지 붙잡는 것이 저의 도망 방법입니다.<br />
-      그 두려움이 결국 저를 더 단단한 개발자로 만들어줬습니다.
-    </p>
-    <div class="hero-actions">
-      <a href="#projects" class="btn btn-dark">
-        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
-        프로젝트 보기
-      </a>
-      <a href="https://github.com/aabyess" target="_blank" class="btn btn-outline">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
-        GitHub
-      </a>
+    <div class="hero-text">
+      <div class="hero-tag">Developer</div>
+      <h1>기획부터<br />운영까지<br />끝까지 <em>책임</em>지는<br />개발자입니다</h1>
+      <p class="hero-quote">
+        평소에도 취미로 게임과 웹 플랫폼을 만들 만큼, 무언가를 만드는 일 자체를 좋아합니다.<br />
+        프론트엔드로 개발을 시작했지만 지금은 풀스택을 넘어, 기획부터 개발·운영까지 서비스 전체를 직접 해보고 싶습니다.<br />
+        Trade-Cmarket에서 프론트와 백엔드를 같이 들여다봤기에 간헐적 로그아웃 버그도, 채팅 refetch 폭주 원인도 직접 찾아낼 수 있었습니다.<br />
+        그 경험이, 한쪽만 아는 개발자가 아니라 서비스 전체를 책임질 수 있는 개발자로 가고 싶다는 확신을 줬습니다.
+      </p>
+      <div class="hero-actions">
+        <a href="#projects" class="btn btn-dark">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
+          프로젝트 보기
+        </a>
+        <a href="https://github.com/aabyess" target="_blank" class="btn btn-outline">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+    <div class="hero-side">
+      <div class="hero-code">
+        <div class="hero-code-bar">
+          <span class="hero-code-dot"></span><span class="hero-code-dot"></span><span class="hero-code-dot"></span>
+          <span class="hero-code-file">choi@portfolio — zsh</span>
+        </div>
+        <div class="hero-code-body">
+          <div class="term-splash">
+            <div class="term-splash-icon">&gt;_</div>
+            <div>
+              <div class="term-splash-title">portfolio <span class="hc-comment">v1.0</span></div>
+              <div class="term-splash-sub">Choi Sangho · Full-stack Developer</div>
+              <div class="term-splash-sub">~/projects/portfolio</div>
+            </div>
+          </div>
+          <div id="term-output"></div>
+        </div>
+      </div>
+      <div class="term-cite" id="term-cite">
+        <div class="term-cite-name" id="term-cite-name"></div>
+        <div class="term-cite-desc" id="term-cite-desc"></div>
+        <div class="term-cite-text" id="term-cite-text"></div>
+        <pre class="term-cite-code" id="term-cite-code" style="display:none"></pre>
+        <div class="term-cite-src" id="term-cite-src" style="display:none"></div>
+      </div>
     </div>
   </div>
 </section>
@@ -272,6 +365,97 @@
     </div>
 
     <div class="projects-grid">
+
+    <!-- 놀러온나 -->
+    <div class="proj-row fade-in">
+      <div class="proj-row-img">
+        <video src="images/nolleo-onna.mp4" autoplay loop muted playsinline style="width:100%;height:100%;object-fit:cover;display:block;"></video>
+      </div>
+      <div class="proj-row-body">
+        <div>
+          <div class="proj-meta">
+            <span class="proj-period">2026.05 — 2026.10</span>
+            <span class="proj-badge">공모전 진행중 · 5인 팀</span>
+          </div>
+          <div class="proj-name-sm">놀러온나 — 한국관광공사 TourAPI 기반 부산 특화 예산 맞춤 여행 플랫폼</div>
+          <div class="proj-desc">홈·스팟·코스·한끗·마이페이지까지 서비스 전 페이지 프론트엔드를 1인으로 설계·구현한 부산 여행 플랫폼. 5인 팀(프론트 1, 백엔드 3, PM 1) 중 프론트엔드 전담.</div>
+          <ul class="proj-points">
+            <li>Kakao Maps SDK로 부산 16개 구 혼잡도 지도를 구현하고, 원형 마커를 실제 행정구역 경계 폴리곤으로 교체 — 구 클릭 시 붐비는 곳 TOP 5와 여유 스팟 패널을 거쳐 상세 모달까지 이어지는 탐색 흐름 설계</li>
+            <li>스팟 검색을 지역명·카테고리·무료 여부·초성까지 인식하는 통합 검색으로 확장하고, 검색·필터 결과에 맞춰 지도 범위가 자동 재조정되도록 구현</li>
+            <li>AI 코스 결과 페이지에 장소 순서 변경·제외, 드래그 정렬, 예산 게이지를 붙여 생성된 코스를 사용자가 직접 다듬을 수 있는 편집 흐름 구현</li>
+            <li>장소 매핑 테이블의 안전 상한이 3,000개로 하드코딩돼 실데이터 3,632개 중 632개가 누락되던 버그를 발견, 상한을 올리고 37회 순차 요청을 8개 단위 병렬로 바꿔 초기 로딩까지 개선</li>
+            <li>카카오 SDK 스크립트 로드 전에 지도 초기화를 시도해 발생하던 레이스 컨디션을, 스크립트 태그가 나타날 때까지 재확인 후 load 이벤트를 붙이는 폴백으로 해결</li>
+            <li>모바일 코스 편집에서 카드 전체 드래그가 목록 스크롤을 막던 문제를 matchMedia + useSyncExternalStore로 화면 크기를 감지해 데스크톱·모바일 드래그 방식을 분리해 해결</li>
+          </ul>
+        </div>
+        <div class="proj-bottom">
+          <div class="proj-stack">
+            <span class="stack-tag">Next.js</span>
+            <span class="stack-tag">TypeScript</span>
+            <span class="stack-tag">TailwindCSS v4</span>
+            <span class="stack-tag">TanStack Query</span>
+            <span class="stack-tag">Zustand</span>
+            <span class="stack-tag">Kakao Maps SDK</span>
+            <span class="stack-tag">Motion</span>
+            <span class="stack-tag">Vitest</span>
+          </div>
+          <div class="proj-links">
+            <a href="https://dev.nolleo-onna.site/" target="_blank" class="link-btn live">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              라이브
+            </a>
+            <a href="https://github.com/nolleo-onna/nolleo-onna-frontend" target="_blank" class="link-btn">GitHub</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Trade-Cmarket -->
+    <div class="proj-row fade-in">
+      <div class="proj-row-img">
+        <img src="images/trade-cmarket.png" alt="Trade-Cmarket 대시보드 화면 (이전 버전)" />
+      </div>
+      <div class="proj-row-body">
+        <div>
+          <div class="proj-meta">
+            <span class="proj-period">2026.07 — 2026.08</span>
+            <span class="proj-badge">인턴 · 1인 개발</span>
+          </div>
+          <div class="proj-name-sm">Trade-Cmarket — 한국–인도네시아 B2B 무역 견적·계약 플랫폼</div>
+          <div class="proj-desc">발주 공고 → 견적 → 낙찰 → 계약 → 실시간 채팅으로 이어지는 B2B 거래 플로우 전체를 바이어·셀러 양면으로 기획부터 설계·구현까지 1인으로 담당한 인턴 프로젝트.</div>
+          <ul class="proj-points">
+            <li>한국어·영어·인도네시아어 3개 국어 서비스를 next-intl로 다국어화하고, 사용자 생성 콘텐츠를 원문+감지언어+번역본(jsonb)으로 저장해 번역 생성을 서버로 강제하는 필드 단위 번역 파이프라인 설계 — 클라이언트발 번역 위조 차단</li>
+            <li>Supabase RLS + 서비스롤 API 이중 권한 구조 설계 — RLS로 행 접근을 통제하고, RLS를 우회하는 서비스롤 라우트엔 소유권·상태 전이 화이트리스트 검증을 직접 구현(완료 계약 되돌리기, 마감 공고 견적 제출 등 차단)</li>
+            <li>Gemini 구조화 출력(responseSchema)으로 공고·견적 AI 초안을 생성하고, 발주서 PDF·이미지를 멀티모달로 추출, 모델 과부하(503) 시 폴백 체인으로 무중단 처리</li>
+            <li>간헐적 강제 로그아웃의 원인이 미들웨어의 리다이렉트 쿠키 누락이라는 것을 프론트·백엔드를 함께 추적해 발견, 모든 리다이렉트에 쿠키를 전파하는 헬퍼로 재발 방지</li>
+            <li>채팅 읽음 처리가 행마다 UPDATE 이벤트를 발생시켜 전체 이력 refetch가 폭주하던 문제를 Realtime 페이로드를 setQueryData로 캐시에 직접 반영하도록 바꿔 해결</li>
+            <li>전 API 라우트 보안 감사를 수행해 저장형 XSS 살균, 무인증 번역 프록시 차단, 파일 업로드 MIME·용량 검증을 일괄 적용</li>
+          </ul>
+        </div>
+        <div class="proj-bottom">
+          <div class="proj-stack">
+            <span class="stack-tag">Next.js 15</span>
+            <span class="stack-tag">TypeScript</span>
+            <span class="stack-tag">TailwindCSS v4</span>
+            <span class="stack-tag">Supabase</span>
+            <span class="stack-tag">TanStack Query</span>
+            <span class="stack-tag">Zustand</span>
+            <span class="stack-tag">next-intl</span>
+            <span class="stack-tag">Gemini API</span>
+            <span class="stack-tag">DeepL API</span>
+            <span class="stack-tag">Vercel</span>
+          </div>
+          <div class="proj-links">
+            <a href="https://mitrapay.vercel.app/" target="_blank" class="link-btn live">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              라이브
+            </a>
+            <a href="https://github.com/cmarketplace/Trade-Cmarket" target="_blank" class="link-btn">GitHub</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- RE:BOOT -->
     <div class="proj-row fade-in">
       <div class="proj-row-img">
@@ -416,36 +600,6 @@
       </div>
     </div>
 
-    <!-- Lidge -->
-    <div class="proj-row fade-in">
-      <div class="proj-row-img">
-        <img src="images/lidge.png" alt="Lidge 협업 플랫폼" />
-      </div>
-      <div class="proj-row-body">
-        <div>
-          <div class="proj-meta">
-            <span class="proj-period">2024.03 — 2024.10</span>
-            <span class="proj-badge">팀 프로젝트</span>
-          </div>
-          <div class="proj-name-sm">Lidge — 멀티플레이어 협업 플랫폼</div>
-          <div class="proj-desc">웹 브라우저에서 여러 사용자가 캐릭터를 통해 실시간으로 협업할 수 있는 게임형 협업 플랫폼.</div>
-          <ul class="proj-points">
-            <li>Vue.js 기반 웹 클라이언트 UI 개발 및 Unity WebGL 연동</li>
-            <li>대용량 파일 전송 시 패킷 과부하 → 파일 분할 순차 전달로 해결</li>
-            <li>Firebase Authentication + Firestore 기반 팀 구성·역할 분배 구현</li>
-          </ul>
-        </div>
-        <div class="proj-bottom">
-          <div class="proj-stack">
-            <span class="stack-tag">Vue.js</span>
-            <span class="stack-tag">Unity WebGL</span>
-            <span class="stack-tag">Photon</span>
-            <span class="stack-tag">Firebase</span>
-          </div>
-          <a href="https://github.com/aabyess/LidgeWeb.git" target="_blank" class="link-btn">GitHub</a>
-        </div>
-      </div>
-    </div>
 
   </div>
   </div>
@@ -461,7 +615,7 @@
     </div>
     <div class="contact-list fade-in" style="transition-delay:0.1s">
       <a href="mailto:maeguming0000@gmail.com" class="contact-item">
-        <div class="ci-icon">✉️</div>
+        <div class="ci-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16v16H4z" stroke-linejoin="round"/><path d="m4 6 8 7 8-7" stroke-linejoin="round"/></svg></div>
         <div class="ci-info">
           <div class="ci-type">Email</div>
           <div class="ci-label">maeguming0000@gmail.com</div>
@@ -469,7 +623,7 @@
         <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
       </a>
       <a href="tel:01033227250" class="contact-item">
-        <div class="ci-icon">📱</div>
+        <div class="ci-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2" stroke-linejoin="round"/><path d="M11 18h2" stroke-linecap="round"/></svg></div>
         <div class="ci-info">
           <div class="ci-type">Phone</div>
           <div class="ci-label">010-3322-7250</div>
@@ -505,6 +659,192 @@
     el.style.transitionDelay = `${(i % 3) * 0.07}s`;
     obs.observe(el);
   });
+</script>
+
+<script>
+(function () {
+  var out = document.getElementById('term-output');
+  if (!out) return;
+
+  var TYPE_MS = 12;
+  var HOLD_MS = 5000;
+
+  var EPISODES = [
+    {
+      file: 'src/lib/guards/quote-status.ts',
+      lines: [
+        [{ c: 'cm', t: '// 완료된 계약은 되돌릴 수 없도록 상태 전이를 화이트리스트로 검증' }],
+        [{ c: 'kw', t: 'const' }, { t: ' ALLOWED = {' }],
+        [{ t: '  draft: [' }, { c: 'st', t: "'submitted'" }, { t: '],' }],
+        [{ t: '  submitted: [' }, { c: 'st', t: "'won'" }, { t: ', ' }, { c: 'st', t: "'lost'" }, { t: '],' }],
+        [{ t: '  won: [],' }],
+        [{ t: '  lost: [],' }],
+        [{ t: '}' }],
+        [],
+        [{ c: 'kw', t: 'export function' }, { t: ' assertTransition(current, next) {' }],
+        [{ t: '  ' }, { c: 'kw', t: 'if' }, { t: ' (!ALLOWED[current]?.includes(next)) {' }],
+        [{ t: '    ' }, { c: 'kw', t: 'throw new' }, { t: ' ForbiddenError(' }],
+        [{ t: '      `${current} → ${next} 전이는 허용되지 않습니다`' }],
+        [{ t: '    )' }],
+        [{ t: '  }' }],
+        [{ t: '}' }],
+        [],
+        [{ c: 'cm', t: '// 일단 만들고 용서를 구한다' }],
+        [{ c: 'cm', t: '// (근데 이 함수는 용서도 안 해줌)' }]
+      ],
+      cite: {
+        name: 'Grace Hopper',
+        desc: '허락보다 일단 저지르는 걸 선호했던 미 해군 제독이자 프로그래머',
+        quote: '"허락보다 용서를 구하는 게 쉽다"'
+      }
+    },
+    {
+      file: 'src/lib/chat/realtime.ts',
+      lines: [
+        [{ c: 'cm', t: '// 읽음 처리 UPDATE마다 전체 이력 refetch가 폭주하던 문제를 해결' }],
+        [{ t: 'channel.on(' }, { c: 'st', t: "'UPDATE'" }, { t: ', (payload) => {' }],
+        [{ t: '  queryClient.setQueryData(' }],
+        [{ t: "    ['chat', roomId]," }],
+        [{ t: '    (old) => merge(old, payload)' }],
+        [{ t: '  )' }],
+        [{ t: '})' }],
+        [],
+        [{ c: 'cm', t: '// 버그를 확인해보니' }],
+        [{ c: 'cm', t: '// 나방이 붙어있었다' }],
+        [{ c: 'cm', t: '// 그래서 제거함' }]
+      ],
+      cite: {
+        name: 'Grace Hopper',
+        desc: '1947년, 컴퓨터 안에서 진짜 나방을 발견해 로그북에 남긴 기록',
+        quote: '"계전기 70번, F 패널에서 나방 발견.\n실제로 확인된 첫 번째 \'버그\' 사례."'
+      }
+    },
+    {
+      final: true,
+      lines: [
+        [{ c: 'prompt', t: '❯ ' }, { t: 'claude "OO 게임 개발할 건데,' }],
+        [{ t: '  너는 PM 겸 리더야. 리서치담당·구현담당1·' }],
+        [{ t: '  구현담당2 에이전트 만들어서 기획부터 시작해보자"' }],
+        [],
+        [{ c: 'ai', t: '⏺ ' }, { t: '팀 세팅부터 할게요.' }],
+        [],
+        [{ t: '  PM(나)       → 지시 수신·작업 분배·코딩·코드리뷰' }],
+        [{ t: '  리서치담당    → 조사·분석 전담, 코딩 없음' }],
+        [{ t: '  구현담당1/2   → 코딩 구현, 서로 코드리뷰' }],
+        [],
+        [{ t: '  ✓ 리서치담당 세션 생성' }],
+        [{ t: '  ✓ 구현담당1 세션 생성' }],
+        [{ t: '  ✓ 구현담당2 세션 생성' }],
+        [],
+        [{ t: '  기획서부터 같이 짜볼까요?' }]
+      ],
+      cite: {
+        name: 'Choi Sangho',
+        desc: '기획부터 개발까지, AI와 함께 일하는 방식',
+        quote: '"물어보고, 검토하고,\n다시 만든다"'
+      }
+    }
+  ];
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function segPlain(segs) { return segs.map(function (s) { return s.t; }).join(''); }
+  function segHtml(segs) {
+    return segs.map(function (s) {
+      return s.c ? '<span class="hc-' + s.c + '">' + escapeHtml(s.t) + '</span>' : escapeHtml(s.t);
+    }).join('');
+  }
+
+  function buildLineList(ep) {
+    var lines = [];
+    if (!ep.final) {
+      lines.push([{ c: 'prompt', t: '❯ ' }, { t: 'cat ' + ep.file }]);
+      lines.push([]);
+    }
+    ep.lines.forEach(function (l) { lines.push(l); });
+    lines.push([]);
+    return lines;
+  }
+
+  var epIndex = 0;
+  var timer = null;
+
+  function typeLine(div, plain, html, onDone) {
+    if (plain.length === 0) { div.textContent = ' '; onDone(); return; }
+    var i = 0;
+    var cursor = document.createElement('span');
+    cursor.className = 'hc-cursor';
+    div.appendChild(cursor);
+    (function step() {
+      if (i < plain.length) {
+        cursor.insertAdjacentText('beforebegin', plain[i]);
+        i++;
+        timer = setTimeout(step, TYPE_MS);
+      } else {
+        div.innerHTML = html;
+        onDone();
+      }
+    })();
+  }
+
+  function runEpisode() {
+    var ep = EPISODES[epIndex];
+    epIndex++;
+    out.innerHTML = '';
+
+    var citeEl = document.getElementById('term-cite');
+    var citeName = document.getElementById('term-cite-name');
+    var citeDesc = document.getElementById('term-cite-desc');
+    var citeText = document.getElementById('term-cite-text');
+    var citeCode = document.getElementById('term-cite-code');
+    var citeSrc = document.getElementById('term-cite-src');
+    if (citeEl && citeName && citeDesc && citeText && citeCode && citeSrc) {
+      citeEl.classList.remove('visible');
+      if (ep.cite) {
+        citeName.textContent = ep.cite.name;
+        citeDesc.textContent = ep.cite.desc;
+        citeText.style.display = ep.cite.quote ? '' : 'none';
+        citeText.textContent = ep.cite.quote || '';
+        citeCode.style.display = ep.cite.code ? '' : 'none';
+        citeCode.textContent = ep.cite.code || '';
+        citeSrc.style.display = ep.cite.src ? '' : 'none';
+        citeSrc.textContent = ep.cite.src || '';
+        setTimeout(function () { citeEl.classList.add('visible'); }, 50);
+      }
+    }
+
+    var lineList = buildLineList(ep);
+    var li = 0;
+
+    function nextLine() {
+      if (li >= lineList.length) {
+        var pdiv = document.createElement('div');
+        pdiv.className = 'tl';
+        out.appendChild(pdiv);
+        var cursor = document.createElement('span');
+        cursor.className = 'hc-prompt';
+        cursor.textContent = '❯ ';
+        pdiv.appendChild(cursor);
+        var blink = document.createElement('span');
+        blink.className = 'hc-cursor';
+        pdiv.appendChild(blink);
+        if (!ep.final) {
+          timer = setTimeout(runEpisode, HOLD_MS);
+        }
+        return;
+      }
+      var segs = lineList[li];
+      var div = document.createElement('div');
+      div.className = 'tl';
+      out.appendChild(div);
+      typeLine(div, segPlain(segs), segHtml(segs), function () { li++; nextLine(); });
+    }
+    nextLine();
+  }
+
+  runEpisode();
+})();
 </script>
 </body>
 </html>
