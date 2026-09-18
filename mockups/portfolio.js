@@ -254,9 +254,19 @@ addEventListener('hashchange', () => setView(viewFromHash(), { updateHash: false
    문서로 바로 들어온 사람은 three.js를 아예 내려받지 않는다.
    ════════════════════════════════════════════════════════════ */
 
-/* Blender에서 만든 차로 갈아끼우려면 '../models/car.glb' 로 바꾼다.
-   (없는 파일을 요청하면 콘솔에 404가 남으므로 기본값은 null) */
-const CAR_MODEL_URL = null;
+/* 차 모델. null로 두면 박스로 조립한 기본 차가 쓰인다.
+   현재 모델은 Kenney Car Kit(CC0)의 hatchback-sports. models/README.md 참고. */
+const CAR_MODEL_URL = '../models/car.glb';
+
+/* 바퀴 노드 이름. 앞에 있는 이름부터 찾는다.
+   Blender에서 직접 만들 땐 wheel_fl 같은 이름을 쓰면 되고,
+   Kenney 킷처럼 다른 규칙으로 된 모델도 그대로 인식된다. */
+const WHEEL_SPEC = [
+  { front: true,  names: ['wheel_fl', 'wheel-front-left',  'wheel_front_left'] },
+  { front: true,  names: ['wheel_fr', 'wheel-front-right', 'wheel_front_right'] },
+  { front: false, names: ['wheel_rl', 'wheel-back-left',   'wheel_rear_left'] },
+  { front: false, names: ['wheel_rr', 'wheel-back-right',  'wheel_rear_right'] }
+];
 
 let driveReady = false;
 
@@ -390,12 +400,13 @@ async function initDrive() {
     model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 
     const wheels = [];
-    for (const [name, front] of [['wheel_fl', true], ['wheel_fr', true], ['wheel_rl', false], ['wheel_rr', false]]) {
-      const node = model.getObjectByName(name);
+    for (const spec of WHEEL_SPEC) {
+      let node = null;
+      for (const n of spec.names) { node = model.getObjectByName(n); if (node) break; }
       if (!node) continue;
-      node.rotation.order = 'YXZ';
+      node.rotation.order = 'YXZ';          // 조향(Y)을 먼저, 구르기(X)를 나중에
       const r = new THREE.Box3().setFromObject(node).getSize(new THREE.Vector3()).y / 2;
-      wheels.push({ steerNode: node, spinNode: node, front, r: r > 0.05 ? r : 0.58 });
+      wheels.push({ steerNode: node, spinNode: node, front: spec.front, r: r > 0.05 ? r : 0.58 });
     }
     car.remove(stockCar);
     car.add(model);
@@ -778,7 +789,16 @@ async function initDrive() {
     window.__drive = {
       step, keys, stations,
       pos: () => ({ x: +car.position.x.toFixed(2), z: +car.position.z.toFixed(2) }),
-      teleport(x, z, h = 0) { car.position.set(x, 0, z); heading = h; speed = 0; }
+      teleport(x, z, h = 0) { car.position.set(x, 0, z); heading = h; speed = 0; },
+      carInfo: () => ({
+        usingModel: !car.children.includes(stockCar),
+        wheels: parts.wheels.length,
+        wheelRadius: parts.wheels.map(w => +w.r.toFixed(3)),
+        size: (() => {
+          const s = new THREE.Box3().setFromObject(car).getSize(new THREE.Vector3());
+          return { w: +s.x.toFixed(2), h: +s.y.toFixed(2), len: +s.z.toFixed(2) };
+        })()
+      })
     };
   }
 }
