@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>시안 F — 최상호 · 운전하는 포트폴리오</title>
+<meta name="description" content="차를 몰고 돌아다니며 보는 최상호의 포트폴리오. Next.js · TypeScript · Supabase 기반 프로젝트 6개." />
+<meta name="theme-color" content="#cfe3ef" />
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+<style>
+:root{
+  --ink:#1d2a33;
+  --muted:#5b6d79;
+  --line:rgba(29,42,51,.14);
+  --panel:rgba(255,255,255,.88);
+  --accent:#e8734a;
+  --sans:'Pretendard Variable',Pretendard,-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:var(--sans);color:var(--ink);background:#cfe3ef;-webkit-font-smoothing:antialiased;
+  overscroll-behavior:none;touch-action:none}
+canvas{display:block;position:fixed;inset:0}
+button{font-family:inherit;cursor:pointer}
+:where(a,button):focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ── LOADING ── */
+#load{position:fixed;inset:0;z-index:90;background:#dfeaf2;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:22px;transition:opacity .6s ease}
+#load.done{opacity:0;pointer-events:none}
+.load-name{font-size:30px;font-weight:800;letter-spacing:-.03em}
+.load-sub{font-size:13.5px;color:var(--muted);margin-top:-14px}
+.load-bar{width:min(240px,60vw);height:4px;border-radius:99px;background:rgba(29,42,51,.12);overflow:hidden}
+.load-bar i{display:block;height:100%;width:0%;background:var(--accent);border-radius:99px;transition:width .25s}
+.load-pct{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+
+/* ── TOP BAR ── */
+#top{position:fixed;top:0;left:0;right:0;z-index:40;display:flex;align-items:center;gap:12px;
+  padding:14px 18px;pointer-events:none}
+.brand{background:var(--panel);backdrop-filter:blur(12px);border:1px solid var(--line);
+  border-radius:12px;padding:9px 15px;pointer-events:auto;box-shadow:0 4px 18px rgba(29,42,51,.10)}
+.brand b{font-size:15px;font-weight:800;letter-spacing:-.02em}
+.brand span{display:block;font-size:11.5px;color:var(--muted);margin-top:1px}
+#top .sp{margin-left:auto}
+.tbtn{background:var(--panel);backdrop-filter:blur(12px);border:1px solid var(--line);border-radius:11px;
+  padding:10px 15px;font-size:13px;font-weight:600;color:var(--ink);text-decoration:none;pointer-events:auto;
+  box-shadow:0 4px 18px rgba(29,42,51,.10);transition:.15s;white-space:nowrap}
+.tbtn:hover{background:#fff;border-color:rgba(29,42,51,.28)}
+
+/* ── PROGRESS CHIPS ── */
+#found{position:fixed;left:18px;bottom:18px;z-index:40;display:flex;flex-direction:column;gap:7px;
+  background:var(--panel);backdrop-filter:blur(12px);border:1px solid var(--line);border-radius:13px;
+  padding:13px 15px;box-shadow:0 4px 18px rgba(29,42,51,.10);max-width:230px}
+.found-t{font-family:var(--mono);font-size:10.5px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase}
+.found-l{display:flex;flex-direction:column;gap:4px}
+.found-i{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);transition:.2s}
+.found-i .dot{width:8px;height:8px;border-radius:50%;background:rgba(29,42,51,.16);flex-shrink:0;transition:.25s}
+.found-i.on{color:var(--ink);font-weight:600}
+.found-i.on .dot{background:var(--c,#e8734a);box-shadow:0 0 0 3px color-mix(in srgb,var(--c,#e8734a) 22%,transparent)}
+
+/* ── HINT ── */
+#hint{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:40;
+  background:var(--panel);backdrop-filter:blur(12px);border:1px solid var(--line);border-radius:13px;
+  padding:11px 18px;display:flex;align-items:center;gap:13px;box-shadow:0 4px 18px rgba(29,42,51,.10);
+  font-size:13px;transition:opacity .4s}
+#hint.hide{opacity:0;pointer-events:none}
+.keys{display:flex;gap:4px}
+.key{font-family:var(--mono);font-size:11px;min-width:24px;height:24px;display:grid;place-items:center;
+  border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;background:#fff;padding:0 5px}
+
+/* ── PROJECT PANEL ── */
+#panel{position:fixed;top:0;right:0;bottom:0;width:min(440px,100%);z-index:50;
+  background:rgba(255,255,255,.96);backdrop-filter:blur(18px);border-left:1px solid var(--line);
+  box-shadow:-14px 0 44px rgba(29,42,51,.14);overflow-y:auto;
+  transform:translateX(102%);transition:transform .4s cubic-bezier(.4,0,.2,1)}
+#panel.open{transform:none}
+.pn-hd{position:sticky;top:0;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line);padding:16px 22px;display:flex;align-items:center;gap:12px;z-index:2}
+.pn-no{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--c,#e8734a)}
+.pn-x{margin-left:auto;width:32px;height:32px;border-radius:9px;border:1px solid var(--line);
+  background:#fff;display:grid;place-items:center;font-size:16px;color:var(--muted);line-height:1}
+.pn-x:hover{background:#f3f5f7;color:var(--ink)}
+.pn-bd{padding:20px 22px 34px}
+.pn-shot{width:100%;aspect-ratio:16/10;object-fit:cover;object-position:top center;border-radius:11px;
+  border:1px solid var(--line);background:#eef2f5;display:block;margin-bottom:18px}
+.pn-meta{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:11px;font-family:var(--mono);font-size:11px}
+.pn-per{color:var(--muted)}
+.pn-role{padding:2px 9px;border-radius:5px;font-weight:600;color:var(--c,#e8734a);
+  background:color-mix(in srgb,var(--c,#e8734a) 11%,transparent);
+  border:1px solid color-mix(in srgb,var(--c,#e8734a) 30%,transparent)}
+.pn-n{font-size:20px;font-weight:800;letter-spacing:-.025em;line-height:1.35;margin-bottom:9px}
+.pn-one{font-size:14px;color:var(--muted);line-height:1.8;margin-bottom:17px}
+.pn-pts{list-style:none;display:flex;flex-direction:column;gap:10px;margin-bottom:18px}
+.pn-pts li{position:relative;padding-left:19px;font-size:13.5px;color:var(--muted);line-height:1.76}
+.pn-pts li::before{content:'';position:absolute;left:0;top:.68em;width:8px;height:2px;border-radius:2px;background:var(--c,#e8734a)}
+.pn-pts li b{color:var(--ink);font-weight:600}
+.pn-stk{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px}
+.pn-stk span{font-family:var(--mono);font-size:11px;color:var(--muted);background:#f1f4f6;
+  border:1px solid var(--line);padding:3px 9px;border-radius:6px}
+.pn-lk{display:flex;gap:8px;flex-wrap:wrap}
+.pn-lk a{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;text-decoration:none;
+  color:var(--muted);border:1px solid rgba(29,42,51,.22);padding:7px 14px;border-radius:8px;transition:.15s}
+.pn-lk a:hover{border-color:var(--c,#e8734a);color:var(--c,#e8734a)}
+.pn-lk a.live{background:var(--ink);border-color:var(--ink);color:#fff}
+.pn-lk a.live:hover{background:#0d171e;color:#fff}
+
+/* ── TOUCH ── */
+#touch{position:fixed;inset:auto 0 0 0;z-index:45;display:none;padding:0 18px 22px;
+  justify-content:space-between;align-items:flex-end;pointer-events:none}
+body.is-touch #touch{display:flex}
+body.is-touch #hint{display:none}
+body.is-touch #found{bottom:150px;padding:10px 12px}
+.tpad{display:flex;gap:10px;pointer-events:auto}
+.tkey{width:60px;height:60px;border-radius:50%;border:1px solid var(--line);background:var(--panel);
+  backdrop-filter:blur(12px);display:grid;place-items:center;font-size:20px;color:var(--ink);
+  box-shadow:0 4px 18px rgba(29,42,51,.14);user-select:none;-webkit-user-select:none}
+.tkey:active{background:#fff;transform:scale(.94)}
+
+/* ── FALLBACK ── */
+#nogl{position:fixed;inset:0;z-index:95;display:none;background:#f7fafc;padding:28px;
+  flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center}
+#nogl h2{font-size:21px;font-weight:800;letter-spacing:-.02em}
+#nogl p{font-size:14.5px;color:var(--muted);line-height:1.8;max-width:420px}
+#nogl a{background:var(--ink);color:#fff;text-decoration:none;font-weight:600;font-size:14px;
+  padding:12px 22px;border-radius:10px}
+</style>
+</head>
+<body>
+
+<!-- 검색엔진·스크린리더용 실제 텍스트 (3D 캔버스 안의 내용은 크롤링되지 않음) -->
+<div class="sr">
+  <h1>최상호 — Full-stack Developer</h1>
+  <p>기획부터 개발·운영까지 책임지는 풀스택 개발자입니다. 차를 몰고 돌아다니며 프로젝트를 보는 포트폴리오입니다.
+     3D 화면 대신 읽기용 페이지를 보려면 아래 링크를 이용하세요.</p>
+  <p><a href="e-sky.html">읽기용 포트폴리오 페이지로 이동</a></p>
+  <h2>프로젝트</h2>
+  <ul id="seo-list"></ul>
+  <h2>연락처</h2>
+  <ul>
+    <li><a href="mailto:maeguming0000@gmail.com">maeguming0000@gmail.com</a></li>
+    <li><a href="tel:01033227250">010-3322-7250</a></li>
+    <li><a href="https://github.com/aabyess">github.com/aabyess</a></li>
+  </ul>
+</div>
+
+<div id="load">
+  <div style="text-align:center">
+    <div class="load-name">최상호</div>
+  </div>
+  <div class="load-sub">차를 몰고 돌아다니는 포트폴리오를 준비하고 있습니다</div>
+  <div class="load-bar"><i id="load-bar-i"></i></div>
+  <div class="load-pct" id="load-pct">0%</div>
+</div>
+
+<div id="nogl">
+  <h2>3D를 표시할 수 없는 환경입니다</h2>
+  <p>이 브라우저에서 WebGL을 사용할 수 없습니다. 같은 내용을 담은 읽기용 페이지로 이동해 주세요.</p>
+  <a href="e-sky.html">읽기용 포트폴리오 보기</a>
+</div>
+
+<div id="top">
+  <div class="brand"><b>최상호</b><span>Full-stack Developer</span></div>
+  <span class="sp"></span>
+  <a class="tbtn" href="e-sky.html">읽기용으로 보기</a>
+  <a class="tbtn" href="mailto:maeguming0000@gmail.com">연락하기</a>
+</div>
+
+<div id="found">
+  <div class="found-t">Projects <span id="found-n">0 / 6</span></div>
+  <div class="found-l" id="found-l"></div>
+</div>
+
+<div id="hint">
+  <div class="keys">
+    <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span>
+  </div>
+  <span>또는 방향키로 운전해서 프로젝트에 가까이 가보세요</span>
+</div>
+
+<div id="touch">
+  <div class="tpad">
+    <div class="tkey" data-k="left">◀</div>
+    <div class="tkey" data-k="right">▶</div>
+  </div>
+  <div class="tpad">
+    <div class="tkey" data-k="back">▼</div>
+    <div class="tkey" data-k="fwd">▲</div>
+  </div>
+</div>
+
+<aside id="panel" aria-live="polite">
+  <div class="pn-hd">
+    <span class="pn-no" id="pn-no">01</span>
+    <button class="pn-x" id="pn-x" aria-label="닫기">×</button>
+  </div>
+  <div class="pn-bd" id="pn-bd"></div>
+</aside>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ────────────────────────────────────────────────
+   프로젝트 데이터
+   ──────────────────────────────────────────────── */
+const PROJECTS = [
+  {
+    id: 'trade', no: '01', color: '#e8734a',
+    name: 'Trade-Cmarket',
+    full: 'Trade-Cmarket — 한국·인도네시아 B2B 무역 견적·계약 플랫폼',
+    period: '2026.07 — 2026.08', role: '인턴 · 1인 개발',
+    one: '발주 공고부터 견적·낙찰·계약·실시간 채팅까지 거래 플로우 전체를 바이어·셀러 양면으로 혼자 기획·설계·구현했습니다.',
+    pts: [
+      'Supabase RLS와 서비스롤 API로 <b>이중 권한 구조</b>를 설계해, RLS를 우회하는 경로에도 소유권·상태 전이 검증을 직접 붙였습니다.',
+      '3개 국어 서비스에서 번역본을 원문·감지언어와 함께 저장하고 생성은 서버로만 강제해, <b>클라이언트발 번역 위조</b>를 막았습니다.',
+      '간헐적 강제 로그아웃의 원인이 <b>미들웨어의 리다이렉트 쿠키 누락</b>임을 프론트와 백엔드를 함께 추적해 찾아냈습니다.',
+      '채팅 읽음 처리가 전체 이력을 다시 불러오던 문제를, 수신 페이로드를 <b>캐시에 직접 반영</b>하도록 바꿔 해결했습니다.'
+    ],
+    stack: ['Next.js 15', 'TypeScript', 'Supabase', 'TanStack Query', 'next-intl', 'Gemini API'],
+    img: '../images/trade-cmarket.png',
+    live: 'https://mitrapay.vercel.app/', repo: 'https://github.com/cmarketplace/Trade-Cmarket',
+    pos: [0, -46]
+  },
+  {
+    id: 'nolleo', no: '02', color: '#3fa7d6',
+    name: '놀러온나',
+    full: '놀러온나 — 부산 특화 예산 맞춤 여행 플랫폼',
+    period: '2026.05 — 2026.10', role: '5인 팀 · 프론트 전담',
+    one: '한국관광공사 TourAPI 기반 여행 플랫폼에서 서비스 전 페이지의 프론트엔드를 혼자 설계·구현했습니다.',
+    pts: [
+      '장소 매핑 상한이 3,000개로 하드코딩돼 <b>실데이터 3,632개 중 632개가 누락</b>되던 버그를 발견하고, 37회 순차 요청을 8개 단위 병렬로 바꿨습니다.',
+      '부산 16개 구 혼잡도 지도를 Kakao Maps SDK로 구현하고, 원형 마커를 <b>실제 행정구역 경계 폴리곤</b>으로 교체했습니다.',
+      'AI가 생성한 코스를 사용자가 직접 다듬도록 순서 변경·드래그 정렬·예산 게이지를 붙인 <b>편집 흐름</b>을 구현했습니다.'
+    ],
+    stack: ['Next.js', 'TypeScript', 'TailwindCSS v4', 'Zustand', 'Kakao Maps SDK', 'Vitest'],
+    video: '../images/nolleo-onna.mp4',
+    live: 'https://dev.nolleo-onna.site/', repo: 'https://github.com/nolleo-onna/nolleo-onna-frontend',
+    pos: [42, -20]
+  },
+  {
+    id: 'reboot', no: '03', color: '#7d6ad6',
+    name: 'RE:BOOT',
+    full: 'RE:BOOT — 번아웃·자기관리 모임 커뮤니티',
+    period: '2026.02 — 2026.04', role: '부트캠프 팀 프로젝트',
+    one: '관심사 기반으로 모임을 탐색·참여·개설하는 커뮤니티 플랫폼에서 자유게시판 영역 전체를 담당했습니다.',
+    pts: [
+      '좋아요를 누르면 <b>조회수가 3씩 오르던 버그</b>를 발견해, API가 3중 호출되던 원인을 찾아 중복 요청을 제거했습니다.',
+      'queryKey를 파일마다 문자열로 관리하던 방식을 <b>객체로 중앙화</b>해 캐시 불일치와 중복 호출을 없앴습니다.',
+      '좋아요 반응이 서버 응답 후에야 반영되어 생기던 지연을 <b>Optimistic Update</b>로 해결했습니다.'
+    ],
+    stack: ['Next.js', 'TypeScript', 'React Query', 'Zustand', 'Storybook', 'Jest'],
+    img: '../images/reboot.png',
+    live: 'https://reboot-codeit.vercel.app/', repo: 'https://github.com/aabyess/Reboot',
+    pos: [30, 36]
+  },
+  {
+    id: 'mate', no: '04', color: '#31a88a',
+    name: 'Myeonjeop-Mate',
+    full: 'Myeonjeop-Mate — AI 기반 면접 준비 플랫폼',
+    period: '2025.11 — 2025.12', role: '개인 프로젝트 · 1인 개발',
+    one: '이력서를 분석해 맞춤 면접 질문과 답변 피드백을 제공하는 서비스를 기획부터 API 연동까지 혼자 만들었습니다.',
+    pts: [
+      'PDF·Word 이력서에서 텍스트를 추출해 프롬프트로 구조화하고, <b>맞춤 면접 질문을 자동 생성</b>했습니다.',
+      'AI 피드백 응답을 JSON으로 파싱해 구조·내용·키워드·개선 예시 항목별로 즉시 렌더링했습니다.',
+      'API 호출 비용을 줄이려고 <b>사용자당 일일 요청 제한</b> 로직을 직접 구현했습니다.'
+    ],
+    stack: ['React', 'OpenAI API', 'PDF.js', 'Mammoth'],
+    img: '../images/interview.png',
+    repo: 'https://github.com/aabyess/myeonjeop-mate',
+    pos: [-30, 36]
+  },
+  {
+    id: 'ignis', no: '05', color: '#d95f8b',
+    name: 'IGNIS',
+    full: 'IGNIS — 사회공헌 플랫폼',
+    period: '2025.03 — 2025.10', role: '팀 프로젝트',
+    one: '기부·펀딩·봉사 활동을 연결하는 온라인 사회공헌 플랫폼입니다.',
+    pts: [
+      'PortOne 결제를 연동하면서, 결제 완료 후 <b>서버 금액과 대조해 승인</b>하는 흐름을 직접 설계해 위변조를 막았습니다.',
+      '홈에서 기부·펀딩·봉사를 통합 조회하고 각 도메인에서 참여·등록까지 이어지는 사용자 플로우를 구현했습니다.'
+    ],
+    stack: ['React', 'Vite', 'React Router', 'Ant Design'],
+    img: '../images/ignis.png',
+    repo: 'https://github.com/aabyess/Ignis.git',
+    pos: [-46, -14]
+  },
+  {
+    id: 'lol', no: '06', color: '#e0a32e',
+    name: 'LOL Face Matcher',
+    full: 'LOL Face Matcher — 얼굴 인식 챔피언 매칭',
+    period: '2025.03 — 2025.06', role: '개인 프로젝트',
+    one: '얼굴 사진을 인식해 닮은 League of Legends 챔피언을 찾아주는 머신러닝 웹 서비스입니다.',
+    pts: [
+      'dlib 기반 모델에서 <b>DeepFace(ArcFace)로 전환</b>해 챔피언 이미지 170장 기준 임베딩 성공률 100%를 달성했습니다.',
+      '성별을 고려한 코사인 유사도 알고리즘으로 닮은꼴 매칭을 구현했습니다.',
+      'FastAPI와 React 사이 CORS 문제를 파악해 해결하고, 업로드·추천 REST API와 DB 구조를 설계했습니다.'
+    ],
+    stack: ['React', 'FastAPI', 'Python', 'DeepFace', 'MySQL'],
+    img: '../images/lol.png',
+    repo: 'https://github.com/aabyess/lol-face-matcher2',
+    pos: [-8, 54]
+  }
+];
+
+/* SEO용 목록 채우기 */
+document.getElementById('seo-list').innerHTML = PROJECTS.map(p =>
+  `<li><h3>${p.full}</h3><p>${p.period} · ${p.role}. ${p.one}</p>
+   <p>${p.pts.map(t => t.replace(/<\/?b>/g, '')).join(' ')}</p>
+   <p>기술: ${p.stack.join(', ')}</p></li>`
+).join('');
+
+/* WebGL 지원 확인 */
+function hasWebGL() {
+  try {
+    const c = document.createElement('canvas');
+    return !!(window.WebGLRenderingContext && (c.getContext('webgl2') || c.getContext('webgl')));
+  } catch (e) { return false; }
+}
+if (!hasWebGL()) {
+  document.getElementById('nogl').style.display = 'flex';
+  document.getElementById('load').classList.add('done');
+  throw new Error('WebGL unavailable');
+}
+
+/* 캔버스에 한글을 그리기 전에 웹폰트 로딩을 기다린다 (안 기다리면 시스템 폰트로 구워짐) */
+await document.fonts.ready;
+
+/* ────────────────────────────────────────────────
+   장면 기본 구성
+   ──────────────────────────────────────────────── */
+const SKY = 0xcfe3ef, GROUND = 0xe9e2d2, WORLD_R = 96;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(SKY);
+scene.fog = new THREE.Fog(SKY, 70, 210);
+
+const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.5, 400);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0xdbeaf5, 0xcfc6b2, 2.1));
+const sun = new THREE.DirectionalLight(0xfff4e2, 2.4);
+sun.position.set(48, 70, 30);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+const sc = sun.shadow.camera;
+sc.left = -110; sc.right = 110; sc.top = 110; sc.bottom = -110; sc.near = 1; sc.far = 220;
+sun.shadow.bias = -0.0006;
+scene.add(sun);
+
+/* 바닥 */
+function groundTexture() {
+  const s = 512, cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#e9e2d2'; g.fillRect(0, 0, s, s);
+  g.strokeStyle = 'rgba(29,42,51,.055)'; g.lineWidth = 2;
+  for (let i = 0; i <= s; i += 64) {
+    g.beginPath(); g.moveTo(i, 0); g.lineTo(i, s); g.stroke();
+    g.beginPath(); g.moveTo(0, i); g.lineTo(s, i); g.stroke();
+  }
+  const t = new THREE.CanvasTexture(cv);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(26, 26);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+const ground = new THREE.Mesh(
+  new THREE.CircleGeometry(WORLD_R + 34, 72),
+  new THREE.MeshStandardMaterial({ map: groundTexture(), color: 0xffffff, roughness: 1 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+/* 경계 울타리 */
+const fence = new THREE.Mesh(
+  new THREE.TorusGeometry(WORLD_R + 3, 0.5, 8, 90),
+  new THREE.MeshStandardMaterial({ color: 0xc8bfa9, roughness: .9 })
+);
+fence.rotation.x = -Math.PI / 2;
+fence.position.y = 0.9;
+fence.castShadow = true;
+scene.add(fence);
+
+/* ────────────────────────────────────────────────
+   자동차
+   ──────────────────────────────────────────────── */
+const car = new THREE.Group();
+const bodyMat = new THREE.MeshStandardMaterial({ color: 0xe8734a, roughness: .45, metalness: .1 });
+const darkMat = new THREE.MeshStandardMaterial({ color: 0x2b3840, roughness: .6 });
+const glassMat = new THREE.MeshStandardMaterial({ color: 0x9fc6d9, roughness: .2, metalness: .3 });
+
+const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.8, 4.2), bodyMat);
+chassis.position.y = 0.95; chassis.castShadow = true;
+car.add(chassis);
+
+const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.78, 2.1), bodyMat);
+cabin.position.set(0, 1.68, -0.18); cabin.castShadow = true;
+car.add(cabin);
+
+const windshield = new THREE.Mesh(new THREE.BoxGeometry(1.74, 0.56, 2.16), glassMat);
+windshield.position.set(0, 1.72, -0.18);
+car.add(windshield);
+
+const wheels = [];
+const wheelGeo = new THREE.CylinderGeometry(0.58, 0.58, 0.44, 18);
+for (const [x, z, front] of [[-1.16, 1.32, true], [1.16, 1.32, true], [-1.16, -1.36, false], [1.16, -1.36, false]]) {
+  const pivot = new THREE.Group();
+  pivot.position.set(x, 0.58, z);
+  const w = new THREE.Mesh(wheelGeo, darkMat);
+  w.rotation.z = Math.PI / 2; w.castShadow = true;
+  pivot.add(w);
+  pivot.userData.front = front;
+  pivot.userData.spin = w;
+  car.add(pivot);
+  wheels.push(pivot);
+}
+scene.add(car);
+
+/* ────────────────────────────────────────────────
+   텍스트 스프라이트
+   ──────────────────────────────────────────────── */
+function labelSprite(text, sub, color) {
+  const W = 640, H = 200, cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const g = cv.getContext('2d');
+  g.clearRect(0, 0, W, H);
+  g.fillStyle = 'rgba(255,255,255,.94)';
+  const r = 26;
+  g.beginPath();
+  g.moveTo(r, 8); g.lineTo(W - r, 8); g.quadraticCurveTo(W - 8, 8, W - 8, 8 + r);
+  g.lineTo(W - 8, H - 8 - r); g.quadraticCurveTo(W - 8, H - 8, W - 8 - r, H - 8);
+  g.lineTo(r, H - 8); g.quadraticCurveTo(8, H - 8, 8, H - 8 - r);
+  g.lineTo(8, 8 + r); g.quadraticCurveTo(8, 8, r, 8);
+  g.closePath(); g.fill();
+  g.fillStyle = color;
+  g.fillRect(8, H - 20, W - 16, 12);
+  g.textAlign = 'center';
+  g.fillStyle = '#1d2a33';
+  g.font = '700 58px Pretendard, system-ui, sans-serif';
+  g.fillText(text, W / 2, 84);
+  g.fillStyle = '#5b6d79';
+  g.font = '500 32px Pretendard, system-ui, sans-serif';
+  g.fillText(sub, W / 2, 132);
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false }));
+  sp.scale.set(9.6, 3, 1);
+  return sp;
+}
+
+/* 중앙 안내 — 바닥에 새긴다. 공중에 띄우면 주행 시야를 정면으로 가린다. */
+function floorSignTexture() {
+  const S = 1024, cv = document.createElement('canvas');
+  cv.width = cv.height = S;
+  const g = cv.getContext('2d');
+  g.translate(S / 2, S / 2);
+  g.textAlign = 'center';
+  g.fillStyle = '#2b3840';
+  g.font = '800 140px Pretendard, system-ui, sans-serif';
+  g.fillText('최상호', 0, -160);
+  g.fillStyle = '#8b959c';
+  g.font = '600 52px Pretendard, system-ui, sans-serif';
+  g.fillText('FULL-STACK DEVELOPER', 0, -78);
+  g.strokeStyle = 'rgba(232,115,74,.9)';
+  g.lineWidth = 8;
+  g.beginPath(); g.moveTo(-200, -26); g.lineTo(200, -26); g.stroke();
+  g.fillStyle = '#5b6d79';
+  g.font = '500 54px Pretendard, system-ui, sans-serif';
+  g.fillText('차를 몰고', 0, 66);
+  g.fillText('프로젝트에 가까이 가보세요', 0, 138);
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+
+const centerPad = new THREE.Mesh(
+  new THREE.CylinderGeometry(10.5, 10.5, 0.16, 48),
+  new THREE.MeshStandardMaterial({ color: 0xf6f1e4, roughness: 1 })
+);
+centerPad.position.y = 0.08;
+centerPad.receiveShadow = true;
+scene.add(centerPad);
+
+/* rotation.x=-90°면 캔버스 위쪽이 -Z를 향한다. 차가 -Z로 출발하므로 글이 바로 읽힌다. */
+const centerText = new THREE.Mesh(
+  new THREE.PlaneGeometry(18, 18),
+  new THREE.MeshBasicMaterial({ map: floorSignTexture(), transparent: true, depthWrite: false })
+);
+centerText.rotation.x = -Math.PI / 2;
+centerText.position.y = 0.17;
+scene.add(centerText);
+
+/* ────────────────────────────────────────────────
+   프로젝트 스테이션
+   ──────────────────────────────────────────────── */
+const manager = new THREE.LoadingManager();
+const texLoader = new THREE.TextureLoader(manager);
+const stations = [];
+const PAD_R = 7.5;
+
+PROJECTS.forEach((p) => {
+  const g = new THREE.Group();
+  g.position.set(p.pos[0], 0, p.pos[1]);
+
+  const col = new THREE.Color(p.color);
+
+  const pad = new THREE.Mesh(
+    new THREE.CylinderGeometry(PAD_R, PAD_R, 0.22, 44),
+    new THREE.MeshStandardMaterial({ color: col, roughness: .85 })
+  );
+  pad.position.y = 0.11;
+  pad.receiveShadow = true;
+  g.add(pad);
+
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(PAD_R + 0.5, 0.16, 8, 56),
+    new THREE.MeshStandardMaterial({ color: col, roughness: .6 })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.3;
+  g.add(ring);
+
+  /* 게시판 */
+  const boardW = 9.4, boardH = 5.9;
+  const postMat = new THREE.MeshStandardMaterial({ color: 0xb9b09c, roughness: .9 });
+  for (const dx of [-3.4, 3.4]) {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 4.6, 10), postMat);
+    post.position.set(dx, 2.3, 0);
+    post.castShadow = true;
+    g.add(post);
+  }
+
+  const frame = new THREE.Mesh(
+    new THREE.BoxGeometry(boardW + 0.5, boardH + 0.5, 0.3),
+    new THREE.MeshStandardMaterial({ color: 0xfbf7ee, roughness: .9 })
+  );
+  frame.position.set(0, 4.6 + boardH / 2 - 0.4, 0);
+  frame.castShadow = true;
+  g.add(frame);
+
+  const screenMat = new THREE.MeshBasicMaterial({ color: 0xdfe6ea });
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(boardW, boardH), screenMat);
+  screen.position.set(0, frame.position.y, 0.17);
+  g.add(screen);
+
+  if (p.img) {
+    texLoader.load(p.img, (t) => {
+      t.colorSpace = THREE.SRGBColorSpace;
+      screenMat.map = t; screenMat.color.set(0xffffff); screenMat.needsUpdate = true;
+    });
+  } else if (p.video) {
+    const v = document.createElement('video');
+    v.src = p.video; v.loop = true; v.muted = true; v.playsInline = true; v.autoplay = true;
+    v.play().catch(() => {});
+    const vt = new THREE.VideoTexture(v);
+    vt.colorSpace = THREE.SRGBColorSpace;
+    screenMat.map = vt; screenMat.color.set(0xffffff); screenMat.needsUpdate = true;
+  }
+
+  const label = labelSprite(p.name, p.role, p.color);
+  label.position.set(0, frame.position.y + boardH / 2 + 2.1, 0);
+  g.add(label);
+
+  scene.add(g);
+  stations.push({
+    ...p, group: g, ring, label,
+    labelY: label.position.y,
+    phase: Math.random() * Math.PI * 2
+  });
+});
+
+/* ────────────────────────────────────────────────
+   배경 오브젝트 (나무·바위)
+   ──────────────────────────────────────────────── */
+const treeTrunk = new THREE.MeshStandardMaterial({ color: 0xa98e6f, roughness: 1 });
+const treeLeaf = new THREE.MeshStandardMaterial({ color: 0x8fb87a, roughness: 1 });
+const rockMat = new THREE.MeshStandardMaterial({ color: 0xc3bdae, roughness: 1 });
+const trunkGeo = new THREE.CylinderGeometry(0.34, 0.44, 2.2, 8);
+const leafGeo = new THREE.ConeGeometry(1.9, 4.2, 9);
+const rockGeo = new THREE.DodecahedronGeometry(1.1, 0);
+
+function farFromStations(x, z, min) {
+  if (Math.hypot(x, z) < 22) return false;              // 중앙 광장과 출발 지점 비우기
+  return stations.every(s => Math.hypot(x - s.pos[0], z - s.pos[1]) > min);
+}
+
+let placed = 0, tries = 0;
+while (placed < 64 && tries < 900) {
+  tries++;
+  const a = Math.random() * Math.PI * 2;
+  const r = 24 + Math.random() * (WORLD_R - 26);
+  const x = Math.cos(a) * r, z = Math.sin(a) * r;
+  if (!farFromStations(x, z, PAD_R + 9)) continue;      // 게시판 시야 가리지 않게
+  if (Math.random() < 0.72) {
+    const t = new THREE.Group();
+    const tr = new THREE.Mesh(trunkGeo, treeTrunk); tr.position.y = 1.1; tr.castShadow = true;
+    const lf = new THREE.Mesh(leafGeo, treeLeaf); lf.position.y = 3.9; lf.castShadow = true;
+    t.add(tr, lf);
+    const s = 0.7 + Math.random() * 0.55;
+    t.scale.setScalar(s);
+    t.position.set(x, 0, z);
+    t.rotation.y = Math.random() * Math.PI;
+    scene.add(t);
+  } else {
+    const rk = new THREE.Mesh(rockGeo, rockMat);
+    rk.position.set(x, 0.5, z);
+    rk.rotation.set(Math.random(), Math.random(), Math.random());
+    rk.scale.setScalar(0.6 + Math.random() * 0.9);
+    rk.castShadow = true; rk.receiveShadow = true;
+    scene.add(rk);
+  }
+  placed++;
+}
+
+/* ────────────────────────────────────────────────
+   조작
+   ──────────────────────────────────────────────── */
+const keys = Object.create(null);
+const KEYMAP = {
+  ArrowUp: 'fwd', KeyW: 'fwd',
+  ArrowDown: 'back', KeyS: 'back',
+  ArrowLeft: 'left', KeyA: 'left',
+  ArrowRight: 'right', KeyD: 'right',
+  Space: 'brake'
+};
+addEventListener('keydown', e => {
+  const k = KEYMAP[e.code];
+  if (k) { keys[k] = true; e.preventDefault(); hideHint(); }
+  if (e.code === 'Escape') closePanel();
+});
+addEventListener('keyup', e => { const k = KEYMAP[e.code]; if (k) keys[k] = false; });
+
+/* 터치 */
+if (matchMedia('(hover: none) and (pointer: coarse)').matches) document.body.classList.add('is-touch');
+document.querySelectorAll('.tkey').forEach(el => {
+  const k = el.dataset.k;
+  const on = e => { e.preventDefault(); keys[k] = true; hideHint(); };
+  const off = e => { e.preventDefault(); keys[k] = false; };
+  el.addEventListener('pointerdown', on);
+  el.addEventListener('pointerup', off);
+  el.addEventListener('pointercancel', off);
+  el.addEventListener('pointerleave', off);
+});
+
+let hintHidden = false;
+function hideHint() {
+  if (hintHidden) return;
+  hintHidden = true;
+  document.getElementById('hint').classList.add('hide');
+}
+
+/* ────────────────────────────────────────────────
+   주행 상태
+   ──────────────────────────────────────────────── */
+const MAX_FWD = 26, MAX_REV = 11, ACCEL = 19, BRAKE = 38, DRAG = 7.5, TURN = 1.75;
+let speed = 0, heading = 0, steer = 0;
+car.position.set(0, 0, 14);
+heading = Math.PI;
+
+function drive(dt) {
+  const wantSteer = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
+  steer += (wantSteer - steer) * Math.min(1, dt * 9);
+
+  if (keys.fwd) speed += ACCEL * dt;
+  else if (keys.back) speed -= ACCEL * dt;
+  else {
+    const drop = DRAG * dt;
+    speed = Math.abs(speed) <= drop ? 0 : speed - Math.sign(speed) * drop;
+  }
+  if (keys.brake) {
+    const drop = BRAKE * dt;
+    speed = Math.abs(speed) <= drop ? 0 : speed - Math.sign(speed) * drop;
+  }
+  speed = Math.max(-MAX_REV, Math.min(MAX_FWD, speed));
+
+  const grip = Math.min(1, Math.abs(speed) / 5);
+  heading += steer * TURN * dt * grip * Math.sign(speed || 1);
+
+  car.position.x += Math.sin(heading) * speed * dt;
+  car.position.z += Math.cos(heading) * speed * dt;
+
+  /* 경계 */
+  const d = Math.hypot(car.position.x, car.position.z);
+  if (d > WORLD_R) {
+    const k = WORLD_R / d;
+    car.position.x *= k; car.position.z *= k;
+    speed *= 0.3;
+  }
+
+  car.rotation.y = heading;
+
+  /* 바퀴 */
+  for (const w of wheels) {
+    if (w.userData.front) w.rotation.y = steer * 0.42;
+    w.userData.spin.rotation.x += speed * dt / 0.58;
+  }
+
+  /* 차체 기울임 */
+  chassis.rotation.z = -steer * grip * 0.055;
+  cabin.rotation.z = chassis.rotation.z;
+  windshield.rotation.z = chassis.rotation.z;
+}
+
+/* ────────────────────────────────────────────────
+   근접 감지 · 패널
+   ──────────────────────────────────────────────── */
+const panel = document.getElementById('panel');
+const pnBd = document.getElementById('pn-bd');
+const pnNo = document.getElementById('pn-no');
+let current = null;    // 지금 패널에 떠 있는 프로젝트
+let dismissed = null;  // 사용자가 직접 닫은 프로젝트. 그 구역을 벗어나기 전엔 다시 열지 않는다.
+const visited = new Set();
+
+document.getElementById('pn-x').addEventListener('click', closePanel);
+function closePanel() {
+  panel.classList.remove('open');
+  dismissed = current;
+  current = null;
+}
+
+function openPanel(p) {
+  current = p.id;
+  panel.style.setProperty('--c', p.color);
+  pnNo.textContent = p.no;
+  const media = p.video
+    ? `<video class="pn-shot" src="${p.video}" autoplay loop muted playsinline></video>`
+    : `<img class="pn-shot" src="${p.img}" alt="${p.name} 화면" />`;
+  pnBd.innerHTML = `
+    ${media}
+    <div class="pn-meta"><span class="pn-per">${p.period}</span><span class="pn-role">${p.role}</span></div>
+    <div class="pn-n">${p.full}</div>
+    <p class="pn-one">${p.one}</p>
+    <ul class="pn-pts">${p.pts.map(t => `<li>${t}</li>`).join('')}</ul>
+    <div class="pn-stk">${p.stack.map(s => `<span>${s}</span>`).join('')}</div>
+    <div class="pn-lk">
+      ${p.live ? `<a class="live" href="${p.live}" target="_blank" rel="noopener">라이브 ↗</a>` : ''}
+      ${p.repo ? `<a href="${p.repo}" target="_blank" rel="noopener">GitHub</a>` : ''}
+    </div>`;
+  panel.classList.add('open');
+
+  if (!visited.has(p.id)) { visited.add(p.id); renderFound(); }
+}
+
+/* 진행 표시 */
+const foundL = document.getElementById('found-l'), foundN = document.getElementById('found-n');
+function renderFound() {
+  foundL.innerHTML = PROJECTS.map(p =>
+    `<div class="found-i ${visited.has(p.id) ? 'on' : ''}" style="--c:${p.color}">
+       <span class="dot"></span>${visited.has(p.id) ? p.name : '? ? ?'}
+     </div>`
+  ).join('');
+  foundN.textContent = `${visited.size} / ${PROJECTS.length}`;
+}
+renderFound();
+
+const ENTER_R = PAD_R + 2.5, LEAVE_R = PAD_R + 9;
+
+/* 한 번 열린 패널은 자동으로 닫지 않는다.
+   전속력이면 구역 통과가 1초도 안 걸려서, 자동으로 닫으면 읽을 틈 없이 사라진다.
+   다른 프로젝트에 들어가면 교체되고, 그 외에는 × 또는 Esc로만 닫힌다. */
+function proximity() {
+  let near = null, nearD = Infinity;
+  for (const s of stations) {
+    const d = Math.hypot(car.position.x - s.pos[0], car.position.z - s.pos[1]);
+    if (d < nearD) { nearD = d; near = s; }
+  }
+  if (!near) return;
+
+  /* 닫았던 구역을 벗어났거나 다른 구역이 가까워지면 다시 열릴 수 있게 해제 */
+  if (dismissed && (dismissed !== near.id || nearD > LEAVE_R)) dismissed = null;
+
+  if (nearD < ENTER_R && current !== near.id && dismissed !== near.id) openPanel(near);
+}
+
+/* ────────────────────────────────────────────────
+   카메라 · 루프
+   ──────────────────────────────────────────────── */
+const camPos = new THREE.Vector3(0, 12, 34);
+const camLook = new THREE.Vector3();
+camera.position.copy(camPos);
+
+function updateCamera(dt) {
+  const back = 13.5, up = 6.6;
+  const tx = car.position.x - Math.sin(heading) * back;
+  const tz = car.position.z - Math.cos(heading) * back;
+  const k = 1 - Math.pow(0.0016, dt);
+  camPos.lerp(new THREE.Vector3(tx, up, tz), k);
+  camera.position.copy(camPos);
+  camLook.lerp(new THREE.Vector3(
+    car.position.x + Math.sin(heading) * 6,
+    1.6,
+    car.position.z + Math.cos(heading) * 6
+  ), k);
+  camera.lookAt(camLook);
+}
+
+const clock = new THREE.Clock();
+let t = 0;
+
+function step(dt) {
+  t += dt;
+  drive(dt);
+  updateCamera(dt);
+  proximity();
+
+  /* 게시판이 항상 차를 향하게 + 링 애니메이션 */
+  for (const s of stations) {
+    /* 차가 아니라 카메라를 향하게 한다. 차가 패드 한가운데면 방향이 0으로 붕괴해
+       게시판 뒷면이 보인다. 카메라는 늘 뒤쪽에 있어 각도가 안정적이다. */
+    const ang = Math.atan2(camera.position.x - s.pos[0], camera.position.z - s.pos[1]);
+    s.group.rotation.y += (ang - s.group.rotation.y) * Math.min(1, dt * 2.4);
+    const d = Math.hypot(car.position.x - s.pos[0], car.position.z - s.pos[1]);
+    const pulse = d < ENTER_R + 6 ? 1 + Math.sin(t * 4) * 0.035 : 1;
+    s.ring.scale.set(pulse, pulse, 1);
+    s.label.position.y = s.labelY + Math.sin(t * 1.3 + s.phase) * 0.18;
+  }
+}
+
+function loop() {
+  requestAnimationFrame(loop);
+  /* 탭이 백그라운드로 갔다 오면 delta가 크게 튀므로 상한을 둔다 */
+  step(Math.min(clock.getDelta(), 0.05));
+  renderer.render(scene, camera);
+}
+
+/* ?test=1 일 때만 주행 로직을 프레임 루프 없이 돌려볼 수 있게 노출 */
+if (new URLSearchParams(location.search).has('test')) {
+  window.__drive = {
+    step, keys, stations,
+    pos: () => ({ x: +car.position.x.toFixed(2), z: +car.position.z.toFixed(2) }),
+    teleport(x, z, h = 0) { car.position.set(x, 0, z); heading = h; speed = 0; }
+  };
+}
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+/* ────────────────────────────────────────────────
+   로딩 완료
+   ──────────────────────────────────────────────── */
+const bar = document.getElementById('load-bar-i'), pct = document.getElementById('load-pct');
+manager.onProgress = (url, done, total) => {
+  const v = Math.round(done / total * 100);
+  bar.style.width = v + '%'; pct.textContent = v + '%';
+};
+function start() {
+  bar.style.width = '100%'; pct.textContent = '100%';
+  setTimeout(() => document.getElementById('load').classList.add('done'), 260);
+  loop();
+}
+manager.onLoad = start;
+/* 이미지가 하나도 없거나 로딩이 지연돼도 진행 */
+setTimeout(() => { if (!clock.running) start(); }, 4000);
+</script>
+</body>
+</html>
