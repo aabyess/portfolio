@@ -200,11 +200,21 @@ body.is-touch #found{bottom:150px;padding:10px 12px}
 </aside>
 
 <script type="importmap">
-{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
 </script>
 
 <script type="module">
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+/* Blender에서 만든 차로 갈아끼우는 자리.
+   models/car.glb 를 만든 뒤 아래 값을 '../models/car.glb' 로 바꾸면 교체된다.
+   (없는 파일을 매번 요청하면 콘솔에 404가 남으므로 기본값은 null)
+   내보내기 규칙은 models/README.md 참고. */
+const CAR_MODEL_URL = null;
 
 /* ────────────────────────────────────────────────
    프로젝트 데이터
@@ -399,37 +409,90 @@ scene.add(fence);
 /* ────────────────────────────────────────────────
    자동차
    ──────────────────────────────────────────────── */
-const car = new THREE.Group();
-const bodyMat = new THREE.MeshStandardMaterial({ color: 0xe8734a, roughness: .45, metalness: .1 });
-const darkMat = new THREE.MeshStandardMaterial({ color: 0x2b3840, roughness: .6 });
-const glassMat = new THREE.MeshStandardMaterial({ color: 0x9fc6d9, roughness: .2, metalness: .3 });
+const CAR_LEN = 4.2;                 // 월드 기준 차 길이. glb도 여기에 맞춰 크기를 맞춘다.
 
-const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.8, 4.2), bodyMat);
-chassis.position.y = 0.95; chassis.castShadow = true;
-car.add(chassis);
-
-const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.78, 2.1), bodyMat);
-cabin.position.set(0, 1.68, -0.18); cabin.castShadow = true;
-car.add(cabin);
-
-const windshield = new THREE.Mesh(new THREE.BoxGeometry(1.74, 0.56, 2.16), glassMat);
-windshield.position.set(0, 1.72, -0.18);
-car.add(windshield);
-
-const wheels = [];
-const wheelGeo = new THREE.CylinderGeometry(0.58, 0.58, 0.44, 18);
-for (const [x, z, front] of [[-1.16, 1.32, true], [1.16, 1.32, true], [-1.16, -1.36, false], [1.16, -1.36, false]]) {
-  const pivot = new THREE.Group();
-  pivot.position.set(x, 0.58, z);
-  const w = new THREE.Mesh(wheelGeo, darkMat);
-  w.rotation.z = Math.PI / 2; w.castShadow = true;
-  pivot.add(w);
-  pivot.userData.front = front;
-  pivot.userData.spin = w;
-  car.add(pivot);
-  wheels.push(pivot);
-}
+const car = new THREE.Group();       // 위치·방향만 담당. 겉모습은 자식으로 갈아끼운다.
 scene.add(car);
+
+/* 주행 애니메이션이 만지는 부분.
+   wheels: { steerNode, spinNode, front, r }
+   tilt:   코너링 때 살짝 기울일 메시들 */
+let parts = { wheels: [], tilt: [] };
+
+/* ── 기본 차 (박스 조립) ── */
+const stockCar = new THREE.Group();
+{
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0xe8734a, roughness: .45, metalness: .1 });
+  const darkMat = new THREE.MeshStandardMaterial({ color: 0x2b3840, roughness: .6 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x9fc6d9, roughness: .2, metalness: .3 });
+
+  const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.8, CAR_LEN), bodyMat);
+  chassis.position.y = 0.95; chassis.castShadow = true;
+  stockCar.add(chassis);
+
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.78, 2.1), bodyMat);
+  cabin.position.set(0, 1.68, -0.18); cabin.castShadow = true;
+  stockCar.add(cabin);
+
+  const windshield = new THREE.Mesh(new THREE.BoxGeometry(1.74, 0.56, 2.16), glassMat);
+  windshield.position.set(0, 1.72, -0.18);
+  stockCar.add(windshield);
+
+  const wheelGeo = new THREE.CylinderGeometry(0.58, 0.58, 0.44, 18);
+  for (const [x, z, front] of [[-1.16, 1.32, true], [1.16, 1.32, true], [-1.16, -1.36, false], [1.16, -1.36, false]]) {
+    const pivot = new THREE.Group();
+    pivot.position.set(x, 0.58, z);
+    const w = new THREE.Mesh(wheelGeo, darkMat);
+    w.rotation.z = Math.PI / 2; w.castShadow = true;
+    pivot.add(w);
+    stockCar.add(pivot);
+    parts.wheels.push({ steerNode: pivot, spinNode: w, front, r: 0.58 });
+  }
+  parts.tilt = [chassis, cabin, windshield];
+}
+car.add(stockCar);
+
+/* ── Blender에서 만든 차로 교체 ── */
+const WHEEL_NAMES = [
+  ['wheel_fl', true], ['wheel_fr', true],
+  ['wheel_rl', false], ['wheel_rr', false]
+];
+
+if (CAR_MODEL_URL) new GLTFLoader().load(
+  CAR_MODEL_URL,
+  (gltf) => {
+    const model = gltf.scene;
+
+    /* 어떤 크기로 내보냈든 월드 스케일에 맞춘다 (길이 기준) */
+    const size = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());
+    if (size.z > 0.0001) model.scale.setScalar(CAR_LEN / size.z);
+
+    /* 좌우·앞뒤 중심을 맞추고 바퀴가 바닥에 닿게 내린다 */
+    const box = new THREE.Box3().setFromObject(model);
+    const c = box.getCenter(new THREE.Vector3());
+    model.position.x -= c.x;
+    model.position.z -= c.z;
+    model.position.y -= box.min.y;
+
+    model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+
+    /* 규칙에 맞는 이름의 바퀴가 있으면 조향·회전을 붙인다. 없으면 차체만 움직인다. */
+    const wheels = [];
+    for (const [name, front] of WHEEL_NAMES) {
+      const node = model.getObjectByName(name);
+      if (!node) continue;
+      node.rotation.order = 'YXZ';   // 조향(Y)을 먼저, 구르기(X)를 나중에
+      const r = new THREE.Box3().setFromObject(node).getSize(new THREE.Vector3()).y / 2;
+      wheels.push({ steerNode: node, spinNode: node, front, r: r > 0.05 ? r : 0.58 });
+    }
+
+    car.remove(stockCar);
+    car.add(model);
+    parts = { wheels, tilt: [model] };
+  },
+  undefined,
+  () => { /* 파일이 없으면 기본 차를 그대로 쓴다 — 정상 동작이므로 조용히 넘어간다 */ }
+);
 
 /* ────────────────────────────────────────────────
    텍스트 스프라이트
@@ -705,16 +768,15 @@ function drive(dt) {
 
   car.rotation.y = heading;
 
-  /* 바퀴 */
-  for (const w of wheels) {
-    if (w.userData.front) w.rotation.y = steer * 0.42;
-    w.userData.spin.rotation.x += speed * dt / 0.58;
+  /* 바퀴 — 앞바퀴는 조향, 전부 굴러간다 */
+  for (const w of parts.wheels) {
+    if (w.front) w.steerNode.rotation.y = steer * 0.42;
+    w.spinNode.rotation.x += speed * dt / w.r;
   }
 
-  /* 차체 기울임 */
-  chassis.rotation.z = -steer * grip * 0.055;
-  cabin.rotation.z = chassis.rotation.z;
-  windshield.rotation.z = chassis.rotation.z;
+  /* 코너링 시 차체 기울임 */
+  const tilt = -steer * grip * 0.055;
+  for (const m of parts.tilt) m.rotation.z = tilt;
 }
 
 /* ────────────────────────────────────────────────
