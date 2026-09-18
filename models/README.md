@@ -3,8 +3,7 @@
 현재 차: **Kenney Car Kit의 `hatchback-sports`** (CC0)
 
 ```
-car.glb                  차 모델 (193KB)
-Textures/colormap.png    car.glb이 참조하는 팔레트 텍스처 (12KB)
+car.glb                  차 모델 (131KB, 텍스처 포함)
 KENNEY-LICENSE.txt       원본 라이선스
 ```
 
@@ -13,18 +12,30 @@ KENNEY-LICENSE.txt       원본 라이선스
 `mockups/portfolio.js`의 `CAR_MODEL_URL`이 이 파일을 가리킵니다.
 `null`로 바꾸면 박스로 조립한 기본 차로 돌아갑니다.
 
-## ⚠️ 텍스처 파일을 같이 옮겨야 합니다
+현재 `car.glb`는 **텍스처를 파일 안에 포함**하고 있어서 이 파일 하나만 있으면 됩니다.
+(Blender로 한 번 왕복시켜 embed한 결과물입니다. 덤으로 197KB → 131KB로 줄었습니다)
 
-Kenney의 glb는 텍스처를 파일 안에 넣지 않고 **`Textures/colormap.png`를 상대 경로로 참조**합니다.
-`car.glb`만 복사하면 차가 **새하얗게** 나옵니다. (콘솔에
-`THREE.GLTFLoader: Couldn't load texture Textures/colormap.png` 가 찍힙니다)
+## ⚠️ Kenney zip에서 직접 꺼내 쓸 때 주의
 
-Car Kit의 다른 차로 바꿀 때도 `Textures/` 폴더를 그대로 두면 됩니다.
-전부 같은 팔레트 텍스처 하나를 공유합니다.
+**원본 zip의 glb는 텍스처가 들어있지 않습니다.** `Textures/colormap.png`를 상대 경로로
+참조만 합니다. 그래서 zip에서 `.glb`만 꺼내 오면 차가 **새하얗게** 나옵니다.
+콘솔에 이런 에러가 찍힙니다:
+
+```
+THREE.GLTFLoader: Couldn't load texture Textures/colormap.png
+```
+
+해결은 둘 중 하나입니다.
+
+1. **`Textures/` 폴더를 `car.glb` 옆에 같이 두기** — 가장 간단합니다.
+   Car Kit의 차들은 전부 같은 팔레트 텍스처 하나를 공유하므로 폴더 하나면 전부 커버됩니다.
+2. **Blender로 열었다가 다시 내보내기** — 텍스처가 파일 안에 묻혀서 파일 하나로 끝납니다.
+   지금 `car.glb`가 이 방식입니다. (아래 "Blender 내보내기 설정" 참고)
 
 ## 다른 차로 바꾸기
 
-Car Kit 안에 50개가 들어 있습니다. 받은 zip에서 원하는 `.glb`를 `car.glb`로 복사만 하면 끝입니다.
+Car Kit 안에 50개가 들어 있습니다. 받은 zip에서 원하는 `.glb`를 `car.glb`로 복사하고,
+위의 텍스처 주의사항만 처리하면 됩니다.
 
 - 승용차 — `sedan`, `sedan-sports`, `hatchback-sports`, `taxi`, `police`
 - SUV·밴 — `suv`, `suv-luxury`, `van`, `delivery`

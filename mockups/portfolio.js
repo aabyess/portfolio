@@ -43,6 +43,7 @@ const PROJECTS = [
     ],
     stack: ['Next.js', 'TypeScript', 'TailwindCSS v4', 'TanStack Query', 'Zustand', 'Kakao Maps SDK', 'Motion', 'Vitest'],
     video: '../images/nolleo-onna.mp4',
+    poster: '../images/nolleo-onna.jpg',   // 영상이 재생되기 전까지 보여줄 정지 이미지
     live: 'https://dev.nolleo-onna.site/', repo: 'https://github.com/nolleo-onna/nolleo-onna-frontend',
     pos: [42, -20]
   },
@@ -134,7 +135,7 @@ const PLAY = [
 ];
 
 const media = p => p.video
-  ? `<video src="${p.video}" autoplay loop muted playsinline></video>`
+  ? `<video src="${p.video}"${p.poster ? ` poster="${p.poster}"` : ''} autoplay loop muted playsinline preload="metadata"></video>`
   : `<img src="${p.img}" alt="${p.name} 화면" loading="lazy" decoding="async" />`;
 
 const links = p => `
@@ -526,18 +527,31 @@ async function initDrive() {
     screen.position.set(0, frame.position.y, 0.17);
     g.add(screen);
 
-    if (p.img) {
-      texLoader.load(p.img, t => {
+    /* 정지 이미지를 먼저 붙인다. 영상만 쓰면 재생 시작 전까지 게시판이 검게 남고,
+       자동재생이 막힌 환경(절전 모드 등)에서는 영원히 검은 판이 된다. */
+    const still = p.img || p.poster;
+    if (still) {
+      texLoader.load(still, t => {
         t.colorSpace = THREE.SRGBColorSpace;
+        /* 그 사이 영상이 이미 올라왔으면 덮어쓰지 않는다 */
+        if (screenMat.userData.video) return;
         screenMat.map = t; screenMat.color.set(0xffffff); screenMat.needsUpdate = true;
       });
-    } else if (p.video) {
+    }
+
+    if (p.video) {
       const v = document.createElement('video');
       Object.assign(v, { src: p.video, loop: true, muted: true, playsInline: true, autoplay: true });
-      v.play().catch(() => {});
-      const vt = new THREE.VideoTexture(v);
-      vt.colorSpace = THREE.SRGBColorSpace;
-      screenMat.map = vt; screenMat.color.set(0xffffff); screenMat.needsUpdate = true;
+      /* 실제로 재생이 시작된 뒤에 교체한다 */
+      v.addEventListener('playing', () => {
+        const vt = new THREE.VideoTexture(v);
+        vt.colorSpace = THREE.SRGBColorSpace;
+        screenMat.map = vt;
+        screenMat.color.set(0xffffff);
+        screenMat.needsUpdate = true;
+        screenMat.userData.video = v;
+      }, { once: true });
+      v.play().catch(() => { /* 자동재생이 막히면 정지 이미지로 남는다 */ });
     }
 
     const label = labelSprite(p.name, p.role, p.color);
