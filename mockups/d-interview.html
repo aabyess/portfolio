@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>시안 D — 최상호 · Full-stack Developer</title>
+<meta name="description" content="기획부터 개발·운영까지 책임지는 풀스택 개발자 최상호. Next.js · TypeScript · Supabase." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+<style>
+:root{
+  color-scheme:light;
+  --bg:#fbfbf9;
+  --surface:#ffffff;
+  --sunk:#f4f4f1;
+  --border:#e6e4df;
+  --border2:#d3d0c9;
+  --text:#191917;
+  --muted:#57554e;
+  --subtle:#8d8b84;
+  --accent:#2c5f52;
+  --accent-tint:#eaf2ef;
+  --accent-line:#c3dad2;
+  --ok:#1f7a4d;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:'Pretendard Variable',Pretendard,-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15.5px;line-height:1.75;
+  -webkit-font-smoothing:antialiased}
+a{color:inherit}
+:where(a,button):focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+.wrap{max-width:1000px;margin:0 auto;padding:0 32px}
+.mono{font-family:var(--mono)}
+
+/* skip link */
+.skip{position:absolute;left:-9999px;top:0;background:var(--accent);color:#fff;padding:10px 16px;z-index:200;border-radius:0 0 8px 0}
+.skip:focus{left:0}
+
+/* ── HEADER ── */
+header{position:sticky;top:0;z-index:60;background:rgba(251,251,249,.9);backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--border)}
+.hd{max-width:1000px;margin:0 auto;padding:0 32px;height:62px;display:flex;align-items:center;gap:20px}
+.hd-name{font-weight:800;font-size:16px;letter-spacing:-.02em;white-space:nowrap}
+.hd-name span{color:var(--subtle);font-weight:500;font-size:13px;margin-left:8px}
+.hd-nav{display:flex;gap:4px;margin-left:auto;align-items:center}
+.hd-nav a{font-size:13.5px;color:var(--muted);text-decoration:none;padding:7px 12px;border-radius:7px;
+  white-space:nowrap;transition:.15s}
+.hd-nav a:hover{color:var(--text);background:var(--sunk)}
+.hd-cv{background:var(--text)!important;color:#fff!important;font-weight:600;padding:8px 15px!important}
+.hd-cv:hover{background:#000!important}
+
+/* ── HERO ── */
+#top{padding:66px 0 54px;border-bottom:1px solid var(--border)}
+.status{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;
+  color:var(--ok);background:var(--accent-tint);border:1px solid var(--accent-line);
+  padding:5px 13px;border-radius:999px;margin-bottom:24px}
+.status .d{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+h1{font-size:clamp(34px,4.6vw,50px);font-weight:800;line-height:1.24;letter-spacing:-.035em;margin-bottom:20px}
+h1 .u{background:linear-gradient(transparent 62%,var(--accent-line) 62%,var(--accent-line) 90%,transparent 90%)}
+.pitch{font-size:16.5px;color:var(--muted);line-height:1.9;max-width:660px;margin-bottom:34px}
+.pitch b{color:var(--text);font-weight:600}
+
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:1px;background:var(--border);
+  border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:32px}
+.fact{background:var(--surface);padding:16px 18px}
+.fact dt{font-family:var(--mono);font-size:10.5px;color:var(--subtle);letter-spacing:.06em;
+  text-transform:uppercase;margin-bottom:5px}
+.fact dd{font-size:14.5px;font-weight:600;letter-spacing:-.01em}
+.fact dd small{display:block;font-weight:400;font-size:12.5px;color:var(--muted);margin-top:2px;letter-spacing:0}
+
+.acts{display:flex;gap:9px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:11px 19px;border-radius:9px;font-size:14px;
+  font-weight:600;text-decoration:none;border:1px solid var(--border2);background:var(--surface);
+  color:var(--text);transition:.15s}
+.btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-tint)}
+.btn-1{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-1:hover{background:#24503f;border-color:#24503f;color:#fff}
+
+/* ── SECTION ── */
+section{padding:64px 0;border-bottom:1px solid var(--border)}
+.sh{margin-bottom:30px}
+.sh-k{font-family:var(--mono);font-size:11.5px;color:var(--accent);letter-spacing:.1em;
+  text-transform:uppercase;margin-bottom:9px;display:flex;align-items:center;gap:9px}
+.sh-k::before{content:'';width:18px;height:1.5px;background:var(--accent)}
+h2{font-size:25px;font-weight:800;letter-spacing:-.03em}
+.sh-d{color:var(--muted);font-size:14.5px;margin-top:7px}
+
+/* ── SKILLS ── */
+.sk{display:grid;grid-template-columns:repeat(auto-fit,minmax(198px,1fr));gap:16px;align-items:start}
+.sk-g{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 21px}
+.sk-t{font-size:13px;font-weight:700;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:8px}
+.sk-t i{font-style:normal;color:var(--accent);font-family:var(--mono);font-size:11px}
+.sk-l{list-style:none;display:flex;flex-wrap:wrap;gap:6px}
+.sk-l li{font-family:var(--mono);font-size:11.5px;color:var(--muted);background:var(--sunk);
+  border:1px solid var(--border);padding:3px 9px;border-radius:6px}
+.sk-l li.k{color:var(--accent);background:var(--accent-tint);border-color:var(--accent-line);font-weight:500}
+
+/* ── PROJECTS ── */
+.pl{display:flex;flex-direction:column;gap:22px}
+.pj{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;
+  transition:border-color .18s,box-shadow .18s}
+.pj:hover{border-color:var(--border2);box-shadow:0 6px 24px rgba(25,25,23,.06)}
+.pj-top{display:flex;align-items:baseline;gap:11px;padding:16px 22px 0;flex-wrap:wrap}
+.pj-no{font-family:var(--mono);font-size:12px;color:var(--accent);font-weight:500}
+.pj-per{font-family:var(--mono);font-size:11.5px;color:var(--subtle);margin-left:auto}
+.pj-role{font-family:var(--mono);font-size:11px;color:var(--accent);background:var(--accent-tint);
+  border:1px solid var(--accent-line);padding:2px 9px;border-radius:5px}
+.pj-hd{padding:9px 22px 0}
+.pj-n{font-size:19.5px;font-weight:800;letter-spacing:-.025em;line-height:1.35;margin-bottom:7px}
+.pj-one{font-size:14.5px;color:var(--muted);line-height:1.75}
+
+.pj-grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:24px;padding:18px 22px 22px}
+.pj-shot{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--sunk);
+  aspect-ratio:16/10;align-self:start}
+.pj-shot img,.pj-shot video{width:100%;height:100%;object-fit:cover;object-position:top center;display:block}
+
+.pts{list-style:none;display:flex;flex-direction:column;gap:11px;margin-bottom:15px}
+.pts li{position:relative;padding-left:20px;font-size:14px;color:var(--muted);line-height:1.76}
+.pts li::before{content:'';position:absolute;left:1px;top:.68em;width:8px;height:2px;border-radius:2px;background:var(--accent)}
+.pts li b{color:var(--text);font-weight:600}
+.pts li.hide{display:none}
+.more{font-family:var(--mono);font-size:12px;color:var(--accent);background:none;border:none;cursor:pointer;
+  padding:4px 0;border-bottom:1px dashed var(--accent-line);margin-bottom:16px}
+.more:hover{border-bottom-style:solid}
+
+.stk{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:15px}
+.stk span{font-family:var(--mono);font-size:11px;color:var(--muted);background:var(--sunk);
+  border:1px solid var(--border);padding:3px 9px;border-radius:6px}
+.lk{display:flex;gap:8px;flex-wrap:wrap}
+.lk a{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;text-decoration:none;
+  color:var(--muted);border:1px solid var(--border2);padding:6px 13px;border-radius:7px;transition:.15s}
+.lk a:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-tint)}
+.lk a.live{background:var(--text);border-color:var(--text);color:#fff}
+.lk a.live:hover{background:#000;border-color:#000;color:#fff}
+
+/* compact projects */
+.pc{display:grid;grid-template-columns:repeat(auto-fit,minmax(288px,1fr));gap:16px;margin-top:22px}
+.pcx{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:19px 20px;transition:.16s}
+.pcx:hover{border-color:var(--border2);box-shadow:0 4px 18px rgba(25,25,23,.05)}
+.pcx-t{display:flex;align-items:baseline;gap:9px;margin-bottom:9px;flex-wrap:wrap}
+.pcx-n{font-size:15.5px;font-weight:700;letter-spacing:-.02em}
+.pcx-p{font-family:var(--mono);font-size:11px;color:var(--subtle);margin-left:auto}
+.pcx-d{font-size:13.5px;color:var(--muted);line-height:1.72;margin-bottom:13px}
+
+/* ── PLAYGROUND ── */
+#play{background:var(--sunk)}
+.pg{display:grid;grid-template-columns:repeat(auto-fit,minmax(252px,1fr));gap:16px}
+.pgc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:19px 20px}
+.pgc-t{display:flex;align-items:center;gap:9px;margin-bottom:10px}
+.pgc-i{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;font-size:16px;
+  background:var(--sunk);border:1px solid var(--border)}
+.pgc-s{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--subtle);
+  border:1px solid var(--border2);padding:2px 8px;border-radius:999px}
+.pgc-s.on{color:var(--ok);border-color:var(--accent-line);background:var(--accent-tint)}
+.pgc-n{font-size:14.5px;font-weight:700;margin-bottom:6px}
+.pgc-d{font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:12px}
+
+/* ── CONTACT ── */
+#contact{border-bottom:none}
+.ct{display:grid;grid-template-columns:repeat(auto-fit,minmax(238px,1fr));gap:12px;margin-top:6px}
+.ct a{display:flex;align-items:center;gap:13px;padding:16px 18px;background:var(--surface);
+  border:1px solid var(--border);border-radius:11px;text-decoration:none;transition:.15s}
+.ct a:hover{border-color:var(--accent);background:var(--accent-tint)}
+.ct .i{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex-shrink:0;
+  background:var(--sunk);border:1px solid var(--border);color:var(--accent)}
+.ct .k{font-family:var(--mono);font-size:10px;color:var(--subtle);letter-spacing:.07em;text-transform:uppercase}
+.ct .v{font-size:14px;font-weight:600;letter-spacing:-.01em}
+
+footer{padding:26px 0 36px}
+.ft{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--subtle)}
+
+@media(max-width:860px){
+  .pj-grid{grid-template-columns:1fr}
+  .pj-shot{grid-row:1;aspect-ratio:16/9}
+  .pj-txt{grid-row:2}
+  .hd-nav a:not(.hd-cv){display:none}
+  .wrap,.hd{padding:0 20px}
+  #top{padding:46px 0 42px}
+  section{padding:48px 0}
+}
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
+@media print{
+  header,.acts,.lk,.skip,#play{display:none}
+  body{background:#fff;font-size:11pt}
+  section,#top{border:none;padding:14pt 0;break-inside:avoid}
+  .pj,.pcx,.sk-g{break-inside:avoid;box-shadow:none}
+  .pts li.hide{display:list-item}
+  .more{display:none}
+  a::after{content:' (' attr(href) ')';font-size:8pt;color:#666}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">본문으로 건너뛰기</a>
+
+<header>
+  <div class="hd">
+    <div class="hd-name">최상호 <span>Full-stack Developer</span></div>
+    <nav class="hd-nav">
+      <a href="#skills">기술</a>
+      <a href="#work">프로젝트</a>
+      <a href="#play">사이드</a>
+      <a href="#contact">연락</a>
+      <a href="#" class="hd-cv">이력서 PDF</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+<section id="top" style="border-bottom:1px solid var(--border)">
+  <div class="wrap">
+    <div class="status"><span class="d"></span>채용 제안 환영 · 2026년 입사 가능</div>
+    <h1>기획부터 운영까지<br /><span class="u">끝까지 책임지는</span> 개발자입니다</h1>
+    <p class="pitch">
+      프론트엔드로 시작해 지금은 <b>기획·설계·개발·운영 전 과정</b>을 직접 맡습니다.
+      B2B 무역 플랫폼을 1인으로 구현하며 프론트와 백엔드를 함께 들여다봤고,
+      그 덕에 간헐적 로그아웃과 채팅 요청 폭주처럼 <b>한쪽만 봐서는 못 찾는 버그</b>를 직접 잡아냈습니다.
+    </p>
+
+    <dl class="facts">
+      <div class="fact"><dt>주력 스택</dt><dd>Next.js · TypeScript<small>Supabase · TanStack Query</small></dd></div>
+      <div class="fact"><dt>경험 형태</dt><dd>1인 풀스택 · 프론트 전담<small>인턴 · 팀 프로젝트 · 공모전</small></dd></div>
+      <div class="fact"><dt>프로젝트</dt><dd>6개 완주<small>이 중 3개 라이브 운영 중</small></dd></div>
+      <div class="fact"><dt>개발 기간</dt><dd>2025.03 —<small>부트캠프 수료 후 지속</small></dd></div>
+    </dl>
+
+    <div class="acts">
+      <a href="#work" class="btn btn-1">프로젝트 6개 보기</a>
+      <a href="#" class="btn">이력서 PDF</a>
+      <a href="https://github.com/aabyess" class="btn">GitHub</a>
+      <a href="mailto:maeguming0000@gmail.com" class="btn">이메일 보내기</a>
+    </div>
+  </div>
+</section>
+
+<section id="skills">
+  <div class="wrap">
+    <div class="sh">
+      <div class="sh-k">Skills</div>
+      <h2>기술 스택</h2>
+      <p class="sh-d">강조 표시는 실제 프로젝트에서 주도적으로 설계·구현해 본 기술입니다.</p>
+    </div>
+    <div class="sk">
+      <div class="sk-g">
+        <div class="sk-t"><i>01</i> Frontend</div>
+        <ul class="sk-l">
+          <li class="k">Next.js</li><li class="k">React</li><li class="k">TypeScript</li>
+          <li class="k">TailwindCSS</li><li class="k">TanStack Query</li><li class="k">Zustand</li>
+          <li>Motion</li><li>Storybook</li><li>Ant Design</li>
+        </ul>
+      </div>
+      <div class="sk-g">
+        <div class="sk-t"><i>02</i> Backend · Data</div>
+        <ul class="sk-l">
+          <li class="k">Supabase</li><li class="k">PostgreSQL / RLS</li><li class="k">REST API 설계</li>
+          <li>FastAPI</li><li>Python</li><li>MySQL</li>
+        </ul>
+      </div>
+      <div class="sk-g">
+        <div class="sk-t"><i>03</i> 연동 · 외부 API</div>
+        <ul class="sk-l">
+          <li class="k">Gemini API</li><li class="k">OpenAI API</li><li class="k">Kakao Maps SDK</li>
+          <li class="k">next-intl</li><li>DeepL</li><li>PortOne 결제</li>
+        </ul>
+      </div>
+      <div class="sk-g">
+        <div class="sk-t"><i>04</i> 테스트 · 배포</div>
+        <ul class="sk-l">
+          <li>Vitest</li><li>Jest</li><li>Vercel</li><li>Git / GitHub</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="work">
+  <div class="wrap">
+    <div class="sh">
+      <div class="sh-k">Work</div>
+      <h2>프로젝트</h2>
+      <p class="sh-d">대표 프로젝트 2개를 먼저, 나머지 4개는 요약으로 정리했습니다.</p>
+    </div>
+
+    <div class="pl">
+
+      <article class="pj">
+        <div class="pj-top">
+          <span class="pj-no">01</span>
+          <span class="pj-role">인턴 · 1인 개발</span>
+          <span class="pj-per">2026.07 — 2026.08</span>
+        </div>
+        <div class="pj-hd">
+          <div class="pj-n">Trade-Cmarket — 한국·인도네시아 B2B 무역 견적·계약 플랫폼</div>
+          <p class="pj-one">발주 공고부터 견적·낙찰·계약·실시간 채팅까지 거래 플로우 전체를 바이어·셀러 양면으로 <b>혼자 기획·설계·구현</b>했습니다.</p>
+        </div>
+        <div class="pj-grid">
+          <div class="pj-txt">
+            <ul class="pts" data-pts>
+              <li>Supabase RLS와 서비스롤 API로 <b>이중 권한 구조</b>를 설계해, RLS를 우회하는 경로에도 소유권·상태 전이 검증을 직접 붙였습니다. 완료된 계약 되돌리기, 마감 공고 견적 제출 같은 조작을 차단했습니다.</li>
+              <li>3개 국어 서비스에서 번역본을 원문·감지언어와 함께 저장하고 생성은 서버로만 강제해, <b>클라이언트발 번역 위조</b>를 막았습니다.</li>
+              <li>간헐적 강제 로그아웃의 원인이 <b>미들웨어의 리다이렉트 쿠키 누락</b>임을 프론트와 백엔드를 함께 추적해 찾아내고, 헬퍼로 재발을 막았습니다.</li>
+              <li class="hide">채팅 읽음 처리가 행마다 이벤트를 발생시켜 전체 이력을 다시 불러오던 문제를, 수신 페이로드를 캐시에 직접 반영하도록 바꿔 해결했습니다.</li>
+              <li class="hide">Gemini 구조화 출력으로 공고·견적 초안을 생성하고, 발주서 PDF·이미지를 멀티모달로 추출했습니다. 모델 과부하 시 폴백 체인으로 무중단 처리했습니다.</li>
+              <li class="hide">전 API 라우트 보안 감사를 수행해 저장형 XSS 살균, 무인증 번역 프록시 차단, 업로드 MIME·용량 검증을 일괄 적용했습니다.</li>
+            </ul>
+            <div class="stk">
+              <span>Next.js 15</span><span>TypeScript</span><span>Supabase</span><span>TanStack Query</span>
+              <span>Zustand</span><span>next-intl</span><span>Gemini API</span><span>Vercel</span>
+            </div>
+            <div class="lk">
+              <a href="https://mitrapay.vercel.app/" class="live">라이브 ↗</a>
+              <a href="https://github.com/cmarketplace/Trade-Cmarket">GitHub</a>
+            </div>
+          </div>
+          <div class="pj-shot"><img src="../images/trade-cmarket.png" alt="Trade-Cmarket 대시보드" loading="lazy" decoding="async" /></div>
+        </div>
+      </article>
+
+      <article class="pj">
+        <div class="pj-top">
+          <span class="pj-no">02</span>
+          <span class="pj-role">5인 팀 · 프론트엔드 전담</span>
+          <span class="pj-per">2026.05 — 2026.10</span>
+        </div>
+        <div class="pj-hd">
+          <div class="pj-n">놀러온나 — 부산 특화 예산 맞춤 여행 플랫폼</div>
+          <p class="pj-one">한국관광공사 TourAPI 기반 여행 플랫폼에서 <b>서비스 전 페이지의 프론트엔드를 혼자</b> 설계·구현했습니다. (프론트 1, 백엔드 3, PM 1)</p>
+        </div>
+        <div class="pj-grid">
+          <div class="pj-txt">
+            <ul class="pts" data-pts>
+              <li>장소 매핑 상한이 3,000개로 하드코딩돼 <b>실데이터 3,632개 중 632개가 누락</b>되던 버그를 발견했습니다. 상한을 올리고 37회 순차 요청을 8개 단위 병렬로 바꿔 초기 로딩도 함께 개선했습니다.</li>
+              <li>부산 16개 구 혼잡도 지도를 Kakao Maps SDK로 구현하고, 원형 마커를 <b>실제 행정구역 경계 폴리곤</b>으로 교체해 구 클릭부터 상세 모달까지 이어지는 탐색 흐름을 설계했습니다.</li>
+              <li>AI가 생성한 코스를 사용자가 직접 다듬도록 순서 변경·제외·드래그 정렬·예산 게이지를 붙인 <b>편집 흐름</b>을 구현했습니다.</li>
+              <li class="hide">카카오 SDK 스크립트 로드 전에 지도를 초기화해 발생하던 레이스 컨디션을, 스크립트 태그를 재확인한 뒤 load 이벤트를 붙이는 폴백으로 해결했습니다.</li>
+              <li class="hide">모바일에서 카드 드래그가 목록 스크롤을 막던 문제를, 화면 크기를 감지해 데스크톱·모바일 드래그 방식을 분리하는 방식으로 해결했습니다.</li>
+              <li class="hide">스팟 검색을 지역명·카테고리·무료 여부·초성까지 인식하는 통합 검색으로 확장하고, 결과에 맞춰 지도 범위가 자동 재조정되도록 했습니다.</li>
+            </ul>
+            <div class="stk">
+              <span>Next.js</span><span>TypeScript</span><span>TailwindCSS v4</span><span>TanStack Query</span>
+              <span>Zustand</span><span>Kakao Maps SDK</span><span>Motion</span><span>Vitest</span>
+            </div>
+            <div class="lk">
+              <a href="https://dev.nolleo-onna.site/" class="live">라이브 ↗</a>
+              <a href="https://github.com/nolleo-onna/nolleo-onna-frontend">GitHub</a>
+            </div>
+          </div>
+          <div class="pj-shot"><video src="../images/nolleo-onna.mp4" autoplay loop muted playsinline></video></div>
+        </div>
+      </article>
+
+    </div>
+
+    <div class="pc">
+      <div class="pcx">
+        <div class="pcx-t"><span class="pcx-n">RE:BOOT</span><span class="pcx-p">2026.02 — 04</span></div>
+        <p class="pcx-d">번아웃·자기관리 테마 모임 커뮤니티. 자유게시판 전체 CRUD를 담당하고, 조회수가 3씩 오르던 중복 호출 버그를 잡고 캐시 키를 중앙화했습니다.</p>
+        <div class="stk"><span>Next.js</span><span>TypeScript</span><span>React Query</span><span>Storybook</span></div>
+        <div class="lk"><a href="https://reboot-codeit.vercel.app/" class="live">라이브 ↗</a><a href="https://github.com/aabyess/Reboot">GitHub</a></div>
+      </div>
+      <div class="pcx">
+        <div class="pcx-t"><span class="pcx-n">Myeonjeop-Mate</span><span class="pcx-p">2025.11 — 12</span></div>
+        <p class="pcx-d">이력서를 분석해 맞춤 면접 질문과 답변 피드백을 주는 서비스. OpenAI 연동부터 PDF·Word 텍스트 추출, 일일 사용량 제한까지 1인 개발했습니다.</p>
+        <div class="stk"><span>React</span><span>OpenAI API</span><span>PDF.js</span><span>Mammoth</span></div>
+        <div class="lk"><a href="https://github.com/aabyess/myeonjeop-mate">GitHub</a></div>
+      </div>
+      <div class="pcx">
+        <div class="pcx-t"><span class="pcx-n">IGNIS</span><span class="pcx-p">2025.03 — 10</span></div>
+        <p class="pcx-d">기부·펀딩·봉사를 연결하는 사회공헌 플랫폼. PortOne 결제를 연동하며 결제 후 서버 금액과 대조해 승인하는 흐름을 설계해 위변조를 막았습니다.</p>
+        <div class="stk"><span>React</span><span>Vite</span><span>React Router</span><span>Ant Design</span></div>
+        <div class="lk"><a href="https://github.com/aabyess/Ignis.git">GitHub</a></div>
+      </div>
+      <div class="pcx">
+        <div class="pcx-t"><span class="pcx-n">LOL Face Matcher</span><span class="pcx-p">2025.03 — 06</span></div>
+        <p class="pcx-d">얼굴을 인식해 닮은 챔피언을 찾아주는 서비스. dlib에서 DeepFace로 전환해 챔피언 이미지 170장 기준 임베딩 성공률 100%를 달성했습니다.</p>
+        <div class="stk"><span>React</span><span>FastAPI</span><span>Python</span><span>DeepFace</span><span>MySQL</span></div>
+        <div class="lk"><a href="https://github.com/aabyess/lol-face-matcher2">GitHub</a></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="play">
+  <div class="wrap">
+    <div class="sh">
+      <div class="sh-k">Side</div>
+      <h2>취미로 만드는 것들</h2>
+      <p class="sh-d">업무 외 시간에 계속 만들고 있습니다. 완성도보다 "끝까지 해본다"에 가까운 작업들입니다.</p>
+    </div>
+    <div class="pg">
+      <div class="pgc">
+        <div class="pgc-t"><div class="pgc-i">🎮</div><div class="pgc-s on">개발 중</div></div>
+        <div class="pgc-n">게임 프로젝트 (제목 미정)</div>
+        <p class="pgc-d">AI 에이전트를 기획·리서치·구현 역할로 나눠 협업하며 만들고 있는 게임. 혼자서 어디까지 완성할 수 있는지 실험 중입니다.</p>
+        <div class="stk"><span>Godot</span><span>GDScript</span></div>
+      </div>
+      <div class="pgc">
+        <div class="pgc-t"><div class="pgc-i">📄</div><div class="pgc-s on">라이브</div></div>
+        <div class="pgc-n">이 포트폴리오</div>
+        <p class="pgc-d">빌드 도구 없이 HTML 파일 하나로 만든 사이트. 프레임워크 없이 어디까지 되는지 직접 해보고 있습니다.</p>
+        <div class="stk"><span>HTML</span><span>CSS</span><span>Vanilla JS</span></div>
+      </div>
+      <div class="pgc">
+        <div class="pgc-t"><div class="pgc-i">🧩</div><div class="pgc-s">준비 중</div></div>
+        <div class="pgc-n">다음에 만들 것</div>
+        <p class="pgc-d">여기에 들어갈 내용을 알려주시면 채워 넣겠습니다.</p>
+        <div class="stk"><span>TBD</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="contact">
+  <div class="wrap">
+    <div class="sh">
+      <div class="sh-k">Contact</div>
+      <h2>연락처</h2>
+      <p class="sh-d">제안이나 궁금한 점이 있으면 편하게 연락 주세요. 보통 하루 안에 답장드립니다.</p>
+    </div>
+    <div class="ct">
+      <a href="mailto:maeguming0000@gmail.com">
+        <span class="i"><svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></span>
+        <span><span class="k">Email</span><br /><span class="v">maeguming0000@gmail.com</span></span>
+      </a>
+      <a href="tel:01033227250">
+        <span class="i"><svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg></span>
+        <span><span class="k">Phone</span><br /><span class="v">010-3322-7250</span></span>
+      </a>
+      <a href="https://github.com/aabyess">
+        <span class="i"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></span>
+        <span><span class="k">GitHub</span><br /><span class="v">github.com/aabyess</span></span>
+      </a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap ft">
+    <span>최상호 · Full-stack Developer</span>
+    <span>© 2026 Choi Sangho</span>
+  </div>
+</footer>
+
+<script>
+document.querySelectorAll('[data-pts]').forEach(function (ul) {
+  var hidden = ul.querySelectorAll('li.hide');
+  if (!hidden.length) return;
+  var btn = document.createElement('button');
+  btn.className = 'more';
+  btn.type = 'button';
+  btn.setAttribute('aria-expanded', 'false');
+  btn.textContent = '+ 상세 내용 ' + hidden.length + '개 더 보기';
+  ul.insertAdjacentElement('afterend', btn);
+  btn.addEventListener('click', function () {
+    var open = btn.getAttribute('aria-expanded') === 'true';
+    hidden.forEach(function (li) { li.classList.toggle('hide', open); });
+    btn.setAttribute('aria-expanded', String(!open));
+    btn.textContent = open ? '+ 상세 내용 ' + hidden.length + '개 더 보기' : '− 접기';
+  });
+});
+</script>
+</body>
+</html>
