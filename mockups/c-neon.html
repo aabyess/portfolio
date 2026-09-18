@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>시안 C — Neon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#07070c; --bg2:#0b0b14;
+  --glass:rgba(255,255,255,.035);
+  --glass2:rgba(255,255,255,.06);
+  --line:rgba(255,255,255,.09);
+  --line2:rgba(255,255,255,.16);
+  --text:#f0f1f7; --muted:#a2a5bd; --dim:#6b6e88;
+  --c1:#7c5cff;   /* violet */
+  --c2:#22d3ee;   /* cyan  */
+  --c3:#ff5c8a;   /* pink  */
+  --c4:#fbbf24;   /* amber */
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:'Pretendard Variable',Pretendard,-apple-system,system-ui,sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.7;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden}
+/* gradient mesh */
+body::before{content:'';position:fixed;inset:0;z-index:-2;pointer-events:none;
+  background:
+    radial-gradient(760px 500px at 8% -6%,rgba(124,92,255,.30),transparent 60%),
+    radial-gradient(620px 460px at 96% 12%,rgba(34,211,238,.20),transparent 62%),
+    radial-gradient(700px 520px at 50% 108%,rgba(255,92,138,.16),transparent 62%)}
+body::after{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.5;
+  background-image:linear-gradient(rgba(255,255,255,.028) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(255,255,255,.028) 1px,transparent 1px);
+  background-size:52px 52px;
+  mask-image:radial-gradient(70% 60% at 50% 30%,#000,transparent)}
+a{color:inherit}
+:where(a,button):focus-visible{outline:2px solid var(--c2);outline-offset:3px;border-radius:6px}
+.mono{font-family:var(--mono)}
+.wrap{max-width:1160px;margin:0 auto;padding:0 26px}
+
+/* ── NAV ── */
+nav{position:fixed;top:14px;left:0;right:0;z-index:70;display:flex;justify-content:center;padding:0 20px}
+.nav-in{display:flex;align-items:center;gap:6px;padding:7px 8px 7px 18px;border-radius:999px;
+  background:rgba(12,12,20,.72);border:1px solid var(--line);backdrop-filter:blur(18px);
+  box-shadow:0 10px 40px rgba(0,0,0,.5);max-width:100%;overflow-x:auto;scrollbar-width:none}
+.nav-in::-webkit-scrollbar{display:none}
+.nav-logo{font-family:var(--mono);font-size:13px;font-weight:700;margin-right:12px;white-space:nowrap;
+  background:linear-gradient(92deg,var(--c1),var(--c2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.nav-in a{font-family:var(--mono);font-size:12px;color:var(--muted);text-decoration:none;padding:7px 13px;
+  border-radius:999px;white-space:nowrap;transition:.16s}
+.nav-in a:hover{color:var(--text);background:var(--glass2)}
+.nav-in a.on{color:#0a0a12;background:linear-gradient(92deg,var(--c1),var(--c2));font-weight:700}
+
+/* ── HERO ── */
+#hero{padding:150px 0 92px;position:relative}
+.eyebrow{display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11.5px;
+  padding:6px 14px;border-radius:999px;border:1px solid var(--line2);background:var(--glass);
+  color:var(--muted);margin-bottom:28px}
+.eyebrow .dot{width:7px;height:7px;border-radius:50%;background:#34d399;box-shadow:0 0 0 3px rgba(52,211,153,.18)}
+h1{font-size:clamp(44px,7vw,86px);font-weight:800;line-height:1.06;letter-spacing:-.045em;margin-bottom:28px}
+h1 .grad{background:linear-gradient(100deg,var(--c1) 0%,var(--c2) 48%,var(--c3) 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.lede{font-size:16px;color:var(--muted);line-height:1.95;max-width:620px;margin-bottom:34px}
+.lede b{color:var(--text);font-weight:600}
+.cta{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:56px}
+.btn{display:inline-flex;align-items:center;gap:9px;padding:13px 24px;border-radius:12px;
+  font-size:14px;font-weight:700;text-decoration:none;border:1px solid transparent;transition:.18s;cursor:pointer}
+.btn-p{background:linear-gradient(100deg,var(--c1),var(--c2));color:#080810;
+  box-shadow:0 8px 28px rgba(124,92,255,.38)}
+.btn-p:hover{transform:translateY(-2px);box-shadow:0 14px 38px rgba(124,92,255,.5)}
+.btn-g{background:var(--glass);border-color:var(--line2);color:var(--text);backdrop-filter:blur(10px)}
+.btn-g:hover{border-color:var(--c2);color:var(--c2)}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;max-width:760px}
+.stat{padding:18px 20px;border-radius:14px;background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(10px)}
+.stat b{display:block;font-family:var(--mono);font-size:26px;font-weight:700;letter-spacing:-.02em;
+  background:linear-gradient(100deg,var(--c1),var(--c2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.stat span{font-size:11.5px;color:var(--dim);font-family:var(--mono)}
+
+/* ── SECTION ── */
+.sec{padding:84px 0}
+.sec-head{margin-bottom:40px}
+.sec-tag{font-family:var(--mono);font-size:11.5px;color:var(--c2);letter-spacing:.14em;text-transform:uppercase;margin-bottom:11px}
+h2{font-size:clamp(30px,4vw,44px);font-weight:800;letter-spacing:-.035em;line-height:1.14}
+h2 .grad{background:linear-gradient(100deg,var(--c1),var(--c2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.sec-sub{color:var(--dim);font-size:14px;margin-top:10px;font-family:var(--mono)}
+
+/* ── PROJECT ── */
+.pcards{display:flex;flex-direction:column;gap:26px}
+.pj{position:relative;border-radius:20px;border:1px solid var(--line);background:var(--glass);
+  backdrop-filter:blur(14px);overflow:hidden;transition:.25s}
+.pj::before{content:'';position:absolute;inset:0;border-radius:20px;padding:1px;opacity:0;transition:.25s;
+  background:linear-gradient(120deg,var(--k1),var(--k2));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+.pj:hover::before{opacity:1}
+.pj:hover{transform:translateY(-4px);box-shadow:0 22px 60px rgba(0,0,0,.5)}
+.pj-num{position:absolute;top:14px;right:22px;font-family:var(--mono);font-size:62px;font-weight:700;
+  line-height:1;color:transparent;-webkit-text-stroke:1px var(--line2);pointer-events:none;z-index:0}
+.pj-in{display:grid;grid-template-columns:minmax(0,1.04fr) minmax(0,.96fr);position:relative;z-index:1}
+.pj-media{padding:22px}
+.pj-frame{position:sticky;top:90px;border-radius:14px;overflow:hidden;border:1px solid var(--line);
+  aspect-ratio:16/10;background:#05050a;box-shadow:0 14px 40px rgba(0,0,0,.45)}
+.pj-frame img,.pj-frame video{width:100%;height:100%;object-fit:cover;object-position:top center;display:block}
+.pj-body{padding:26px 28px 28px 8px}
+.pj:nth-child(even) .pj-media{grid-column:2;grid-row:1}
+.pj:nth-child(even) .pj-body{grid-column:1;grid-row:1;padding:26px 8px 28px 28px}
+
+.pj-meta{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:13px;font-family:var(--mono);font-size:11px}
+.pj-per{color:var(--dim)}
+.pj-badge{padding:3px 10px;border-radius:999px;font-weight:700;
+  color:var(--k1);background:color-mix(in srgb,var(--k1) 14%,transparent);
+  border:1px solid color-mix(in srgb,var(--k1) 34%,transparent)}
+.pj-name{font-size:23px;font-weight:800;letter-spacing:-.028em;line-height:1.28;margin-bottom:10px}
+.pj-desc{font-size:14px;color:var(--muted);line-height:1.8;margin-bottom:18px}
+.pj-pts{list-style:none;display:flex;flex-direction:column;gap:9px;margin-bottom:20px}
+.pj-pts li{position:relative;padding-left:22px;font-size:13.5px;color:var(--muted);line-height:1.75}
+.pj-pts li::before{content:'';position:absolute;left:0;top:.62em;width:9px;height:2px;border-radius:2px;
+  background:linear-gradient(90deg,var(--k1),var(--k2))}
+.pj-pts li b{color:var(--text);font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:18px}
+.chip{font-family:var(--mono);font-size:10.5px;color:var(--muted);background:var(--glass2);
+  border:1px solid var(--line);padding:4px 10px;border-radius:999px}
+.lnks{display:flex;gap:9px;flex-wrap:wrap}
+.lnk{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:12px;font-weight:600;
+  text-decoration:none;color:var(--muted);border:1px solid var(--line2);padding:8px 15px;border-radius:10px;transition:.18s}
+.lnk:hover{color:var(--text);border-color:var(--k2);background:var(--glass2)}
+.lnk.live{color:#080810;border-color:transparent;background:linear-gradient(100deg,var(--k1),var(--k2));font-weight:700}
+.lnk.live:hover{filter:brightness(1.12);color:#080810}
+
+/* ── PLAYGROUND ── */
+#play{position:relative}
+.pg{display:grid;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));gap:18px}
+.pgc{position:relative;border-radius:18px;border:1px solid var(--line);background:var(--glass);
+  backdrop-filter:blur(12px);padding:24px;overflow:hidden;transition:.22s}
+.pgc::after{content:'';position:absolute;inset:-40% -20% auto -20%;height:120px;opacity:.5;
+  background:radial-gradient(60% 100% at 50% 100%,var(--k1),transparent 70%);filter:blur(28px);transition:.25s}
+.pgc:hover{transform:translateY(-5px);border-color:color-mix(in srgb,var(--k1) 45%,transparent)}
+.pgc:hover::after{opacity:.9}
+.pgc-top{display:flex;align-items:center;gap:11px;margin-bottom:15px;position:relative}
+.pgc-ico{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;font-size:21px;
+  background:var(--glass2);border:1px solid var(--line2)}
+.pgc-st{margin-left:auto;font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:999px;
+  color:var(--k1);background:color-mix(in srgb,var(--k1) 14%,transparent);
+  border:1px solid color-mix(in srgb,var(--k1) 32%,transparent)}
+.pgc-n{font-size:16.5px;font-weight:800;letter-spacing:-.02em;margin-bottom:8px;position:relative}
+.pgc-d{font-size:13px;color:var(--muted);line-height:1.75;margin-bottom:16px;position:relative}
+
+/* ── CONTACT ── */
+#contact .wrap{position:relative}
+.ct{border-radius:24px;border:1px solid var(--line);background:var(--glass);backdrop-filter:blur(16px);
+  padding:52px 44px;text-align:center;overflow:hidden;position:relative}
+.ct::before{content:'';position:absolute;inset:-60% 10% auto 10%;height:240px;opacity:.55;
+  background:radial-gradient(60% 100% at 50% 100%,var(--c1),transparent 70%);filter:blur(52px)}
+.ct > *{position:relative}
+.ct h2{margin-bottom:14px}
+.ct p{color:var(--muted);font-size:15px;margin-bottom:32px}
+.ct-links{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.ct-l{display:inline-flex;align-items:center;gap:10px;padding:14px 22px;border-radius:14px;
+  border:1px solid var(--line2);background:rgba(10,10,18,.5);text-decoration:none;transition:.2s;min-width:200px}
+.ct-l:hover{transform:translateY(-3px);border-color:var(--c2);background:var(--glass2)}
+.ct-l .ic{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;background:var(--glass2);flex-shrink:0}
+.ct-l .tx{text-align:left}
+.ct-l .k{font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase}
+.ct-l .v{font-size:13.5px;font-weight:600}
+
+footer{border-top:1px solid var(--line);padding:26px 0;margin-top:70px}
+.ft{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;
+  font-family:var(--mono);font-size:12px;color:var(--dim)}
+
+@media(max-width:1000px){
+  .pj-in{grid-template-columns:1fr}
+  .pj-media,.pj:nth-child(even) .pj-media{grid-column:1;grid-row:1;padding:20px 20px 0}
+  .pj-body,.pj:nth-child(even) .pj-body{grid-column:1;grid-row:2;padding:22px 22px 24px}
+  .pj-frame{position:static;aspect-ratio:16/9}
+  .pj-num{font-size:44px;top:10px;right:16px}
+}
+@media(max-width:640px){
+  .wrap{padding:0 18px}
+  #hero{padding:122px 0 64px}
+  .sec{padding:60px 0}
+  .ct{padding:38px 22px}
+  .ct-l{min-width:0;width:100%}
+}
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+  .pj:hover,.pgc:hover,.btn-p:hover,.ct-l:hover{transform:none}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-in">
+    <span class="nav-logo">choi.dev</span>
+    <a href="#hero" class="on">소개</a>
+    <a href="#work">프로젝트</a>
+    <a href="#play">Playground</a>
+    <a href="#contact">연락</a>
+  </div>
+</nav>
+
+<section id="hero">
+  <div class="wrap">
+    <div class="eyebrow"><span class="dot"></span> 채용 제안 환영 · Full-stack Developer</div>
+    <h1>기획부터 운영까지<br /><span class="grad">끝까지 책임지는</span><br />개발자입니다</h1>
+    <p class="lede">
+      프론트엔드로 개발을 시작했지만, 지금은 <b>기획부터 개발·운영까지 서비스 전체</b>를 직접 책임지는 개발자를 목표로 합니다.
+      Trade-Cmarket에서 B2B 거래 플로우 전체를 1인으로 설계·구현하며 프론트와 백엔드를 같이 들여다봤고,
+      그 덕에 간헐적 로그아웃 버그도 채팅 refetch 폭주 원인도 직접 찾아낼 수 있었습니다.
+    </p>
+    <div class="cta">
+      <a href="#work" class="btn btn-p">프로젝트 보기 →</a>
+      <a href="https://github.com/aabyess" class="btn btn-g">GitHub ↗</a>
+    </div>
+    <div class="stats">
+      <div class="stat"><b>6</b><span>shipped projects</span></div>
+      <div class="stat"><b>2</b><span>live services</span></div>
+      <div class="stat"><b>1인</b><span>풀스택 구현 경험</span></div>
+      <div class="stat"><b>3</b><span>지원 언어 (i18n)</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="work" class="sec">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-tag">// work</div>
+      <h2><span class="grad">프로젝트</span></h2>
+      <div class="sec-sub">6 projects · 2025 — 2026</div>
+    </div>
+    <div class="pcards">
+
+      <article class="pj" style="--k1:#7c5cff;--k2:#22d3ee">
+        <div class="pj-num">01</div>
+        <div class="pj-in">
+          <div class="pj-media"><div class="pj-frame"><img src="../images/trade-cmarket.png" alt="Trade-Cmarket" loading="lazy" decoding="async" /></div></div>
+          <div class="pj-body">
+            <div class="pj-meta">
+              <span class="pj-per">2026.07 — 2026.08</span>
+              <span class="pj-badge">인턴 · 1인 개발</span>
+            </div>
+            <div class="pj-name">Trade-Cmarket<br />한국–인도네시아 B2B 무역 견적·계약 플랫폼</div>
+            <div class="pj-desc">발주 공고 → 견적 → 낙찰 → 계약 → 실시간 채팅으로 이어지는 B2B 거래 플로우 전체를 바이어·셀러 양면으로 기획부터 설계·구현까지 1인으로 담당.</div>
+            <ul class="pj-pts">
+              <li>3개 국어 서비스를 next-intl로 다국어화하고, 원문+감지언어+번역본(jsonb) 저장으로 <b>클라이언트발 번역 위조 차단</b></li>
+              <li>Supabase RLS + 서비스롤 API <b>이중 권한 구조</b> 설계, 상태 전이 화이트리스트 검증 직접 구현</li>
+              <li>간헐적 강제 로그아웃의 원인이 <b>미들웨어 리다이렉트 쿠키 누락</b>임을 프론트·백엔드 함께 추적해 발견</li>
+              <li>채팅 읽음 처리의 refetch 폭주를 Realtime 페이로드 <b>캐시 직접 반영</b>으로 해결</li>
+            </ul>
+            <div class="chips">
+              <span class="chip">Next.js 15</span><span class="chip">TypeScript</span><span class="chip">Supabase</span>
+              <span class="chip">TanStack Query</span><span class="chip">next-intl</span><span class="chip">Gemini API</span>
+            </div>
+            <div class="lnks"><a href="#" class="lnk live">라이브 ↗</a><a href="#" class="lnk">GitHub</a></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="pj" style="--k1:#22d3ee;--k2:#34d399">
+        <div class="pj-num">02</div>
+        <div class="pj-in">
+          <div class="pj-media"><div class="pj-frame"><video src="../images/nolleo-onna.mp4" autoplay loop muted playsinline></video></div></div>
+          <div class="pj-body">
+            <div class="pj-meta">
+              <span class="pj-per">2026.05 — 2026.10</span>
+              <span class="pj-badge">공모전 진행중 · 5인 팀</span>
+            </div>
+            <div class="pj-name">놀러온나<br />TourAPI 기반 부산 특화 여행 플랫폼</div>
+            <div class="pj-desc">홈·스팟·코스·한끗·마이페이지까지 서비스 전 페이지 프론트엔드를 1인으로 설계·구현한 부산 여행 플랫폼.</div>
+            <ul class="pj-pts">
+              <li>Kakao Maps SDK로 부산 16개 구 혼잡도 지도 구현, 원형 마커를 <b>실제 행정구역 경계 폴리곤</b>으로 교체</li>
+              <li>매핑 상한 하드코딩으로 <b>3,632개 중 632개가 누락되던 버그</b> 발견, 37회 순차 요청을 8개 단위 병렬로 전환</li>
+              <li>카카오 SDK 로드 전 지도 초기화 <b>레이스 컨디션</b>을 폴백 로직으로 해결</li>
+            </ul>
+            <div class="chips">
+              <span class="chip">Next.js</span><span class="chip">TypeScript</span><span class="chip">TailwindCSS v4</span>
+              <span class="chip">Zustand</span><span class="chip">Kakao Maps SDK</span>
+            </div>
+            <div class="lnks"><a href="#" class="lnk live">라이브 ↗</a><a href="#" class="lnk">GitHub</a></div>
+          </div>
+        </div>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<section id="play" class="sec">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-tag">// playground</div>
+      <h2>취미로 <span class="grad">만드는 것들</span></h2>
+      <div class="sec-sub">완성도보다 재미 — 계속 만들고 있습니다</div>
+    </div>
+    <div class="pg">
+      <div class="pgc" style="--k1:#ff5c8a">
+        <div class="pgc-top"><div class="pgc-ico">🎮</div><div class="pgc-st">개발 중</div></div>
+        <div class="pgc-n">게임 프로젝트 (제목 미정)</div>
+        <div class="pgc-d">Claude를 PM·리서치·구현 에이전트로 나눠 기획 단계부터 함께 만들고 있는 게임. 혼자서 어디까지 만들 수 있는지 실험 중.</div>
+        <div class="chips"><span class="chip">Godot</span><span class="chip">GDScript</span></div>
+      </div>
+      <div class="pgc" style="--k1:#fbbf24">
+        <div class="pgc-top"><div class="pgc-ico">🧩</div><div class="pgc-st">아이디어</div></div>
+        <div class="pgc-n">다음에 만들 것</div>
+        <div class="pgc-d">여기에 들어갈 내용을 알려주시면 채워 넣겠습니다.</div>
+        <div class="chips"><span class="chip">TBD</span></div>
+      </div>
+      <div class="pgc" style="--k1:#22d3ee">
+        <div class="pgc-top"><div class="pgc-ico">📄</div><div class="pgc-st">라이브</div></div>
+        <div class="pgc-n">이 포트폴리오</div>
+        <div class="pgc-d">빌드 도구 없이 단일 HTML 파일 하나로 만든 사이트. 프레임워크 없이 어디까지 되는지 해보는 중.</div>
+        <div class="chips"><span class="chip">HTML</span><span class="chip">CSS</span><span class="chip">Vanilla JS</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="contact" class="sec">
+  <div class="wrap">
+    <div class="ct">
+      <div class="sec-tag">// contact</div>
+      <h2>함께 만들 <span class="grad">기회를</span> 기다립니다</h2>
+      <p>새로운 도전과 협업에 열려 있습니다. 제안이나 궁금한 점이 있다면 편하게 연락 주세요.</p>
+      <div class="ct-links">
+        <a class="ct-l" href="mailto:maeguming0000@gmail.com">
+          <span class="ic">✉</span>
+          <span class="tx"><span class="k">Email</span><br /><span class="v">maeguming0000@gmail.com</span></span>
+        </a>
+        <a class="ct-l" href="tel:01033227250">
+          <span class="ic">☎</span>
+          <span class="tx"><span class="k">Phone</span><br /><span class="v">010-3322-7250</span></span>
+        </a>
+        <a class="ct-l" href="https://github.com/aabyess">
+          <span class="ic">⌨</span>
+          <span class="tx"><span class="k">GitHub</span><br /><span class="v">github.com/aabyess</span></span>
+        </a>
+      </div>
+    </div>
+  </div>
+  <footer>
+    <div class="wrap ft">
+      <span>choi.dev</span>
+      <span>© 2026 Choi Sangho · Full-stack Developer</span>
+    </div>
+  </footer>
+</section>
+
+</body>
+</html>
