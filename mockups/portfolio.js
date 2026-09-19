@@ -769,9 +769,12 @@ async function initDrive() {
 
     let dx = 0, dz = 0;
     if (f || r) {
-      /* 카메라가 보는 방향을 앞으로 삼는다 */
-      dx = Math.sin(camYaw) * f + Math.sin(camYaw + Math.PI / 2) * r;
-      dz = Math.cos(camYaw) * f + Math.cos(camYaw + Math.PI / 2) * r;
+      /* 카메라가 보는 방향이 앞.
+         이 월드는 전방이 (sin h, cos h)이라 카메라가 +Z를 바라본다.
+         그래서 화면상 오른쪽은 월드 -X이고, 오른쪽 축은 camYaw"-"90°다.
+         (+90°로 두면 A/D가 반대로 움직인다) */
+      dx = Math.sin(camYaw) * f + Math.sin(camYaw - Math.PI / 2) * r;
+      dz = Math.cos(camYaw) * f + Math.cos(camYaw - Math.PI / 2) * r;
       const len = Math.hypot(dx, dz) || 1;
       dx /= len; dz /= len;
       pHeading = angLerp(pHeading, Math.atan2(dx, dz), dt * TURN_SNAP);
