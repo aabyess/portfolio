@@ -9,7 +9,7 @@ KENNEY-LICENSE.txt       원본 라이선스
 
 출처: <https://kenney.nl/assets/car-kit> · 라이선스 CC0 (퍼블릭 도메인, 출처 표기 의무 없음)
 
-`mockups/portfolio.js`의 `CAR_MODEL_URL`이 이 파일을 가리킵니다.
+`portfolio.js`의 `CAR_MODEL_URL`이 이 파일을 가리킵니다.
 `null`로 바꾸면 박스로 조립한 기본 차로 돌아갑니다.
 
 현재 `car.glb`는 **텍스처를 파일 안에 포함**하고 있어서 이 파일 하나만 있으면 됩니다.
@@ -89,10 +89,10 @@ Blender에서 앞코를 -Y로 두고 내보내면 glTF에서 +Z가 됩니다. �
 차에서 내려 뛰어다니는 캐릭터입니다. 현재는 **박스로 조립한 기본 캐릭터**가
 팔다리를 흔드는 방식으로 움직입니다. 별도 모델 파일이 없어도 동작합니다.
 
-리깅된 `.glb`로 교체하려면 `mockups/portfolio.js`의 `CHAR_MODEL_URL`에 경로를 넣으면 됩니다.
+리깅된 `.glb`로 교체하려면 `portfolio.js`의 `CHAR_MODEL_URL`에 경로를 넣으면 됩니다.
 
 ```js
-const CHAR_MODEL_URL = '../models/character.glb';
+const CHAR_MODEL_URL = 'models/character.glb';
 const CHAR_HEIGHT = 1.95;   // 월드 기준 키. 모델 크기는 여기에 맞춰 자동 조정된다.
 ```
 

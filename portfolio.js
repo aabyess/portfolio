@@ -22,7 +22,7 @@ const PROJECTS = [
       '전 API 라우트 보안 감사를 수행해 저장형 XSS 살균, 무인증 번역 프록시 차단, 업로드 MIME·용량 검증을 일괄 적용했습니다.'
     ],
     stack: ['Next.js 15', 'TypeScript', 'Supabase', 'TanStack Query', 'Zustand', 'next-intl', 'Gemini API', 'Vercel'],
-    img: '../images/trade-cmarket.png',
+    img: 'images/trade-cmarket.png',
     live: 'https://mitrapay.vercel.app/', repo: 'https://github.com/cmarketplace/Trade-Cmarket',
     pos: [-17, -16]
   },
@@ -42,8 +42,8 @@ const PROJECTS = [
       '스팟 검색을 지역명·카테고리·무료 여부·초성까지 인식하는 통합 검색으로 확장하고, 결과에 맞춰 지도 범위가 자동 재조정되도록 했습니다.'
     ],
     stack: ['Next.js', 'TypeScript', 'TailwindCSS v4', 'TanStack Query', 'Zustand', 'Kakao Maps SDK', 'Motion', 'Vitest'],
-    video: '../images/nolleo-onna.mp4',
-    poster: '../images/nolleo-onna.jpg',   // 영상이 재생되기 전까지 보여줄 정지 이미지
+    video: 'images/nolleo-onna.mp4',
+    poster: 'images/nolleo-onna.jpg',   // 영상이 재생되기 전까지 보여줄 정지 이미지
     live: 'https://dev.nolleo-onna.site/', repo: 'https://github.com/nolleo-onna/nolleo-onna-frontend',
     pos: [17, -38]
   },
@@ -61,7 +61,7 @@ const PROJECTS = [
       '섹션마다 빈 상태·에러가 달라 섹션별 ErrorBoundary를 적용해, 일부 API가 실패해도 페이지 전체가 멈추지 않게 했습니다.'
     ],
     stack: ['Next.js', 'TypeScript', 'React Query', 'Zustand', 'Storybook', 'Jest'],
-    img: '../images/reboot.png',
+    img: 'images/reboot.png',
     live: 'https://reboot-codeit.vercel.app/', repo: 'https://github.com/aabyess/Reboot',
     pos: [-17, -60]
   },
@@ -78,7 +78,7 @@ const PROJECTS = [
       'API 호출 비용을 줄이려고 <b>사용자당 일일 요청 제한</b> 로직을 직접 구현했습니다.'
     ],
     stack: ['React', 'OpenAI API', 'PDF.js', 'Mammoth'],
-    img: '../images/interview.png',
+    img: 'images/interview.png',
     repo: 'https://github.com/aabyess/myeonjeop-mate',
     pos: [17, -82]
   },
@@ -95,7 +95,7 @@ const PROJECTS = [
       '등록 폼에서 필수 항목 누락 시 유효성 메시지를 표시해 사용자 실수를 줄였습니다.'
     ],
     stack: ['React', 'Vite', 'React Router', 'Ant Design'],
-    img: '../images/ignis.png',
+    img: 'images/ignis.png',
     repo: 'https://github.com/aabyess/Ignis.git',
     pos: [-17, -104]
   },
@@ -112,7 +112,7 @@ const PROJECTS = [
       'FastAPI와 React 사이 CORS 문제를 파악해 해결하고, 업로드·추천 REST API와 DB 구조를 설계했습니다.'
     ],
     stack: ['React', 'FastAPI', 'Python', 'DeepFace', 'MySQL'],
-    img: '../images/lol.png',
+    img: 'images/lol.png',
     repo: 'https://github.com/aabyess/lol-face-matcher2',
     pos: [17, -126]
   }
@@ -266,7 +266,7 @@ addEventListener('hashchange', () => setView(viewFromHash(), { updateHash: false
 
 /* 차 모델. null로 두면 박스로 조립한 기본 차가 쓰인다.
    현재 모델은 Kenney Car Kit(CC0)의 hatchback-sports. models/README.md 참고. */
-const CAR_MODEL_URL = '../models/car.glb';
+const CAR_MODEL_URL = 'models/car.glb';
 
 /* 바퀴 노드 이름. 앞에 있는 이름부터 찾는다.
    Blender에서 직접 만들 땐 wheel_fl 같은 이름을 쓰면 되고,
