@@ -24,7 +24,7 @@ const PROJECTS = [
     stack: ['Next.js 15', 'TypeScript', 'Supabase', 'TanStack Query', 'Zustand', 'next-intl', 'Gemini API', 'Vercel'],
     img: '../images/trade-cmarket.png',
     live: 'https://mitrapay.vercel.app/', repo: 'https://github.com/cmarketplace/Trade-Cmarket',
-    pos: [0, -46]
+    pos: [-17, -16]
   },
   {
     id: 'nolleo', no: '02', color: '#3fa7d6', featured: true,
@@ -45,7 +45,7 @@ const PROJECTS = [
     video: '../images/nolleo-onna.mp4',
     poster: '../images/nolleo-onna.jpg',   // 영상이 재생되기 전까지 보여줄 정지 이미지
     live: 'https://dev.nolleo-onna.site/', repo: 'https://github.com/nolleo-onna/nolleo-onna-frontend',
-    pos: [42, -20]
+    pos: [17, -38]
   },
   {
     id: 'reboot', no: '03', color: '#7d6ad6',
@@ -63,7 +63,7 @@ const PROJECTS = [
     stack: ['Next.js', 'TypeScript', 'React Query', 'Zustand', 'Storybook', 'Jest'],
     img: '../images/reboot.png',
     live: 'https://reboot-codeit.vercel.app/', repo: 'https://github.com/aabyess/Reboot',
-    pos: [30, 36]
+    pos: [-17, -60]
   },
   {
     id: 'mate', no: '04', color: '#31a88a',
@@ -80,7 +80,7 @@ const PROJECTS = [
     stack: ['React', 'OpenAI API', 'PDF.js', 'Mammoth'],
     img: '../images/interview.png',
     repo: 'https://github.com/aabyess/myeonjeop-mate',
-    pos: [-30, 36]
+    pos: [17, -82]
   },
   {
     id: 'ignis', no: '05', color: '#d95f8b',
@@ -97,7 +97,7 @@ const PROJECTS = [
     stack: ['React', 'Vite', 'React Router', 'Ant Design'],
     img: '../images/ignis.png',
     repo: 'https://github.com/aabyess/Ignis.git',
-    pos: [-46, -14]
+    pos: [-17, -104]
   },
   {
     id: 'lol', no: '06', color: '#e0a32e',
@@ -114,7 +114,7 @@ const PROJECTS = [
     stack: ['React', 'FastAPI', 'Python', 'DeepFace', 'MySQL'],
     img: '../images/lol.png',
     repo: 'https://github.com/aabyess/lol-face-matcher2',
-    pos: [-8, 54]
+    pos: [17, -126]
   }
 ];
 
@@ -310,66 +310,161 @@ async function initDrive() {
   const THREE = await import('three');
   const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
 
-  const SKY = 0xcfe3ef, WORLD_R = 96, CAR_LEN = 4.2, PAD_R = 7.5;
+  /* ── 월드 크기 ──
+     원형 광장에서 직선 고속도로로 바꿨다. 차는 (0,14)에서 -Z를 향해 출발하고
+     게시판이 도로 좌우에 번갈아 선다. 경계는 원이 아니라 사각형이다. */
+  const CAR_LEN = 4.2, PAD_R = 7.5;
+  const ROAD_HALF = 9;                                   // 포장도로 반폭
+  const BOUND = { x: 40, zMin: -142, zMax: 30 };         // 이동 가능 범위
+
+  const NEON_PINK = 0xff3d9a, NEON_CYAN = 0x2de2ff, SUN_WARM = 0xff8c42;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(SKY);
-  scene.fog = new THREE.Fog(SKY, 70, 210);
+  /* 안개 색을 노을의 지평선 색에 맞춰야 멀리가 하늘로 자연스럽게 녹는다 */
+  scene.fog = new THREE.Fog(0x4a2a63, 60, 230);
 
-  const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.5, 400);
+  const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.5, 500);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setSize(innerWidth, innerHeight);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;    // 네온이 하얗게 타지 않게
+  renderer.toneMappingExposure = 1.15;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   document.getElementById('drive-root').appendChild(renderer.domElement);
 
-  scene.add(new THREE.HemisphereLight(0xdbeaf5, 0xcfc6b2, 2.1));
-  const sun = new THREE.DirectionalLight(0xfff4e2, 2.4);
-  sun.position.set(48, 70, 30);
+  /* ── 하늘 ──
+     큰 구의 안쪽에 그라디언트를 그린다. 위는 보라, 지평선은 주황. */
+  {
+    const cv = document.createElement('canvas');
+    cv.width = 8; cv.height = 256;
+    const g = cv.getContext('2d');
+    const grad = g.createLinearGradient(0, 0, 0, 256);
+    grad.addColorStop(0.00, '#180d33');   // 천정
+    grad.addColorStop(0.42, '#4a2a63');
+    grad.addColorStop(0.62, '#a8447a');
+    grad.addColorStop(0.78, '#ff6b5a');
+    grad.addColorStop(0.88, '#ffa751');
+    grad.addColorStop(1.00, '#ffd08a');   // 지평선
+    g.fillStyle = grad; g.fillRect(0, 0, 8, 256);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const sky = new THREE.Mesh(
+      new THREE.SphereGeometry(320, 32, 20),
+      new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, fog: false, depthWrite: false })
+    );
+    scene.add(sky);
+
+    /* 지평선에 걸린 해 — 차가 달려가는 -Z 쪽에 둔다 */
+    const sunCv = document.createElement('canvas');
+    sunCv.width = sunCv.height = 256;
+    const sg = sunCv.getContext('2d');
+    const rad = sg.createRadialGradient(128, 128, 10, 128, 128, 126);
+    rad.addColorStop(0, '#fff3c4');
+    rad.addColorStop(0.45, '#ffb347');
+    rad.addColorStop(0.8, 'rgba(255,90,120,.55)');
+    rad.addColorStop(1, 'rgba(255,60,140,0)');
+    sg.fillStyle = rad; sg.fillRect(0, 0, 256, 256);
+    /* 신스웨이브 해의 가로 줄무늬 */
+    sg.globalCompositeOperation = 'destination-out';
+    for (let i = 0; i < 6; i++) sg.fillRect(0, 150 + i * 16, 256, 5 + i * 0.9);
+    const sunTex = new THREE.CanvasTexture(sunCv);
+    sunTex.colorSpace = THREE.SRGBColorSpace;
+    const disc = new THREE.Mesh(
+      new THREE.PlaneGeometry(150, 150),
+      new THREE.MeshBasicMaterial({ map: sunTex, transparent: true, fog: false, depthWrite: false })
+    );
+    disc.position.set(0, 28, -290);
+    scene.add(disc);
+  }
+
+  /* ── 조명 ── */
+  scene.add(new THREE.HemisphereLight(0xff9d6e, 0x2a1440, 1.35));
+  const sun = new THREE.DirectionalLight(0xffb27a, 2.3);
+  sun.position.set(-26, 34, -120);        // 해 쪽에서 낮게 → 그림자가 길게 눕는다
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
-  Object.assign(sun.shadow.camera, { left: -110, right: 110, top: 110, bottom: -110, near: 1, far: 220 });
+  Object.assign(sun.shadow.camera, { left: -70, right: 70, top: 90, bottom: -90, near: 1, far: 300 });
   sun.shadow.bias = -0.0006;
   scene.add(sun);
+  /* 반대편에서 차가운 보라 필 — 어두운 면이 새까맣게 죽지 않게 */
+  const fill = new THREE.DirectionalLight(0x7a5cff, 0.85);
+  fill.position.set(40, 22, 60);
+  scene.add(fill);
 
   /* ── 바닥 ── */
   const gTex = (() => {
     const s = 512, cv = document.createElement('canvas');
     cv.width = cv.height = s;
     const g = cv.getContext('2d');
-    g.fillStyle = '#e9e2d2'; g.fillRect(0, 0, s, s);
-    g.strokeStyle = 'rgba(29,42,51,.055)'; g.lineWidth = 2;
+    g.fillStyle = '#1b0f2e'; g.fillRect(0, 0, s, s);
+    g.strokeStyle = 'rgba(45,226,255,.28)'; g.lineWidth = 2;
     for (let i = 0; i <= s; i += 64) {
       g.beginPath(); g.moveTo(i, 0); g.lineTo(i, s); g.stroke();
       g.beginPath(); g.moveTo(0, i); g.lineTo(s, i); g.stroke();
     }
     const t = new THREE.CanvasTexture(cv);
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.repeat.set(26, 26);
+    t.repeat.set(34, 34);
     t.colorSpace = THREE.SRGBColorSpace;
     t.anisotropy = renderer.capabilities.getMaxAnisotropy();
     return t;
   })();
 
   const ground = new THREE.Mesh(
-    new THREE.CircleGeometry(WORLD_R + 34, 72),
-    new THREE.MeshStandardMaterial({ map: gTex, roughness: 1 })
+    new THREE.PlaneGeometry(620, 620),
+    new THREE.MeshStandardMaterial({ map: gTex, roughness: .95 })
   );
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   scene.add(ground);
 
-  const fence = new THREE.Mesh(
-    new THREE.TorusGeometry(WORLD_R + 3, 0.5, 8, 90),
-    new THREE.MeshStandardMaterial({ color: 0xc8bfa9, roughness: .9 })
-  );
-  fence.rotation.x = -Math.PI / 2;
-  fence.position.y = 0.9;
-  fence.castShadow = true;
-  scene.add(fence);
+  /* ── 도로 ── */
+  {
+    const zA = BOUND.zMax, zB = BOUND.zMin;
+    const len = zA - zB, midZ = (zA + zB) / 2;
+
+    const road = new THREE.Mesh(
+      new THREE.PlaneGeometry(ROAD_HALF * 2, len),
+      new THREE.MeshStandardMaterial({ color: 0x140c24, roughness: .78 })
+    );
+    road.rotation.x = -Math.PI / 2;
+    road.position.set(0, 0.02, midZ);
+    road.receiveShadow = true;
+    scene.add(road);
+
+    /* 양쪽 가장자리 네온 라인 */
+    for (const [x, col] of [[-ROAD_HALF, NEON_CYAN], [ROAD_HALF, NEON_PINK]]) {
+      const edge = new THREE.Mesh(
+        new THREE.BoxGeometry(0.42, 0.12, len),
+        new THREE.MeshBasicMaterial({ color: col, fog: false })
+      );
+      edge.position.set(x, 0.09, midZ);
+      scene.add(edge);
+    }
+
+    /* 중앙 점선 */
+    const dashMat = new THREE.MeshBasicMaterial({ color: 0xffe9b0 });
+    const dashGeo = new THREE.PlaneGeometry(0.5, 4.5);
+    for (let z = zA - 6; z > zB; z -= 11) {
+      const d = new THREE.Mesh(dashGeo, dashMat);
+      d.rotation.x = -Math.PI / 2;
+      d.position.set(0, 0.04, z);
+      scene.add(d);
+    }
+  }
+
+  /* 사각형 경계 안으로 되돌린다. 부딪혔으면 true. */
+  function clampToBounds(pos) {
+    let hit = false;
+    if (pos.x < -BOUND.x) { pos.x = -BOUND.x; hit = true; }
+    else if (pos.x > BOUND.x) { pos.x = BOUND.x; hit = true; }
+    if (pos.z < BOUND.zMin) { pos.z = BOUND.zMin; hit = true; }
+    else if (pos.z > BOUND.zMax) { pos.z = BOUND.zMax; hit = true; }
+    return hit;
+  }
 
   /* ── 자동차 ── */
   const car = new THREE.Group();
@@ -529,43 +624,35 @@ async function initDrive() {
     return sp;
   }
 
-  /* 중앙 안내는 바닥에 새긴다. 공중에 띄우면 주행 시야를 정면으로 가린다. */
-  const centerPad = new THREE.Mesh(
-    new THREE.CylinderGeometry(10.5, 10.5, 0.16, 48),
-    new THREE.MeshStandardMaterial({ color: 0xf6f1e4, roughness: 1 })
-  );
-  centerPad.position.y = 0.08;
-  centerPad.receiveShadow = true;
-  scene.add(centerPad);
-
+  /* 출발 지점 안내는 노면에 새긴다. 공중에 띄우면 주행 시야를 정면으로 가린다. */
   {
     const S = 1024, cv = document.createElement('canvas');
     cv.width = cv.height = S;
     const g = cv.getContext('2d');
     g.translate(S / 2, S / 2);
     g.textAlign = 'center';
-    g.fillStyle = '#2b3840';
-    g.font = '800 140px Pretendard, system-ui, sans-serif';
-    g.fillText('최상호', 0, -160);
-    g.fillStyle = '#8b959c';
-    g.font = '600 52px Pretendard, system-ui, sans-serif';
-    g.fillText('FULL-STACK DEVELOPER', 0, -78);
-    g.strokeStyle = 'rgba(232,115,74,.9)'; g.lineWidth = 8;
-    g.beginPath(); g.moveTo(-200, -26); g.lineTo(200, -26); g.stroke();
-    g.fillStyle = '#5b6d79';
-    g.font = '500 54px Pretendard, system-ui, sans-serif';
-    g.fillText('차를 몰고', 0, 66);
-    g.fillText('프로젝트에 가까이 가보세요', 0, 138);
+    g.fillStyle = '#fff3d6';
+    g.font = '800 150px Pretendard, system-ui, sans-serif';
+    g.fillText('최상호', 0, -150);
+    g.fillStyle = '#2de2ff';
+    g.font = '600 56px Pretendard, system-ui, sans-serif';
+    g.fillText('FULL-STACK DEVELOPER', 0, -66);
+    g.strokeStyle = '#ff3d9a'; g.lineWidth = 9;
+    g.beginPath(); g.moveTo(-210, -14); g.lineTo(210, -14); g.stroke();
+    g.fillStyle = 'rgba(255,243,214,.82)';
+    g.font = '500 56px Pretendard, system-ui, sans-serif';
+    g.fillText('직진하면 프로젝트가', 0, 80);
+    g.fillText('길 양옆에 있습니다', 0, 152);
     const tex = new THREE.CanvasTexture(cv);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
     /* rotation.x=-90°면 캔버스 위쪽이 -Z를 향한다. 차가 -Z로 출발하므로 바로 읽힌다. */
     const plate = new THREE.Mesh(
-      new THREE.PlaneGeometry(18, 18),
-      new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false })
+      new THREE.PlaneGeometry(17, 17),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false })
     );
     plate.rotation.x = -Math.PI / 2;
-    plate.position.y = 0.17;
+    plate.position.set(0, 0.06, 6);
     scene.add(plate);
   }
 
@@ -579,22 +666,29 @@ async function initDrive() {
     g.position.set(p.pos[0], 0, p.pos[1]);
     const col = new THREE.Color(p.color);
 
+    /* 어두운 노면 위라 패드는 깔고, 테두리만 네온으로 띄운다 */
     const pad = new THREE.Mesh(
       new THREE.CylinderGeometry(PAD_R, PAD_R, 0.22, 44),
-      new THREE.MeshStandardMaterial({ color: col, roughness: .85 })
+      new THREE.MeshStandardMaterial({ color: col.clone().multiplyScalar(0.38), roughness: .9 })
     );
     pad.position.y = 0.11; pad.receiveShadow = true;
     g.add(pad);
 
+    /* MeshBasic + fog:false — 조명·안개와 무관하게 항상 같은 밝기로 빛난다 */
     const ring = new THREE.Mesh(
       new THREE.TorusGeometry(PAD_R + 0.5, 0.16, 8, 56),
-      new THREE.MeshStandardMaterial({ color: col, roughness: .6 })
+      new THREE.MeshBasicMaterial({ color: col, fog: false })
     );
     ring.rotation.x = -Math.PI / 2; ring.position.y = 0.3;
     g.add(ring);
 
+    /* 패드마다 은은한 색광 — 멀리서도 어느 프로젝트인지 구분된다 */
+    const glow = new THREE.PointLight(col, 18, 26, 2);
+    glow.position.set(0, 3.4, 0);
+    g.add(glow);
+
     const boardW = 9.4, boardH = 5.9;
-    const postMat = new THREE.MeshStandardMaterial({ color: 0xb9b09c, roughness: .9 });
+    const postMat = new THREE.MeshStandardMaterial({ color: 0x241634, roughness: .85 });
     for (const dx of [-3.4, 3.4]) {
       const post = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 4.6, 10), postMat);
       post.position.set(dx, 2.3, 0); post.castShadow = true;
@@ -603,11 +697,19 @@ async function initDrive() {
 
     const frame = new THREE.Mesh(
       new THREE.BoxGeometry(boardW + 0.5, boardH + 0.5, 0.3),
-      new THREE.MeshStandardMaterial({ color: 0xfbf7ee, roughness: .9 })
+      new THREE.MeshStandardMaterial({ color: 0x1a1030, roughness: .85 })
     );
     frame.position.set(0, 4.6 + boardH / 2 - 0.4, 0);
     frame.castShadow = true;
     g.add(frame);
+
+    /* 게시판 둘레 네온 띠 */
+    const edge = new THREE.Mesh(
+      new THREE.BoxGeometry(boardW + 0.9, boardH + 0.9, 0.16),
+      new THREE.MeshBasicMaterial({ color: col, fog: false })
+    );
+    edge.position.set(0, frame.position.y, -0.08);
+    g.add(edge);
 
     const screenMat = new THREE.MeshBasicMaterial({ color: 0xdfe6ea });
     const screen = new THREE.Mesh(new THREE.PlaneGeometry(boardW, boardH), screenMat);
@@ -649,42 +751,69 @@ async function initDrive() {
     stations.push({ ...p, group: g, ring, label, labelY: label.position.y, phase: Math.random() * Math.PI * 2 });
   }
 
-  /* ── 배경 ── */
+  /* ── 도로변 ──
+     야자수는 해를 등지고 실루엣으로, 가로등은 네온으로 리듬을 만든다.
+     무작위로 흩뿌리지 않고 도로를 따라 일정 간격으로 세운다. */
   {
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0xa98e6f, roughness: 1 });
-    const leafMat = new THREE.MeshStandardMaterial({ color: 0x8fb87a, roughness: 1 });
-    const rockMat = new THREE.MeshStandardMaterial({ color: 0xc3bdae, roughness: 1 });
-    const trunkGeo = new THREE.CylinderGeometry(0.34, 0.44, 2.2, 8);
-    const leafGeo = new THREE.ConeGeometry(1.9, 4.2, 9);
-    const rockGeo = new THREE.DodecahedronGeometry(1.1, 0);
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x2a1b3d, roughness: 1 });
+    const frondMat = new THREE.MeshStandardMaterial({ color: 0x3d2a52, roughness: 1 });
+    const poleMat = new THREE.MeshStandardMaterial({ color: 0x241634, roughness: .85 });
 
-    let placed = 0, tries = 0;
-    while (placed < 64 && tries < 900) {
-      tries++;
-      const a = Math.random() * Math.PI * 2;
-      const r = 24 + Math.random() * (WORLD_R - 26);
-      const x = Math.cos(a) * r, z = Math.sin(a) * r;
-      if (Math.hypot(x, z) < 22) continue;                                     // 중앙 광장 비우기
-      if (!stations.every(s => Math.hypot(x - s.pos[0], z - s.pos[1]) > PAD_R + 9)) continue;
+    const trunkGeo = new THREE.CylinderGeometry(0.2, 0.34, 7.5, 7);
+    const frondGeo = new THREE.ConeGeometry(0.55, 3.4, 5);
+    const poleGeo = new THREE.CylinderGeometry(0.16, 0.2, 7, 6);
+    const armGeo = new THREE.BoxGeometry(2.2, 0.18, 0.18);
+    const lampGeo = new THREE.BoxGeometry(1.5, 0.22, 0.5);
 
-      if (Math.random() < 0.72) {
-        const t = new THREE.Group();
-        const tr = new THREE.Mesh(trunkGeo, trunkMat); tr.position.y = 1.1; tr.castShadow = true;
-        const lf = new THREE.Mesh(leafGeo, leafMat); lf.position.y = 3.9; lf.castShadow = true;
-        t.add(tr, lf);
-        t.scale.setScalar(0.7 + Math.random() * 0.55);
-        t.position.set(x, 0, z);
-        t.rotation.y = Math.random() * Math.PI;
-        scene.add(t);
-      } else {
-        const rk = new THREE.Mesh(rockGeo, rockMat);
-        rk.position.set(x, 0.5, z);
-        rk.rotation.set(Math.random(), Math.random(), Math.random());
-        rk.scale.setScalar(0.6 + Math.random() * 0.9);
-        rk.castShadow = true; rk.receiveShadow = true;
-        scene.add(rk);
+    const palm = (x, z, s) => {
+      const g = new THREE.Group();
+      const tr = new THREE.Mesh(trunkGeo, trunkMat);
+      tr.position.y = 3.75; tr.rotation.z = (Math.random() - .5) * 0.16; tr.castShadow = true;
+      g.add(tr);
+      for (let i = 0; i < 7; i++) {
+        const f = new THREE.Mesh(frondGeo, frondMat);
+        const a = (i / 7) * Math.PI * 2;
+        f.position.set(Math.cos(a) * 1.15, 7.3, Math.sin(a) * 1.15);
+        f.rotation.set(Math.PI / 2.4 * Math.cos(a + Math.PI / 2), 0, Math.PI / 2.4 * -Math.sin(a + Math.PI / 2));
+        f.rotation.x += Math.PI;      // 잎이 바깥·아래로 처지게
+        f.castShadow = true;
+        g.add(f);
       }
-      placed++;
+      g.position.set(x, 0, z);
+      g.scale.setScalar(s);
+      g.rotation.y = Math.random() * Math.PI;
+      scene.add(g);
+    };
+
+    const lamp = (x, z, dir, col) => {
+      const g = new THREE.Group();
+      const p = new THREE.Mesh(poleGeo, poleMat);
+      p.position.y = 3.5; p.castShadow = true;
+      const arm = new THREE.Mesh(armGeo, poleMat);
+      arm.position.set(dir * 1.1, 6.9, 0);
+      const head = new THREE.Mesh(lampGeo, new THREE.MeshBasicMaterial({ color: col, fog: false }));
+      head.position.set(dir * 2.05, 6.78, 0);
+      g.add(p, arm, head);
+      g.position.set(x, 0, z);
+      scene.add(g);
+      /* 실제 광원은 달지 않는다. 가로등까지 점광원으로 만들면 씬 전체 광원이
+         20개 가까이 되어 저사양 기기에서 프레임이 무너진다. 발광 재질로 충분하다. */
+    };
+
+    /* 가로등: 도로를 따라 좌우 교대 */
+    let side = 1;
+    for (let z = BOUND.zMax - 8; z > BOUND.zMin + 6; z -= 26) {
+      lamp(side * (ROAD_HALF + 1.6), z, -side, side > 0 ? NEON_PINK : NEON_CYAN);
+      side *= -1;
+    }
+
+    /* 야자수: 도로 바깥쪽, 게시판을 가리지 않게 */
+    for (let z = BOUND.zMax - 4; z > BOUND.zMin; z -= 13) {
+      for (const sx of [-1, 1]) {
+        const x = sx * (ROAD_HALF + 13 + Math.random() * 16);
+        if (!stations.every(s => Math.hypot(x - s.pos[0], z - s.pos[1]) > PAD_R + 8)) continue;
+        palm(x, z + (Math.random() - .5) * 6, 0.75 + Math.random() * 0.5);
+      }
     }
   }
 
@@ -747,12 +876,7 @@ async function initDrive() {
     car.position.x += Math.sin(heading) * speed * dt;
     car.position.z += Math.cos(heading) * speed * dt;
 
-    const d = Math.hypot(car.position.x, car.position.z);
-    if (d > WORLD_R) {
-      const k = WORLD_R / d;
-      car.position.x *= k; car.position.z *= k;
-      speed *= 0.3;
-    }
+    if (clampToBounds(car.position)) speed *= 0.3;
     car.rotation.y = heading;
 
     for (const w of parts.wheels) {
@@ -795,12 +919,7 @@ async function initDrive() {
     person.position.x += Math.sin(pHeading) * pSpeed * dt;
     person.position.z += Math.cos(pHeading) * pSpeed * dt;
 
-    const d = Math.hypot(person.position.x, person.position.z);
-    if (d > WORLD_R) {
-      const k = WORLD_R / d;
-      person.position.x *= k; person.position.z *= k;
-      pSpeed = 0;
-    }
+    if (clampToBounds(person.position)) pSpeed = 0;
     person.rotation.y = pHeading;
 
     /* 달리는 동안만 카메라가 진행 방향으로 따라 돈다 */
@@ -923,7 +1042,10 @@ async function initDrive() {
 
   /* 한 번 열린 패널은 자동으로 닫지 않는다. 전속력이면 구역 통과가 1초도 안 걸려서
      자동으로 닫으면 읽을 틈 없이 사라진다. */
-  const ENTER_R = PAD_R + 2.5, LEAVE_R = PAD_R + 9;
+  /* 게시판은 도로 중앙에서 17유닛 떨어져 있다. 판정을 패드 언저리로 잡으면
+     직진만 해서는 아무것도 열리지 않고 매번 길 밖으로 빠져야 한다.
+     고속도로 광고판처럼 지나가면서 차례로 뜨도록 도로 폭을 덮는 거리로 잡는다. */
+  const ENTER_R = PAD_R + 11, LEAVE_R = PAD_R + 17;
 
   /* 지금 조종 중인 쪽(차 또는 캐릭터)의 위치 */
   const activePos = () => (player.mode === 'onfoot' ? person.position : car.position);
