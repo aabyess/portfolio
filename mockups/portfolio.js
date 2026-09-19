@@ -238,7 +238,16 @@ function setView(v, { updateHash = true } = {}) {
   }
 
   if (v === 'drive') {
-    initDrive();
+    /* 3D 초기화가 어떤 이유로든 실패하면 로딩 화면에 갇히지 않고 문서 뷰로 넘긴다 */
+    initDrive().catch(err => {
+      console.error('3D 초기화 실패:', err);
+      const load = document.getElementById('g-load');
+      if (load) {
+        load.innerHTML = '<div class="n">3D 화면을 불러오지 못했습니다</div>' +
+                         '<div class="s">문서 뷰로 대신 보여드리겠습니다.</div>';
+      }
+      setTimeout(() => setView('doc'), 1600);
+    });
   } else {
     /* 게임에서 넘어올 땐 맨 위부터 읽게 한다 (앵커로 들어온 경우는 그대로 둔다) */
     if (location.hash === '#doc') scrollTo(0, 0);
