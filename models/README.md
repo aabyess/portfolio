@@ -81,3 +81,44 @@ Blender에서 앞코를 -Y로 두고 내보내면 glTF에서 +Z가 됩니다. �
 
 포트폴리오는 첫 로딩 속도가 중요합니다. **2MB 이하**를 권합니다.
 현재 차 + 텍스처는 합쳐서 약 205KB입니다.
+
+---
+
+# 캐릭터 모델
+
+차에서 내려 뛰어다니는 캐릭터입니다. 현재는 **박스로 조립한 기본 캐릭터**가
+팔다리를 흔드는 방식으로 움직입니다. 별도 모델 파일이 없어도 동작합니다.
+
+리깅된 `.glb`로 교체하려면 `mockups/portfolio.js`의 `CHAR_MODEL_URL`에 경로를 넣으면 됩니다.
+
+```js
+const CHAR_MODEL_URL = '../models/character.glb';
+const CHAR_HEIGHT = 1.95;   // 월드 기준 키. 모델 크기는 여기에 맞춰 자동 조정된다.
+```
+
+## 애니메이션 이름
+
+glb 안의 애니메이션 클립에서 `Armature|Run` 같은 접두사를 떼고 **소문자**로 찾습니다.
+아래 이름이 있으면 자동으로 연결됩니다.
+
+| 상태 | 찾는 이름 | 없을 때 |
+|---|---|---|
+| 서 있을 때 | `idle` | 애니메이션 없이 정지 |
+| 뛸 때 | `run` | `walk`로 대체 |
+
+## 쓸 만한 CC0 에셋
+
+- **Kenney — Animated Characters** <https://kenney.nl/assets/animated-characters-protagonists>
+  스케이터·캐주얼 복장. **지금 차와 화풍이 같습니다.** 단, FBX로만 제공되고
+  애니메이션이 별도 파일(`idle.fbx` / `run.fbx` / `jump.fbx`)이라 Blender에서
+  하나의 glb로 합쳐야 합니다.
+- **Quaternius** <https://quaternius.com> — glb에 애니메이션이 이미 들어 있어 바로 쓸 수 있지만,
+  판타지 계열이 많아 이 월드와는 덜 어울립니다.
+
+## Blender에서 FBX 애니메이션 합치기
+
+1. `Model/characterMedium.fbx` 임포트 (아마추어 + 메시)
+2. `Animations/idle.fbx`, `run.fbx` 를 각각 임포트 → 각자 액션을 가지고 들어옵니다
+3. 그 액션들을 본체 아마추어의 NLA 트랙에 넣고, 임시로 들어온 아마추어는 삭제
+4. `Skins/` 폴더의 PNG를 머티리얼 베이스 컬러에 연결
+5. glTF Binary(.glb)로 내보내기 — Animation 모드를 **Actions**로 두면 전부 포함됩니다

@@ -287,6 +287,8 @@ body.is-touch #g-found{bottom:150px;padding:10px 12px}
   backdrop-filter:blur(12px);display:grid;place-items:center;font-size:20px;color:var(--ink);
   box-shadow:0 4px 18px rgba(29,42,51,.14);user-select:none;-webkit-user-select:none}
 .tkey:active{background:#fff;transform:scale(.94)}
+.tkey.act{font-family:var(--mono);font-weight:700;font-size:17px;color:var(--acc)}
+#g-hint span:not(:last-child){margin-right:2px}
 
 @media(max-width:560px){
   #g-top{padding:10px 12px;gap:7px}
@@ -450,7 +452,11 @@ body.is-touch #g-found{bottom:150px;padding:10px 12px}
 
   <div id="g-touch">
     <div class="tpad"><div class="tkey" data-k="left">◀</div><div class="tkey" data-k="right">▶</div></div>
-    <div class="tpad"><div class="tkey" data-k="back">▼</div><div class="tkey" data-k="fwd">▲</div></div>
+    <div class="tpad">
+      <button class="tkey act" data-act="toggle" aria-label="타기 / 내리기">F</button>
+      <div class="tkey" data-k="back">▼</div>
+      <div class="tkey" data-k="fwd">▲</div>
+    </div>
   </div>
 
   <aside id="g-panel" aria-live="polite">

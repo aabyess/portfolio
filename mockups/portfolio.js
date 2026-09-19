@@ -269,6 +269,11 @@ const WHEEL_SPEC = [
   { front: false, names: ['wheel_rr', 'wheel-back-right',  'wheel_rear_right'] }
 ];
 
+/* 캐릭터 모델. null이면 박스로 조립한 기본 캐릭터를 쓴다.
+   리깅된 .glb를 넣으면 애니메이션(idle/run)을 자동으로 찾아 쓴다. */
+const CHAR_MODEL_URL = null;
+const CHAR_HEIGHT = 1.95;   // 월드 기준 키. glb도 여기에 맞춰 크기를 맞춘다.
+
 let driveReady = false;
 
 function hasWebGL() {
@@ -413,6 +418,79 @@ async function initDrive() {
     car.add(model);
     parts = { wheels, tilt: [model] };
   }, undefined, () => { /* 없으면 기본 차 유지 */ });
+
+  /* ── 캐릭터 ──
+     차와 같은 방식. CHAR_MODEL_URL에 애니메이션이 든 .glb를 주면 교체되고,
+     없으면 아래 박스로 조립한 기본 캐릭터가 절차적으로 움직인다. */
+  const person = new THREE.Group();
+  person.visible = false;          // 차에서 시작하므로 처음엔 숨김
+  scene.add(person);
+
+  const limbs = {};
+  {
+    const skin = new THREE.MeshStandardMaterial({ color: 0xf0bc95, roughness: .85 });
+    const shirt = new THREE.MeshStandardMaterial({ color: 0x3fa7d6, roughness: .8 });
+    const pants = new THREE.MeshStandardMaterial({ color: 0x3b4a57, roughness: .85 });
+    const shoe = new THREE.MeshStandardMaterial({ color: 0x2b3038, roughness: .8 });
+    const hair = new THREE.MeshStandardMaterial({ color: 0x2a2320, roughness: .9 });
+
+    const box = (w, h, d, mat, x, y, z) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+      m.position.set(x, y, z);
+      m.castShadow = true;
+      return m;
+    };
+    person.add(
+      box(0.62, 0.72, 0.34, shirt, 0, 1.12, 0),   // 몸통
+      box(0.46, 0.46, 0.44, skin, 0, 1.71, 0),    // 머리
+      box(0.50, 0.16, 0.48, hair, 0, 1.93, 0)     // 머리카락
+    );
+
+    /* 팔다리는 어깨·골반을 회전축으로 삼아야 자연스럽게 흔들린다 */
+    const limb = (w, h, d, mat, x, y, footMat) => {
+      const pivot = new THREE.Group();
+      pivot.position.set(x, y, 0);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+      m.position.y = -h / 2;
+      m.castShadow = true;
+      pivot.add(m);
+      if (footMat) {
+        const f = new THREE.Mesh(new THREE.BoxGeometry(w * 1.1, 0.16, d * 1.5), footMat);
+        f.position.set(0, -h + 0.02, 0.06);
+        f.castShadow = true;
+        pivot.add(f);
+      }
+      person.add(pivot);
+      return pivot;
+    };
+
+    limbs.armL = limb(0.18, 0.62, 0.2, skin, 0.4, 1.42);
+    limbs.armR = limb(0.18, 0.62, 0.2, skin, -0.4, 1.42);
+    limbs.legL = limb(0.24, 0.76, 0.26, pants, 0.16, 0.78, shoe);
+    limbs.legR = limb(0.24, 0.76, 0.26, pants, -0.16, 0.78, shoe);
+  }
+
+  /* 리깅된 glb를 쓸 때의 애니메이션 믹서 */
+  let charMixer = null, charAction = null;
+  const charClips = {};
+
+  if (CHAR_MODEL_URL) new GLTFLoader().load(CHAR_MODEL_URL, gltf => {
+    const model = gltf.scene;
+    const size = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());
+    if (size.y > 0.0001) model.scale.setScalar(CHAR_HEIGHT / size.y);
+    const b = new THREE.Box3().setFromObject(model);
+    const c = b.getCenter(new THREE.Vector3());
+    model.position.x -= c.x; model.position.z -= c.z; model.position.y -= b.min.y;
+    model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+
+    for (const child of [...person.children]) person.remove(child);
+    person.add(model);
+    limbs.armL = limbs.armR = limbs.legL = limbs.legR = null;
+
+    charMixer = new THREE.AnimationMixer(model);
+    /* "Armature|Run" 같은 접두사를 떼고 소문자 키로 정리 */
+    for (const clip of gltf.animations) charClips[clip.name.split('|').pop().toLowerCase()] = clip;
+  }, undefined, () => { /* 없으면 기본 캐릭터 유지 */ });
 
   /* ── 텍스트 ── */
   function labelSprite(text, sub, color) {
@@ -615,17 +693,22 @@ async function initDrive() {
     if (!driveActive) return;                 // 문서 뷰에서는 키를 가로채지 않는다
     const k = KEYMAP[e.code];
     if (k) { keys[k] = true; e.preventDefault(); hideHint(); }
+    if (e.code === 'KeyF') { e.preventDefault(); toggleVehicle(); hideHint(); }
     if (e.code === 'Escape') closePanel();
   });
   addEventListener('keyup', e => { const k = KEYMAP[e.code]; if (k) keys[k] = false; });
 
   if (matchMedia('(hover: none) and (pointer: coarse)').matches) document.body.classList.add('is-touch');
-  document.querySelectorAll('.tkey').forEach(el => {
+  document.querySelectorAll('.tkey[data-k]').forEach(el => {
     const k = el.dataset.k;
     const on = e => { e.preventDefault(); keys[k] = true; hideHint(); };
     const off = e => { e.preventDefault(); keys[k] = false; };
     el.addEventListener('pointerdown', on);
     ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => el.addEventListener(ev, off));
+  });
+  /* 승하차는 눌렀다 떼는 동작이 아니라 한 번의 명령이다 */
+  document.querySelectorAll('.tkey[data-act="toggle"]').forEach(el => {
+    el.addEventListener('pointerdown', e => { e.preventDefault(); toggleVehicle(); hideHint(); });
   });
 
   /* ── 주행 ── */
@@ -670,6 +753,116 @@ async function initDrive() {
     const tilt = -steer * grip * 0.055;
     for (const m of parts.tilt) m.rotation.z = tilt;
   }
+
+  /* ── 도보 ──
+     차에서 내려 뛰어다니는 모드. 방향키는 카메라 기준으로 해석하고
+     캐릭터는 가려는 방향으로 부드럽게 돌아선다 (3인칭 게임의 일반적인 방식). */
+  const RUN_SPEED = 11, RUN_ACCEL = 46, RUN_DRAG = 34, TURN_SNAP = 11;
+  let pHeading = Math.PI, pSpeed = 0, camYaw = Math.PI, bob = 0;
+
+  /* 각도는 -π~π를 넘나들어서 그냥 보간하면 한 바퀴 돌아버린다 */
+  const angLerp = (a, b, t) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * Math.min(1, t);
+
+  function walk(dt) {
+    const f = (keys.fwd ? 1 : 0) - (keys.back ? 1 : 0);
+    const r = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+
+    let dx = 0, dz = 0;
+    if (f || r) {
+      /* 카메라가 보는 방향을 앞으로 삼는다 */
+      dx = Math.sin(camYaw) * f + Math.sin(camYaw + Math.PI / 2) * r;
+      dz = Math.cos(camYaw) * f + Math.cos(camYaw + Math.PI / 2) * r;
+      const len = Math.hypot(dx, dz) || 1;
+      dx /= len; dz /= len;
+      pHeading = angLerp(pHeading, Math.atan2(dx, dz), dt * TURN_SNAP);
+      pSpeed = Math.min(RUN_SPEED, pSpeed + RUN_ACCEL * dt);
+    } else {
+      pSpeed = Math.max(0, pSpeed - RUN_DRAG * dt);
+    }
+
+    person.position.x += Math.sin(pHeading) * pSpeed * dt;
+    person.position.z += Math.cos(pHeading) * pSpeed * dt;
+
+    const d = Math.hypot(person.position.x, person.position.z);
+    if (d > WORLD_R) {
+      const k = WORLD_R / d;
+      person.position.x *= k; person.position.z *= k;
+      pSpeed = 0;
+    }
+    person.rotation.y = pHeading;
+
+    /* 달리는 동안만 카메라가 진행 방향으로 따라 돈다 */
+    if (pSpeed > 0.3) camYaw = angLerp(camYaw, pHeading, dt * 2.2);
+
+    const moving = pSpeed / RUN_SPEED;
+    if (charMixer) {
+      playClip(moving > 0.05 ? 'run' : 'idle');
+      charMixer.update(dt);
+    } else {
+      /* 기본 캐릭터는 팔다리를 직접 흔든다 */
+      bob += dt * (4 + moving * 9);
+      const swing = Math.sin(bob) * 0.85 * moving;
+      limbs.legL.rotation.x = swing;
+      limbs.legR.rotation.x = -swing;
+      limbs.armL.rotation.x = -swing * 0.75;
+      limbs.armR.rotation.x = swing * 0.75;
+      person.position.y = Math.abs(Math.sin(bob)) * 0.06 * moving;
+    }
+  }
+
+  /* glb 캐릭터용 — 같은 클립이면 다시 시작하지 않고 부드럽게 교차시킨다 */
+  function playClip(name) {
+    const clip = charClips[name] || charClips[name === 'run' ? 'walk' : 'idle'];
+    if (!clip || !charMixer) return;
+    if (charAction && charAction.getClip() === clip) return;
+    const next = charMixer.clipAction(clip);
+    next.reset().fadeIn(0.18).play();
+    if (charAction) charAction.fadeOut(0.18);
+    charAction = next;
+  }
+
+  /* ── 승하차 ── */
+  const ENTER_CAR_R = 5.5;
+  const player = { mode: 'driving' };
+
+  function nearCar() {
+    return Math.hypot(person.position.x - car.position.x, person.position.z - car.position.z) < ENTER_CAR_R;
+  }
+
+  function toggleVehicle() {
+    if (player.mode === 'driving') {
+      /* 차 옆(운전석 쪽)에 내려놓는다 */
+      const side = heading + Math.PI / 2;
+      person.position.set(
+        car.position.x + Math.sin(side) * 2.6,
+        0,
+        car.position.z + Math.cos(side) * 2.6
+      );
+      pHeading = camYaw = side;
+      pSpeed = 0; speed = 0;
+      person.visible = true;
+      player.mode = 'onfoot';
+    } else {
+      if (!nearCar()) return false;     // 차에서 멀면 못 탄다
+      person.visible = false;
+      heading = pHeading;
+      camYaw = pHeading;
+      player.mode = 'driving';
+    }
+    updateHint();
+    return true;
+  }
+
+  /* ── 안내 문구 ── */
+  function updateHint() {
+    const driving = player.mode === 'driving';
+    hint.innerHTML = `
+      <div class="keys"><span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span></div>
+      <span>${driving ? '운전해서 프로젝트에 가까이 가보세요' : '뛰어서 돌아다닐 수 있습니다'}</span>
+      <div class="keys"><span class="key">F</span></div>
+      <span>${driving ? '내려서 걷기' : '차 타기'}</span>`;
+  }
+  updateHint();
 
   /* ── 패널 ── */
   const panel = document.getElementById('g-panel');
@@ -719,10 +912,15 @@ async function initDrive() {
   /* 한 번 열린 패널은 자동으로 닫지 않는다. 전속력이면 구역 통과가 1초도 안 걸려서
      자동으로 닫으면 읽을 틈 없이 사라진다. */
   const ENTER_R = PAD_R + 2.5, LEAVE_R = PAD_R + 9;
+
+  /* 지금 조종 중인 쪽(차 또는 캐릭터)의 위치 */
+  const activePos = () => (player.mode === 'onfoot' ? person.position : car.position);
+
   function proximity() {
+    const me = activePos();
     let near = null, nearD = Infinity;
     for (const s of stations) {
-      const d = Math.hypot(car.position.x - s.pos[0], car.position.z - s.pos[1]);
+      const d = Math.hypot(me.x - s.pos[0], me.z - s.pos[1]);
       if (d < nearD) { nearD = d; near = s; }
     }
     if (!near) return;
@@ -730,20 +928,31 @@ async function initDrive() {
     if (nearD < ENTER_R && current !== near.id && dismissed !== near.id) openPanel(near);
   }
 
-  /* ── 카메라 ── */
+  /* ── 카메라 ──
+     차일 땐 멀찍이 높게, 도보일 땐 가깝고 낮게 따라붙는다. */
   const camPos = new THREE.Vector3(0, 12, 34);
   const camLook = new THREE.Vector3();
+  const camTarget = new THREE.Vector3();
   camera.position.copy(camPos);
 
+  const CAM = {
+    driving: { back: 13.5, up: 6.6, ahead: 6, lookY: 1.6, ease: 0.0016 },
+    onfoot:  { back: 7.2,  up: 3.9, ahead: 3, lookY: 1.3, ease: 0.0006 }
+  };
+
   function updateCamera(dt) {
-    const k = 1 - Math.pow(0.0016, dt);
-    camPos.lerp(new THREE.Vector3(
-      car.position.x - Math.sin(heading) * 13.5, 6.6, car.position.z - Math.cos(heading) * 13.5
-    ), k);
+    const onFoot = player.mode === 'onfoot';
+    const c = onFoot ? CAM.onfoot : CAM.driving;
+    const p = onFoot ? person.position : car.position;
+    const h = onFoot ? camYaw : heading;
+    const k = 1 - Math.pow(c.ease, dt);
+
+    camTarget.set(p.x - Math.sin(h) * c.back, c.up, p.z - Math.cos(h) * c.back);
+    camPos.lerp(camTarget, k);
     camera.position.copy(camPos);
-    camLook.lerp(new THREE.Vector3(
-      car.position.x + Math.sin(heading) * 6, 1.6, car.position.z + Math.cos(heading) * 6
-    ), k);
+
+    camTarget.set(p.x + Math.sin(h) * c.ahead, c.lookY, p.z + Math.cos(h) * c.ahead);
+    camLook.lerp(camTarget, k);
     camera.lookAt(camLook);
   }
 
@@ -753,15 +962,18 @@ async function initDrive() {
 
   function step(dt) {
     t += dt;
-    drive(dt);
+    if (player.mode === 'driving') drive(dt);
+    else walk(dt);
     updateCamera(dt);
     proximity();
+
+    const me = activePos();
     for (const s of stations) {
-      /* 차가 아니라 카메라를 향하게 한다. 차가 패드 한가운데면 방향이 0으로 붕괴해
-         게시판 뒷면이 보인다. 카메라는 늘 뒤쪽에 있어 각도가 안정적이다. */
+      /* 캐릭터나 차가 아니라 카메라를 향하게 한다. 패드 한가운데에 서면 방향이
+         0으로 붕괴해 게시판 뒷면이 보인다. 카메라는 늘 뒤쪽이라 각도가 안정적이다. */
       const ang = Math.atan2(camera.position.x - s.pos[0], camera.position.z - s.pos[1]);
       s.group.rotation.y += (ang - s.group.rotation.y) * Math.min(1, dt * 2.4);
-      const d = Math.hypot(car.position.x - s.pos[0], car.position.z - s.pos[1]);
+      const d = Math.hypot(me.x - s.pos[0], me.z - s.pos[1]);
       const pulse = d < ENTER_R + 6 ? 1 + Math.sin(t * 4) * 0.035 : 1;
       s.ring.scale.set(pulse, pulse, 1);
       s.label.position.y = s.labelY + Math.sin(t * 1.3 + s.phase) * 0.18;
@@ -802,8 +1014,17 @@ async function initDrive() {
   if (new URLSearchParams(location.search).has('test')) {
     window.__drive = {
       step, keys, stations,
-      pos: () => ({ x: +car.position.x.toFixed(2), z: +car.position.z.toFixed(2) }),
-      teleport(x, z, h = 0) { car.position.set(x, 0, z); heading = h; speed = 0; },
+      pos: () => ({ x: +activePos().x.toFixed(2), z: +activePos().z.toFixed(2) }),
+      teleport(x, z, h = 0) {
+        const p = activePos();
+        p.set(x, p.y, z);
+        if (player.mode === 'onfoot') { pHeading = camYaw = h; pSpeed = 0; }
+        else { heading = h; speed = 0; }
+      },
+      mode: () => player.mode,
+      toggleVehicle,
+      carPos: () => ({ x: +car.position.x.toFixed(2), z: +car.position.z.toFixed(2) }),
+      personVisible: () => person.visible,
       carInfo: () => ({
         usingModel: !car.children.includes(stockCar),
         wheels: parts.wheels.length,
