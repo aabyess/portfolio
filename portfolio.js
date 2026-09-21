@@ -7,12 +7,11 @@
 
 const PROJECTS = [
   {
-    id: 'nolleo', no: '01', color: '#3fa7d6', featured: true,
+    id: 'nolleo', no: '01', color: '#3fa7d6',
     name: '놀러온나',
     full: '놀러온나 — 부산 특화 예산 맞춤 여행 플랫폼',
     period: '2026.05 — 2026.10', role: '5인 팀 · 프론트 전담',
     one: '한국관광공사 TourAPI 기반 여행 플랫폼에서 <b>서비스 전 페이지의 프론트엔드를 혼자</b> 설계·구현했습니다. (프론트 1, 백엔드 3, PM 1)',
-    short: '부산 여행 플랫폼의 전 페이지 프론트엔드를 1인 담당. 조용히 누락되던 데이터 632개를 찾아냈습니다.',
     pts: [
       '장소 매핑 상한이 3,000개로 하드코딩돼 <b>실데이터 3,632개 중 632개가 누락</b>되던 버그를 발견했습니다. 상한을 올리고 37회 순차 요청을 8개 단위 병렬로 바꿔 초기 로딩도 함께 개선했습니다.',
       '부산 16개 구 혼잡도 지도를 Kakao Maps SDK로 구현하고, 원형 마커를 <b>실제 행정구역 경계 폴리곤</b>으로 교체해 구 클릭부터 상세 모달까지 이어지는 탐색 흐름을 설계했습니다.',
@@ -27,12 +26,11 @@ const PROJECTS = [
     pos: [-17, -16]
   },
   {
-    id: 'trade', no: '02', color: '#e8734a', featured: true,
+    id: 'trade', no: '02', color: '#e8734a',
     name: 'Trade-Cmarket',
     full: 'Trade-Cmarket — 한국·인도네시아 B2B 무역 견적·계약 플랫폼',
     period: '2026.07 — 2026.08', role: '인턴 · 1인 개발',
     one: '발주 공고부터 견적·낙찰·계약·실시간 채팅까지 거래 플로우 전체를 바이어·셀러 양면으로 <b>혼자 기획·설계·구현</b>했습니다.',
-    short: 'B2B 거래 플로우 전체를 1인으로 구현. 이중 권한 구조를 설계하고, 프론트·백엔드를 함께 추적해 강제 로그아웃 버그를 잡았습니다.',
     pts: [
       'Supabase RLS와 서비스롤 API로 <b>이중 권한 구조</b>를 설계해, RLS를 우회하는 경로에도 소유권·상태 전이 검증을 직접 붙였습니다. 완료된 계약 되돌리기, 마감 공고 견적 제출 같은 조작을 차단했습니다.',
       '3개 국어 서비스에서 번역본을 원문·감지언어와 함께 저장하고 생성은 서버로만 강제해, <b>클라이언트발 번역 위조</b>를 막았습니다.',
@@ -52,7 +50,6 @@ const PROJECTS = [
     full: 'RE:BOOT — 번아웃·자기관리 모임 커뮤니티',
     period: '2026.02 — 2026.04', role: '부트캠프 팀 프로젝트',
     one: '관심사 기반으로 모임을 탐색·참여·개설하는 커뮤니티 플랫폼에서 자유게시판 영역 전체를 담당했습니다.',
-    short: '자유게시판 전체 CRUD를 담당하고, <b>조회수가 3씩 오르던</b> 중복 호출 버그를 잡고 캐시 키를 중앙화했습니다.',
     pts: [
       '좋아요를 누르면 <b>조회수가 3씩 오르던 버그</b>를 발견해, API가 3중 호출되던 원인을 찾아 중복 요청을 제거했습니다.',
       'queryKey를 파일마다 문자열로 관리하던 방식을 <b>객체로 중앙화</b>해 캐시 불일치와 중복 호출을 없앴습니다.',
@@ -70,7 +67,6 @@ const PROJECTS = [
     full: 'Myeonjeop-Mate — AI 기반 면접 준비 플랫폼',
     period: '2025.11 — 2025.12', role: '개인 프로젝트 · 1인 개발',
     one: '이력서를 분석해 맞춤 면접 질문과 답변 피드백을 제공하는 서비스를 기획부터 API 연동까지 혼자 만들었습니다.',
-    short: '이력서를 분석해 맞춤 면접 질문과 피드백을 주는 서비스. OpenAI 연동부터 파일 텍스트 추출, 사용량 제한까지 1인 개발했습니다.',
     pts: [
       'PDF·Word 이력서에서 텍스트를 추출해 프롬프트로 구조화하고, <b>맞춤 면접 질문을 자동 생성</b>했습니다.',
       'AI 피드백 응답을 JSON으로 파싱해 구조·내용·키워드·개선 예시 항목별로 즉시 렌더링했습니다.',
@@ -87,7 +83,6 @@ const PROJECTS = [
     full: 'IGNIS — 사회공헌 플랫폼',
     period: '2025.03 — 2025.10', role: '팀 프로젝트',
     one: '기부·펀딩·봉사 활동을 연결하는 온라인 사회공헌 플랫폼입니다.',
-    short: '기부·펀딩·봉사를 연결하는 플랫폼. 결제 후 <b>서버 금액과 대조해 승인</b>하는 흐름을 설계해 위변조를 막았습니다.',
     pts: [
       'PortOne 결제를 연동하면서, 결제 완료 후 <b>서버 금액과 대조해 승인</b>하는 흐름을 직접 설계해 위변조를 막았습니다.',
       '홈에서 기부·펀딩·봉사를 통합 조회하고 각 도메인에서 참여·등록까지 이어지는 사용자 플로우를 구현했습니다.',
@@ -104,7 +99,6 @@ const PROJECTS = [
     full: 'LOL Face Matcher — 얼굴 인식 챔피언 매칭',
     period: '2025.03 — 2025.06', role: '개인 프로젝트',
     one: '얼굴 사진을 인식해 닮은 League of Legends 챔피언을 찾아주는 머신러닝 웹 서비스입니다.',
-    short: '얼굴을 인식해 닮은 챔피언을 찾아주는 서비스. 모델을 바꿔 <b>임베딩 성공률 100%</b>를 달성했습니다.',
     pts: [
       'dlib 기반 모델에서 <b>DeepFace(ArcFace)로 전환</b>해 챔피언 이미지 170장 기준 임베딩 성공률 100%를 달성했습니다.',
       '성별을 고려한 코사인 유사도 알고리즘으로 닮은꼴 매칭을 구현했습니다.',
@@ -118,7 +112,7 @@ const PROJECTS = [
 ];
 
 const SKILLS = [
-  { t: 'Frontend', items: [['Next.js', 1], ['React', 1], ['TypeScript', 1], ['TailwindCSS', 1], ['TanStack Query', 1], ['Zustand', 1], ['Motion', 0], ['Storybook', 0], ['Ant Design', 0]] },
+  { t: 'Frontend', items: [['Next.js', 1], ['React', 1], ['TypeScript', 1], ['TailwindCSS', 1], ['TanStack Query', 1], ['Zustand', 1], ['Three.js', 1], ['Motion', 0], ['Storybook', 0], ['Ant Design', 0]] },
   { t: 'Backend · Data', items: [['Supabase', 1], ['PostgreSQL / RLS', 1], ['REST API 설계', 1], ['FastAPI', 0], ['Python', 0], ['MySQL', 0]] },
   { t: '연동 · 외부 API', items: [['Gemini API', 1], ['OpenAI API', 1], ['Kakao Maps SDK', 1], ['next-intl', 1], ['DeepL', 0], ['PortOne 결제', 0]] },
   { t: '테스트 · 배포', items: [['Vitest', 0], ['Jest', 0], ['Vercel', 0], ['Git / GitHub', 0]] }
@@ -153,7 +147,7 @@ function renderDoc() {
       <ul class="sk-l">${g.items.map(([n, key]) => `<li class="${key ? 'k' : ''}">${n}</li>`).join('')}</ul>
     </div>`).join('');
 
-  document.getElementById('d-featured').innerHTML = PROJECTS.filter(p => p.featured).map(p => `
+  document.getElementById('d-projects').innerHTML = PROJECTS.map(p => `
     <article class="pj">
       <div class="pj-top">
         <span class="pj-no">${p.no}</span>
@@ -175,14 +169,6 @@ function renderDoc() {
         <div class="pj-shot">${media(p)}</div>
       </div>
     </article>`).join('');
-
-  document.getElementById('d-compact').innerHTML = PROJECTS.filter(p => !p.featured).map(p => `
-    <div class="pcx">
-      <div class="pcx-t"><span class="pcx-n">${p.name}</span><span class="pcx-p">${p.period}</span></div>
-      <p class="pcx-d">${p.short}</p>
-      <div class="stk">${p.stack.map(s => `<span>${s}</span>`).join('')}</div>
-      <div class="lk">${links(p)}</div>
-    </div>`).join('');
 
   document.getElementById('d-pg').innerHTML = PLAY.map(p => `
     <div class="pgc">
