@@ -1,44 +1,52 @@
 # 다음에 할 일
 
 새 세션에서 이어서 작업할 때 이 파일부터 읽으면 됩니다.
-마지막 갱신: 2026-09-19
+마지막 갱신: 2026-09-21
 
 ---
 
 ## 지금 상태 한 줄 요약
 
-3D 드라이브 포트폴리오가 동작하고 루트 배포 구조까지 끝났습니다.
+3D 드라이브 포트폴리오가 동작하고, 루트 배포 구조와 프로젝트 순서·내용 수정(스펙 01·02)까지 끝났습니다.
 **남은 건 캐릭터 모델 교체, 도로 텍스처, 그리고 내용 채우기(이력서·게임)입니다.**
 
 ## 브랜치 배치
 
-| 브랜치 | 커밋 | 워크트리 위치 | 용도 |
-|---|---|---|---|
-| `main` | `bc1ba6a` | `~/GitHub/portfolio` | **원본 구버전. 아직 아무것도 머지 안 됨** |
-| `worktree-portfolio-ui-polish` | `d38b1a8` | `~/GitHub/portfolio/.claude/worktrees/portfolio-ui-polish` | 기획(Claude). `docs/`만 수정 |
-| `codex-impl` | `ea5abbd` | `~/GitHub/portfolio-codex` | 구현(Codex). 코드 수정 |
+| 브랜치 | 워크트리 위치 | 용도 |
+|---|---|---|
+| `main` (`bc1ba6a`) | `~/GitHub/portfolio` | **원본 구버전. 아직 아무것도 머지 안 됨** |
+| `worktree-portfolio-ui-polish` | `~/GitHub/portfolio/.claude/worktrees/portfolio-ui-polish` | **현재 작업 브랜치.** 기획·구현 모두 여기서 |
+| `codex-impl` | `~/GitHub/portfolio-codex` | **사용 중단.** 스펙 01 결과까지 위 브랜치에 흡수됨 |
 
-셋 다 원격에 푸시되어 있습니다. **실제 사이트는 여전히 `main`의 구버전을 보여줍니다.**
-되돌리고 싶으면 그냥 머지 안 하면 됩니다.
+**실제 사이트는 여전히 `main`의 구버전을 보여줍니다.** 되돌리고 싶으면 그냥 머지 안 하면 됩니다.
 
-### 역할 분담 (테스트 중인 방식)
+`codex-impl`과 그 워크트리는 더 쓰지 않으므로 정리해도 됩니다:
 
-- **Claude Code = 기획.** `docs/specs/`에 스펙을 쓰고 코드는 건드리지 않음
-- **Codex = 구현.** 스펙을 받아 코드 작성, 완료 조건을 직접 검증
-- Codex가 스펙 받아가는 법: `git merge worktree-portfolio-ui-polish`
-- 기획이 `docs/`만 만지므로 두 브랜치가 충돌하지 않음
+```bash
+cd ~/GitHub/portfolio
+git worktree remove ../portfolio-codex --force
+git branch -D codex-impl && git push origin --delete codex-impl
+```
 
-스펙 01(루트 승격)은 이 방식으로 완료됐고 결과가 정확했습니다.
+### 역할 분담 실험 — 종료 (2026-09-21)
+
+Claude(기획) / Codex(구현) 분리를 시험했고, 사용자 결정으로 **Claude가 기획·구현을 모두 맡는 것으로
+되돌렸습니다.** 코덱스는 중단했습니다.
+
+- 스펙 01(루트 승격)은 코덱스가 스펙 그대로 정확하게 구현했습니다
+- 스펙 02는 코덱스가 착수하기 전에 Claude가 직접 적용했습니다
+- 변경 요청이 오갈 때마다 "스펙 작성 → 코덱스 전달 → 검수" 한 단계가 더 붙는 게 비용이었습니다
+
+`docs/specs/`는 **작업 기록으로 남겨둡니다.** 다시 분리 방식을 쓰고 싶으면 그대로 재개할 수 있습니다.
 
 ## 로컬 띄우기
 
 ```bash
-cd ~/GitHub/portfolio-codex && python3 -m http.server 8788   # 구현 결과
-# http://127.0.0.1:8788/
+cd ~/GitHub/portfolio/.claude/worktrees/portfolio-ui-polish
+python3 -m http.server 8777
+# http://127.0.0.1:8777/          ← index.html이 루트에 있음
+# http://127.0.0.1:8777/?test=1   ← window.__drive 테스트 훅
 ```
-
-기획 브랜치 쪽을 보려면 `.claude/worktrees/portfolio-ui-polish`에서 8777 포트.
-(그쪽은 아직 `mockups/g-portfolio.html` 경로입니다)
 
 ---
 
@@ -75,8 +83,7 @@ https://kenney.nl/media/pages/assets/animated-characters-protagonists/608191acc4
 `'models/character.glb'`로 바꾸면 교체되고, 애니메이션 이름은 `idle` / `run`을
 자동으로 찾습니다. (`Armature|Run` 같은 접두사는 떼고 소문자로 매칭)
 
-> 분담: **Blender MCP는 Claude 쪽에만 연결됩니다.** 에셋 생성은 Claude가 하고,
-> 코드 통합은 스펙으로 넘겨 Codex가 하는 게 맞습니다.
+> Blender MCP는 Claude 쪽에만 연결되므로 에셋 생성부터 코드 통합까지 Claude가 이어서 합니다.
 
 ### 2. 도로 텍스처 (스펙 미작성)
 
@@ -84,7 +91,7 @@ https://kenney.nl/media/pages/assets/animated-characters-protagonists/608191acc4
 길이가 고정돼서 `BOUND` 상수로 도로를 늘리는 게 불가능해집니다.
 아스팔트 노멀·러프니스 텍스처를 입히는 방향이 맞습니다.
 
-Codex가 Blender 없이 바로 할 수 있는 작업입니다. 스펙만 쓰면 됩니다.
+Blender 연결 없이 바로 할 수 있는 작업입니다.
 
 ### 3. 이력서 PDF — **사용자 입력 대기**
 

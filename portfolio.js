@@ -7,7 +7,27 @@
 
 const PROJECTS = [
   {
-    id: 'trade', no: '01', color: '#e8734a', featured: true,
+    id: 'nolleo', no: '01', color: '#3fa7d6', featured: true,
+    name: '놀러온나',
+    full: '놀러온나 — 부산 특화 예산 맞춤 여행 플랫폼',
+    period: '2026.05 — 2026.10', role: '5인 팀 · 프론트 전담',
+    one: '한국관광공사 TourAPI 기반 여행 플랫폼에서 <b>서비스 전 페이지의 프론트엔드를 혼자</b> 설계·구현했습니다. (프론트 1, 백엔드 3, PM 1)',
+    short: '부산 여행 플랫폼의 전 페이지 프론트엔드를 1인 담당. 조용히 누락되던 데이터 632개를 찾아냈습니다.',
+    pts: [
+      '장소 매핑 상한이 3,000개로 하드코딩돼 <b>실데이터 3,632개 중 632개가 누락</b>되던 버그를 발견했습니다. 상한을 올리고 37회 순차 요청을 8개 단위 병렬로 바꿔 초기 로딩도 함께 개선했습니다.',
+      '부산 16개 구 혼잡도 지도를 Kakao Maps SDK로 구현하고, 원형 마커를 <b>실제 행정구역 경계 폴리곤</b>으로 교체해 구 클릭부터 상세 모달까지 이어지는 탐색 흐름을 설계했습니다.',
+      'AI가 생성한 코스를 사용자가 직접 다듬도록 순서 변경·제외·드래그 정렬·예산 게이지를 붙인 <b>편집 흐름</b>을 구현했습니다.',
+      '카카오 SDK 스크립트 로드 전에 지도를 초기화해 발생하던 레이스 컨디션을, 스크립트 태그를 재확인한 뒤 load 이벤트를 붙이는 폴백으로 해결했습니다.',
+      '모바일에서 카드 드래그가 목록 스크롤을 막던 문제를, 화면 크기를 감지해 데스크톱·모바일 드래그 방식을 분리하는 방식으로 해결했습니다.',
+      '스팟 검색을 지역명·카테고리·무료 여부·초성까지 인식하는 통합 검색으로 확장하고, 결과에 맞춰 지도 범위가 자동 재조정되도록 했습니다.'
+    ],
+    stack: ['Next.js', 'TypeScript', 'TailwindCSS v4', 'TanStack Query', 'Zustand', 'Kakao Maps SDK', 'Motion', 'Vitest'],
+    img: 'images/nolleo-onna.jpg',
+    live: 'https://www.nolleo-onna.site/', repo: 'https://github.com/nolleo-onna/nolleo-onna-frontend',
+    pos: [-17, -16]
+  },
+  {
+    id: 'trade', no: '02', color: '#e8734a', featured: true,
     name: 'Trade-Cmarket',
     full: 'Trade-Cmarket — 한국·인도네시아 B2B 무역 견적·계약 플랫폼',
     period: '2026.07 — 2026.08', role: '인턴 · 1인 개발',
@@ -23,28 +43,7 @@ const PROJECTS = [
     ],
     stack: ['Next.js 15', 'TypeScript', 'Supabase', 'TanStack Query', 'Zustand', 'next-intl', 'Gemini API', 'Vercel'],
     img: 'images/trade-cmarket.png',
-    live: 'https://mitrapay.vercel.app/', repo: 'https://github.com/cmarketplace/Trade-Cmarket',
-    pos: [-17, -16]
-  },
-  {
-    id: 'nolleo', no: '02', color: '#3fa7d6', featured: true,
-    name: '놀러온나',
-    full: '놀러온나 — 부산 특화 예산 맞춤 여행 플랫폼',
-    period: '2026.05 — 2026.10', role: '5인 팀 · 프론트 전담',
-    one: '한국관광공사 TourAPI 기반 여행 플랫폼에서 <b>서비스 전 페이지의 프론트엔드를 혼자</b> 설계·구현했습니다. (프론트 1, 백엔드 3, PM 1)',
-    short: '부산 여행 플랫폼의 전 페이지 프론트엔드를 1인 담당. 조용히 누락되던 데이터 632개를 찾아냈습니다.',
-    pts: [
-      '장소 매핑 상한이 3,000개로 하드코딩돼 <b>실데이터 3,632개 중 632개가 누락</b>되던 버그를 발견했습니다. 상한을 올리고 37회 순차 요청을 8개 단위 병렬로 바꿔 초기 로딩도 함께 개선했습니다.',
-      '부산 16개 구 혼잡도 지도를 Kakao Maps SDK로 구현하고, 원형 마커를 <b>실제 행정구역 경계 폴리곤</b>으로 교체해 구 클릭부터 상세 모달까지 이어지는 탐색 흐름을 설계했습니다.',
-      'AI가 생성한 코스를 사용자가 직접 다듬도록 순서 변경·제외·드래그 정렬·예산 게이지를 붙인 <b>편집 흐름</b>을 구현했습니다.',
-      '카카오 SDK 스크립트 로드 전에 지도를 초기화해 발생하던 레이스 컨디션을, 스크립트 태그를 재확인한 뒤 load 이벤트를 붙이는 폴백으로 해결했습니다.',
-      '모바일에서 카드 드래그가 목록 스크롤을 막던 문제를, 화면 크기를 감지해 데스크톱·모바일 드래그 방식을 분리하는 방식으로 해결했습니다.',
-      '스팟 검색을 지역명·카테고리·무료 여부·초성까지 인식하는 통합 검색으로 확장하고, 결과에 맞춰 지도 범위가 자동 재조정되도록 했습니다.'
-    ],
-    stack: ['Next.js', 'TypeScript', 'TailwindCSS v4', 'TanStack Query', 'Zustand', 'Kakao Maps SDK', 'Motion', 'Vitest'],
-    video: 'images/nolleo-onna.mp4',
-    poster: 'images/nolleo-onna.jpg',   // 영상이 재생되기 전까지 보여줄 정지 이미지
-    live: 'https://dev.nolleo-onna.site/', repo: 'https://github.com/nolleo-onna/nolleo-onna-frontend',
+    repo: 'https://github.com/cmarketplace/Trade-Cmarket',
     pos: [17, -38]
   },
   {
