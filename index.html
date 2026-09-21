@@ -242,19 +242,27 @@ body[data-view="drive"] #doc-root{display:none}
 .key{font-family:var(--mono);font-size:11px;min-width:24px;height:24px;display:grid;place-items:center;
   border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;background:#fff;padding:0 5px}
 
-#g-panel{position:fixed;top:0;right:0;bottom:0;width:min(440px,100%);z-index:50;
+#g-panel{position:fixed;top:0;right:0;bottom:0;width:min(var(--pw,440px),max(320px,70vw),100%);z-index:50;
   background:rgba(255,255,255,.96);backdrop-filter:blur(18px);border-left:1px solid var(--line);
-  box-shadow:-14px 0 44px rgba(29,42,51,.14);overflow-y:auto;
+  box-shadow:-14px 0 44px rgba(29,42,51,.14);display:flex;flex-direction:column;overflow:hidden;
   transform:translateX(102%);transition:transform .4s cubic-bezier(.4,0,.2,1)}
 #g-panel.open{transform:none}
-#g-panel .hd{position:sticky;top:0;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);
+#g-panel .hd{flex-shrink:0;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);
   border-bottom:1px solid var(--line);padding:16px 22px;display:flex;align-items:center;gap:12px;z-index:2}
 #g-panel .no{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--c,#e8734a)}
 #g-panel .x{margin-left:auto;width:32px;height:32px;border-radius:9px;border:1px solid var(--line);
   background:#fff;display:grid;place-items:center;font-size:16px;color:var(--muted);line-height:1}
 #g-panel .x:hover{background:#f3f5f7;color:var(--ink)}
-#g-panel .bd{padding:20px 22px 34px}
-#g-panel .shot{width:100%;aspect-ratio:16/10;object-fit:cover;object-position:top center;border-radius:11px;
+#g-panel .grip{position:absolute;top:0;bottom:0;left:0;width:12px;z-index:5;cursor:col-resize;touch-action:none}
+#g-panel .grip::after{content:'';position:absolute;top:50%;left:3px;width:4px;height:44px;margin-top:-22px;
+  border-radius:4px;background:rgba(29,42,51,.24);transition:background .15s,height .15s,margin-top .15s}
+#g-panel .grip:hover::after,#g-panel .grip:focus-visible::after,body.resizing #g-panel .grip::after{
+  background:var(--c,#e8734a);height:68px;margin-top:-34px}
+body.resizing{user-select:none;-webkit-user-select:none;cursor:col-resize}
+/* 좁은 화면은 손잡이 없이 원래 동작(최대 440px, 화면보다 크지 않게) */
+@media(max-width:640px){#g-panel .grip{display:none}#g-panel{width:min(440px,100%)}}
+#g-panel .bd{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:20px 22px 34px}
+#g-panel .shot{width:100%;max-height:320px;aspect-ratio:16/10;object-fit:cover;object-position:top center;border-radius:11px;
   border:1px solid var(--line);background:#eef2f5;display:block;margin-bottom:18px}
 #g-panel .meta{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:11px;font-family:var(--mono);font-size:11px}
 #g-panel .per{color:var(--muted)}
@@ -460,6 +468,8 @@ body.is-touch #g-found{bottom:150px;padding:10px 12px}
   </div>
 
   <aside id="g-panel" aria-live="polite">
+    <div class="grip" role="separator" aria-orientation="vertical" tabindex="0"
+         aria-label="패널 너비 조절 (좌우 방향키)"></div>
     <div class="hd"><span class="no"></span><button class="x" aria-label="닫기" type="button">×</button></div>
     <div class="bd"></div>
   </aside>

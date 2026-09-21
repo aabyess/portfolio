@@ -1011,6 +1011,83 @@ async function initDrive() {
   }
   panel.querySelector('.x').addEventListener('click', closePanel);
 
+  /* ── 패널 너비 조절 ──
+     왼쪽 가장자리를 드래그하거나, 손잡이에 초점을 두고 좌우 방향키로 조절한다.
+     글이 길어 답답하면 늘리고 게시판을 더 보고 싶으면 줄인다.
+     너비는 기억해 뒀다가 다음에 열 때도 그대로 쓴다. */
+  const PW_DEFAULT = 440, PW_MIN = 320, PW_CAP = 960, PW_KEY = 'portfolio.panelWidth';
+  const grip = panel.querySelector('.grip');
+  /* 지금 화면에서 허용되는 최대 너비. 화면의 70%를 넘으면 게시판이 가려져
+     주행 화면이 의미를 잃는다. CSS의 70vw 제한과 같은 값이어야 한다. */
+  const pwMax = () => Math.max(PW_MIN, Math.min(innerWidth * 0.7, PW_CAP));
+  const shown = () => Math.round(panel.getBoundingClientRect().width);   // 실제로 보이는 너비
+
+  /* pw는 "사용자가 정한 값"이다. 로드할 때 현재 창 크기로 깎지 않는다.
+     작은 창에서 열었다고 저장값이 덮어써지면 창을 키워도 복원되지 않기 때문이다.
+     화면에 보이는 너비의 제한은 CSS(min(..., 70vw))가 맡는다. */
+  let pw = PW_DEFAULT;
+  try {
+    const saved = parseInt(localStorage.getItem(PW_KEY), 10);
+    if (saved) pw = Math.max(PW_MIN, Math.min(PW_CAP, saved));
+  } catch { /* 저장소가 막힌 환경이면 기본값으로 */ }
+
+  function syncAria() {
+    grip.setAttribute('aria-valuemin', PW_MIN);
+    grip.setAttribute('aria-valuemax', Math.round(pwMax()));
+    grip.setAttribute('aria-valuenow', shown());
+  }
+  function applyPw() {
+    panel.style.setProperty('--pw', pw + 'px');
+    syncAria();
+  }
+  /* 사용자가 직접 조절할 때만 현재 화면 기준으로 범위를 제한하고 저장한다 */
+  function setPw(w, save) {
+    pw = Math.round(Math.max(PW_MIN, Math.min(pwMax(), w)));
+    applyPw();
+    if (save) { try { localStorage.setItem(PW_KEY, String(pw)); } catch { /* 무시 */ } }
+  }
+  applyPw();
+
+  let dragging = false, dragX0 = 0, dragW0 = 0;
+  grip.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    dragging = true;
+    dragX0 = e.clientX;
+    dragW0 = panel.getBoundingClientRect().width;
+    try { grip.setPointerCapture(e.pointerId); } catch { /* 캡처 실패해도 진행 */ }
+    document.body.classList.add('resizing');
+  });
+  grip.addEventListener('pointermove', e => {
+    /* 패널이 오른쪽에 붙어 있으므로 왼쪽으로 끌수록(clientX 감소) 넓어진다 */
+    if (dragging) setPw(dragW0 + (dragX0 - e.clientX));
+  });
+  const endDrag = () => {
+    if (!dragging) return;
+    dragging = false;
+    document.body.classList.remove('resizing');
+    setPw(pw, true);
+  };
+  grip.addEventListener('pointerup', endDrag);
+  grip.addEventListener('pointercancel', endDrag);
+
+  grip.addEventListener('keydown', e => {
+    const step = e.shiftKey ? 96 : 24;
+    const next =
+      e.key === 'ArrowLeft' ? shown() + step :
+      e.key === 'ArrowRight' ? shown() - step :
+      e.key === 'Home' ? PW_MIN :
+      e.key === 'End' ? pwMax() : null;
+    if (next === null) return;
+    e.preventDefault();
+    /* 방향키는 원래 주행 입력이라 전역 핸들러까지 올라가면 조절하는 동안 차가 조향된다 */
+    e.stopPropagation();
+    setPw(next, true);
+  });
+  grip.addEventListener('dblclick', () => setPw(PW_DEFAULT, true));   // 기본 너비로 되돌리기
+  /* 창이 바뀌어도 pw는 건드리지 않고 접근성 값만 갱신한다 */
+  addEventListener('resize', syncAria);
+
   function openPanel(p) {
     current = p.id;
     panel.style.setProperty('--c', p.color);
@@ -1026,6 +1103,7 @@ async function initDrive() {
     /* .shot 안의 미디어가 카드 크기를 채우도록 */
     const m = pnBd.querySelector('.shot > *');
     if (m) { m.className = 'shot'; pnBd.querySelector('.shot').replaceWith(m); }
+    pnBd.scrollTop = 0;   // 다른 프로젝트로 넘어왔을 때 이전 스크롤 위치가 남지 않게
     panel.classList.add('open');
     if (!visited.has(p.id)) { visited.add(p.id); renderFound(); }
   }
