@@ -98,10 +98,18 @@ Blender 연결 없이 바로 할 수 있는 작업입니다.
 `index.html`에 자리만 잡혀 있습니다: `<a href="#" data-todo="resume">`
 PDF 파일을 주시면 연결합니다.
 
-### 4. Playground 게임 정보 — **사용자 입력 대기**
+### 4. Playground 카드 다듬기 — 틀은 채움
 
-`portfolio.js`의 `PLAY` 배열 첫 항목이 임시 내용입니다.
-**제목 / 장르 / 사용 엔진 / 스크린샷**이 필요합니다.
+`portfolio.js`의 `PLAY` 배열에 취미 프로젝트 5개가 들어 있습니다. 로컬 저장소
+(`~/GitHub/GuilRandomDefense`, `Sin-Changseop`, `FlyKing`, `rent-mate`)의 README·CLAUDE.md·코드를
+읽고 **간단한 틀**로 적은 것이라, 문구는 아직 초안입니다.
+
+- 각 카드에 스크린샷·링크가 없습니다. 게임은 private 저장소라 링크를 걸 수 없고,
+  나머지도 공개 여부를 정해야 합니다
+- `GuilRandomDefense`의 `.claude/PROJECT_BRIEF.md`는 "2단계 직전"이라고 적혀 있지만 실제로는
+  스크립트 100여 개가 있는 훨씬 진행된 상태입니다. 브리프가 아니라 코드를 기준으로 썼습니다
+- `FlyKing`의 뇌 모델은 Shiu et al. 2024의 공개 모델입니다. 카드에 출처를 밝혔으니
+  "직접 만든 것"처럼 읽히게 고치지 마세요
 
 ### 5. main 머지 + GitHub Pages
 

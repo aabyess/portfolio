@@ -119,12 +119,16 @@ const SKILLS = [
 ];
 
 const PLAY = [
-  { icon: '🎮', on: true, status: '개발 중', name: '게임 프로젝트 (제목 미정)', stack: ['Godot', 'GDScript'],
-    desc: 'AI 에이전트를 기획·리서치·구현 역할로 나눠 협업하며 만들고 있는 게임. 혼자서 어디까지 완성할 수 있는지 실험 중입니다.' },
+  { icon: '🎮', on: true, status: '개발 중', name: 'GuilRandomDefense', stack: ['Unity 6', 'C#', 'URP', 'NavMesh', 'ScriptableObject'],
+    desc: '워크래프트3 유즈맵 "원랜디"에서 영감을 받은 3D 랜덤 디펜스. 유닛 뽑기·조합, 웨이브, 난이도, 사이드 보스, 저장까지 구현했고 유닛·스킬·웨이브는 ScriptableObject 데이터로 정의해 밸런싱합니다. AI 에이전트를 PM·리서치·구현 역할로 나눠 협업합니다.' },
+  { icon: '🎤', on: true, status: '개발 중', name: 'AI 커버곡', stack: ['Python', 'FastAPI', 'PyTorch', 'Demucs', 'RVC', 'Redis RQ', 'Next.js'],
+    desc: '원곡에서 Demucs로 보컬을 분리하고 RVC로 다른 목소리로 바꿔 커버곡을 만드는 서비스. 유튜브 URL 수집(도메인 제한으로 SSRF 방지), 작업 큐 기반 변환 파이프라인, 결과물의 AI 생성 표시까지 구성했습니다.' },
+  { icon: '🪰', on: true, status: '실험 중', name: 'FlyKing — 초파리 뇌 × Blender 몸', stack: ['Python', 'Blender', 'Brian2'],
+    desc: '초파리 전뇌 커넥톰 시뮬레이션(Shiu et al. 2024, 공개 모델)을 직접 만든 Blender 초파리 몸(뼈 61개, NeuroMechFly 규격)에 연결하려는 개인 프로젝트. 몸 생성·리깅 스크립트와 걷기·몸단장 클립까지 만들었고, 뇌 신호를 관절 움직임으로 옮기는 단계를 준비 중입니다.' },
+  { icon: '🤝', on: true, status: '개발 중', name: 'RentMate', stack: ['Next.js 16', 'React 19', 'TypeScript', 'Supabase', 'TanStack Query', 'TossPayments'],
+    desc: '시간제 동행·운동 메이트 매칭 플랫폼. 예약·결제·실시간 채팅·후기·신고·관리자를 도메인별로 나눠 설계하고, 성인인증·채팅 로그 보관 같은 법적 요구사항을 기능 설계에 반영했습니다.' },
   { icon: '🚗', on: true, status: '라이브', name: '이 포트폴리오', stack: ['Three.js', 'Vanilla JS'],
-    desc: '빌드 도구 없이 HTML 하나로 만든 사이트. 3D 월드와 문서 페이지가 같은 데이터에서 그려집니다.' },
-  { icon: '🧩', on: false, status: '준비 중', name: '다음에 만들 것', stack: ['TBD'],
-    desc: '여기에 들어갈 내용을 알려주시면 채워 넣겠습니다.' }
+    desc: '빌드 도구 없이 HTML·JS만으로 만든 사이트. 3D 월드와 문서 페이지가 같은 데이터에서 그려집니다.' }
 ];
 
 const media = p => p.video
