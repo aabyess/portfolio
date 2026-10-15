@@ -540,33 +540,63 @@ async function initDrive() {
     scene.add(gltf.scene);
   });
 
-  /* ── 풀 — 인스턴스 하나로 수만 장, 셰이더로 바람에 눕는다 ── */
+  /* ── 풀 — 휘어진 풀잎 3장짜리 포기를 인스턴스로 깐다 ──
+     뿌리는 어둡고 끝은 밝게, 끝으로 갈수록 바람에 더 휜다. 일부는 키 큰 풀로 섞는다. */
   {
-    const blade = new THREE.BufferGeometry();
-    const w = 0.06, hgt = 0.5;
-    blade.setAttribute('position', new THREE.Float32BufferAttribute([
-      -w, 0, 0,  w, 0, 0,  0, hgt, 0,
-      0, 0, -w,  0, 0, w,  0, hgt, 0], 3));
-    blade.computeVertexNormals();
-    const gm = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .85, side: THREE.DoubleSide });
-    addWind(gm, `vec4 gw = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
-      float gs = sin(uTime*1.8 + gw.x*0.35 + gw.z*0.25)*0.6 + sin(uTime*3.1 + gw.x*0.9 - gw.z*0.4)*0.25 + 0.25;
-      transformed.x += gs * position.y * 0.55; transformed.z += gs * position.y * 0.2;`);
-    const cols = [0xd99a4e, 0xc77a3a, 0xe8b868, 0xb0683a].map(c => new THREE.Color(c));
+    const H = 0.55, W = 0.05, SEG = 3;
+    const pos = [], idx = [];
+    for (let b = 0; b < 3; b++) {
+      const a = b * Math.PI * 2 / 3 + 0.3;
+      const dx = Math.cos(a), dz = Math.sin(a);            // 풀잎이 눕는 방향
+      const px = -dz, pz = dx;                              // 풀잎 폭 방향
+      const base = pos.length / 3;
+      for (let s = 0; s <= SEG; s++) {
+        const t = s / SEG, y = t * H * (0.85 + b * 0.12);
+        const w = W * Math.pow(1 - t, 0.7) * (s === SEG ? 0 : 1);
+        const bend = t * t * 0.16;
+        const cx = dx * (0.02 + bend), cz = dz * (0.02 + bend);
+        pos.push(cx - px * w, y, cz - pz * w, cx + px * w, y, cz + pz * w);
+      }
+      for (let s = 0; s < SEG; s++) {
+        const i0 = base + s * 2;
+        idx.push(i0, i0 + 1, i0 + 2, i0 + 1, i0 + 3, i0 + 2);
+      }
+    }
+    const tuft = new THREE.BufferGeometry();
+    tuft.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    tuft.setIndex(idx);
+    tuft.computeVertexNormals();
+
+    const gm = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .82, side: THREE.DoubleSide });
+    gm.onBeforeCompile = sh => {
+      sh.uniforms.uTime = timeU;
+      sh.vertexShader = 'uniform float uTime;\nvarying float vH;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+        vH = clamp(position.y / ${H.toFixed(2)}, 0.0, 1.0);
+        vec4 gw = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+        float gs = sin(uTime*1.8 + gw.x*0.35 + gw.z*0.25)*0.6 + sin(uTime*3.1 + gw.x*0.9 - gw.z*0.4)*0.25 + 0.3;
+        float bendW = vH * vH;
+        transformed.x += gs * bendW * 0.32; transformed.z += gs * bendW * 0.12;`);
+      sh.fragmentShader = 'varying float vH;\n' + sh.fragmentShader.replace('#include <color_fragment>',
+        '#include <color_fragment>\n diffuseColor.rgb *= mix(0.42, 1.18, vH);');
+    };
+    const cols = [0xdca052, 0xc98340, 0xedc070, 0xb8703c, 0xd28a3a].map(c => new THREE.Color(c));
+    const tall = new THREE.Color(0xa86a34);
     const spots = [];
     const n = GRID.n;
     for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
       if (GRID.mask[j * n + i] < 0.6) continue;
-      for (let k = 0; k < 2; k++) spots.push([-GRID.half + (i + Math.random() - .5) * GRID.step, GRID.half - (j + Math.random() - .5) * GRID.step]);
+      const cnt = Math.random() < 0.5 ? 2 : 3;
+      for (let k = 0; k < cnt; k++) spots.push([-GRID.half + (i + Math.random() - .5) * GRID.step, GRID.half - (j + Math.random() - .5) * GRID.step]);
     }
-    const grass = new THREE.InstancedMesh(blade, gm, spots.length);
+    const grass = new THREE.InstancedMesh(tuft, gm, spots.length);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
     spots.forEach(([x, z], i) => {
-      e.set((Math.random() - .5) * 0.5, Math.random() * Math.PI, (Math.random() - .5) * 0.5);
-      const k = 0.55 + Math.random() * 0.6;
-      m4.compose(ps.set(x, heightAt(x, z), z), q.setFromEuler(e), sc.set(k, k, k));
+      e.set((Math.random() - .5) * 0.25, Math.random() * Math.PI * 2, (Math.random() - .5) * 0.25);
+      const isTall = Math.random() < 0.08;
+      const k = 0.7 + Math.random() * 0.6, ky = isTall ? k * (1.7 + Math.random() * 0.6) : k;
+      m4.compose(ps.set(x, heightAt(x, z), z), q.setFromEuler(e), sc.set(k, ky, k));
       grass.setMatrixAt(i, m4);
-      grass.setColorAt(i, cols[i % 4]);
+      grass.setColorAt(i, isTall ? tall : cols[(Math.random() * cols.length) | 0]);
     });
     grass.receiveShadow = true;
     scene.add(grass);
