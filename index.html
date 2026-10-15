@@ -124,8 +124,10 @@ body[data-view="drive"] #doc-root{display:none}
 #doc-root .pj-one b{color:var(--text);font-weight:600}
 #doc-root .pj-grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:24px;padding:18px 22px 22px}
 /* 지연 로딩 중인 이미지는 높이가 0으로 접혀서, 로드되는 순간 아래 내용이 밀린다. 최소 높이로 자리를 잡아둔다 */
-#doc-root .pj-shot{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--sunk);align-self:start;min-height:150px}
-#doc-root .pj-shot>*{width:100%;height:auto;max-height:420px;object-fit:contain;display:block}
+#doc-root .pj-shot{align-self:start;min-width:0}
+#doc-root .pj-grid{grid-template-columns:minmax(0,1fr) minmax(0,400px)}
+#doc-root .sec{margin-bottom:14px}
+#doc-root .sec-t{font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--acc);margin-bottom:7px}
 #doc-root .pts{list-style:none;display:flex;flex-direction:column;gap:11px;margin-bottom:15px}
 #doc-root .pts li{position:relative;padding-left:20px;font-size:14px;color:var(--muted);line-height:1.76}
 #doc-root .pts li::before{content:'';position:absolute;left:1px;top:.68em;width:8px;height:2px;
@@ -298,6 +300,30 @@ body.is-touch #g-found{bottom:150px;padding:10px 12px}
 .tkey.act{font-family:var(--mono);font-weight:700;font-size:17px;color:var(--acc)}
 #g-hint span:not(:last-child){margin-right:2px}
 
+
+/* ── 이미지 여러 장 (게임 창·문서 뷰 공용) ── */
+.gal{display:flex;flex-direction:column;gap:9px;min-width:0;margin-bottom:16px}
+.gal-main{position:relative;border-radius:12px;overflow:hidden;background:#14121c;aspect-ratio:16/10;border:1px solid var(--line)}
+.gal-main>img,.gal-main>video{width:100%;height:100%;object-fit:contain;display:block}
+.gal-nav{position:absolute;top:50%;transform:translateY(-50%);width:36px;height:36px;border-radius:50%;border:0;
+  background:rgba(255,255,255,.9);color:#1d2a33;font-size:22px;line-height:1;cursor:pointer;box-shadow:0 3px 12px rgba(0,0,0,.25);
+  display:grid;place-items:center;transition:transform .15s}
+.gal-nav:hover{transform:translateY(-50%) scale(1.08)}
+.gal-nav.prev{left:10px}.gal-nav.next{right:10px}
+.gal-count{position:absolute;right:10px;bottom:10px;font:600 11px/1 var(--mono,monospace);color:#fff;
+  background:rgba(0,0,0,.55);padding:4px 8px;border-radius:99px}
+.gal-cap{font-size:12.5px;color:var(--muted);margin:0;line-height:1.5}
+.gal-thumbs{display:flex;gap:7px;overflow-x:auto;padding-bottom:2px}
+.gal-th{position:relative;flex:0 0 auto;width:78px;aspect-ratio:16/10;border-radius:7px;overflow:hidden;padding:0;cursor:pointer;
+  border:2px solid transparent;opacity:.55;background:#14121c;transition:opacity .15s}
+.gal-th:hover{opacity:.85}
+.gal-th.on{border-color:var(--c,#e8734a);opacity:1}
+.gal-th img{width:100%;height:100%;object-fit:cover;display:block}
+.gal-th .play{position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:13px;text-shadow:0 1px 4px #000}
+#g-panel .sec{margin-bottom:6px}
+#g-panel .sec-t{font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--c,#e8734a);margin:4px 0 9px}
+#g-panel .sec ul{margin-bottom:14px}
+
 /* ── 가까이 가면 뜨는 "Space" 안내 + 가운데 큰 프로젝트 창 ── */
 #g-prompt{position:fixed;left:0;top:0;z-index:42;transform:translate(-50%,-100%);
   display:flex;align-items:center;gap:9px;padding:9px 15px 9px 9px;border-radius:999px;
@@ -325,12 +351,11 @@ body.is-touch #g-prompt .space{display:none}
 #drive-root #g-panel .hd{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)}
 #drive-root #g-panel .hd .esc{font-family:var(--mono);font-size:11px;color:var(--muted)}
 #drive-root #g-panel .bd{padding:22px 26px 30px}
-#drive-root #g-panel .shot{max-height:52vh}
 #drive-root #g-panel .n{font-size:24px}
 @media(min-width:900px){
   #drive-root #g-panel .bd{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);column-gap:28px;align-content:start}
-  #drive-root #g-panel .bd>.shot{grid-column:1;grid-row:1/span 7;align-self:start;max-height:70vh;width:100%}
-  #drive-root #g-panel .bd>:not(.shot){grid-column:2}
+  #drive-root #g-panel .bd>.gal{grid-column:1;grid-row:1/span 9;align-self:start;position:sticky;top:0}
+  #drive-root #g-panel .bd>:not(.gal){grid-column:2}
 }
 
 @media(max-width:560px){

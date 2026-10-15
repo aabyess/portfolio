@@ -5,23 +5,37 @@
    문서 카드도, 3D 게시판과 상세 패널도 전부 여기서 그려진다.
    ════════════════════════════════════════════════════════════ */
 
+/* 프로젝트 데이터
+   one   : 어떤 프로젝트인지 (2~3줄)
+   mine  : 내가 맡은 일
+   pts   : 해결한 문제 (핵심만)
+   gallery: 여러 장. 첫 장이 대표 이미지이고 게임 속 간판에도 쓰인다. */
 const PROJECTS = [
   {
     id: 'nolleo', no: '01', color: '#3fa7d6',
     name: '놀러온나',
     full: '놀러온나 — 부산 특화 예산 맞춤 여행 플랫폼',
     period: '2026.05 — 2026.10', role: '5인 팀 · 프론트 전담',
-    one: '한국관광공사 TourAPI 기반 여행 플랫폼에서 <b>서비스 전 페이지의 프론트엔드를 혼자</b> 설계·구현했습니다. (프론트 1, 백엔드 3, PM 1)',
+    one: '부산 여행 코스를 예산에 맞춰 짜주는 여행 플랫폼입니다. 한국관광공사 TourAPI의 부산 스팟 3,600여 곳을 지도로 둘러보고, AI 여행 메이트 <b>온나</b>에게 물어 코스를 만들고, 동네 커뮤니티 <b>한끗</b>에서 꿀팁과 후기를 나눕니다. (프론트 1, 백엔드 3, PM 1)',
+    mine: [
+      '<b>서비스 전 페이지의 프론트엔드를 혼자</b> 설계·구현했습니다. 홈, 스팟 지도, 코스, 한끗 커뮤니티까지 화면 구조와 상태 관리를 맡았습니다.',
+      '<b>스팟 지도</b>: Kakao Maps로 부산 16개 구 혼잡도 지도를 만들고, 원형 마커를 실제 행정구역 경계 폴리곤으로 바꿔 구 선택부터 상세 모달까지 이어지게 했습니다.',
+      '<b>코스 편집</b>: AI가 만든 코스를 순서 변경·제외·드래그 정렬·예산 게이지로 직접 다듬는 흐름을 만들었습니다.',
+      '<b>통합 검색</b>: 지역명·카테고리·무료 여부·초성까지 알아듣고, 결과에 맞춰 지도 범위가 자동으로 맞춰지게 했습니다.'
+    ],
     pts: [
-      '장소 매핑 상한이 3,000개로 하드코딩돼 <b>실데이터 3,632개 중 632개가 누락</b>되던 버그를 발견했습니다. 상한을 올리고 37회 순차 요청을 8개 단위 병렬로 바꿔 초기 로딩도 함께 개선했습니다.',
-      '부산 16개 구 혼잡도 지도를 Kakao Maps SDK로 구현하고, 원형 마커를 <b>실제 행정구역 경계 폴리곤</b>으로 교체해 구 클릭부터 상세 모달까지 이어지는 탐색 흐름을 설계했습니다.',
-      'AI가 생성한 코스를 사용자가 직접 다듬도록 순서 변경·제외·드래그 정렬·예산 게이지를 붙인 <b>편집 흐름</b>을 구현했습니다.',
-      '카카오 SDK 스크립트 로드 전에 지도를 초기화해 발생하던 레이스 컨디션을, 스크립트 태그를 재확인한 뒤 load 이벤트를 붙이는 폴백으로 해결했습니다.',
-      '모바일에서 카드 드래그가 목록 스크롤을 막던 문제를, 화면 크기를 감지해 데스크톱·모바일 드래그 방식을 분리하는 방식으로 해결했습니다.',
-      '스팟 검색을 지역명·카테고리·무료 여부·초성까지 인식하는 통합 검색으로 확장하고, 결과에 맞춰 지도 범위가 자동 재조정되도록 했습니다.'
+      '장소 매핑 상한이 3,000개로 하드코딩돼 <b>실데이터 3,632곳 중 632곳이 누락</b>되던 버그를 찾았습니다. 상한을 올리고 37회 순차 요청을 8개씩 병렬로 바꿔 초기 로딩도 함께 줄였습니다.',
+      '카카오 SDK 스크립트가 로드되기 전에 지도를 초기화하던 <b>레이스 컨디션</b>을, 스크립트 태그를 다시 확인한 뒤 load 이벤트를 붙이는 폴백으로 해결했습니다.',
+      '모바일에서 카드 드래그가 목록 스크롤을 막던 문제를, 화면 크기에 따라 드래그 방식을 나눠 해결했습니다.'
     ],
     stack: ['Next.js', 'TypeScript', 'TailwindCSS v4', 'TanStack Query', 'Zustand', 'Kakao Maps SDK', 'Motion', 'Vitest'],
     img: 'images/nolleo-onna.png',
+    gallery: [
+      { src: 'images/nolleo-onna.png', cap: '홈 — AI 여행 메이트 온나에게 코스 물어보기' },
+      { src: 'images/nolleo-spot.jpg', cap: '스팟 — 부산 16개 구 혼잡도 지도와 3,632곳 스팟 목록' },
+      { src: 'images/nolleo-course.jpg', cap: '코스 — 내가 만든 코스 모아보기' },
+      { src: 'images/nolleo-hankkut.jpg', cap: '한끗 — 동네별 꿀팁·후기 커뮤니티' }
+    ],
     live: 'https://www.nolleo-onna.site/', repo: 'https://github.com/nolleo-onna/nolleo-onna-frontend',
     pos: [-17, -16]
   },
@@ -30,17 +44,26 @@ const PROJECTS = [
     name: 'Trade-Cmarket',
     full: 'Trade-Cmarket — 한국·인도네시아 B2B 무역 견적·계약 플랫폼',
     period: '2026.07 — 2026.08', role: '인턴 · 1인 개발',
-    one: '발주 공고부터 견적·낙찰·계약·실시간 채팅까지 거래 플로우 전체를 바이어·셀러 양면으로 <b>혼자 기획·설계·구현</b>했습니다.',
+    one: '인도네시아 바이어가 견적을 요청하면 한국 공급기업이 견적을 보내고, 낙찰·계약·입금 확인·채팅까지 한곳에서 진행하는 B2B 무역 플랫폼(MitraPay)입니다. 한국어·영어·인도네시아어 3개 국어를 지원합니다.',
+    mine: [
+      '인턴 기간 동안 <b>기획·설계·구현을 혼자</b> 맡아, 바이어와 셀러 양쪽 화면과 API를 모두 만들었습니다.',
+      '<b>거래 흐름 전체</b>: 견적 요청 → 견적 제출 → 낙찰 → 계약 → 수령 확인·영수증까지 상태가 이어지는 구조를 설계했습니다.',
+      '<b>AI 기능</b>: Gemini 구조화 출력으로 견적 요청·견적 초안을 만들고, 발주서 PDF·이미지에서 정보를 뽑아냅니다. 모델이 과부하면 다른 모델로 넘기는 폴백 체인을 붙였습니다.',
+      '<b>권한과 번역</b>: Supabase RLS와 서비스롤 API로 이중 권한 구조를 짜고, 번역은 서버에서만 만들어 원문·감지 언어와 함께 저장했습니다.'
+    ],
     pts: [
-      'Supabase RLS와 서비스롤 API로 <b>이중 권한 구조</b>를 설계해, RLS를 우회하는 경로에도 소유권·상태 전이 검증을 직접 붙였습니다. 완료된 계약 되돌리기, 마감 공고 견적 제출 같은 조작을 차단했습니다.',
-      '3개 국어 서비스에서 번역본을 원문·감지언어와 함께 저장하고 생성은 서버로만 강제해, <b>클라이언트발 번역 위조</b>를 막았습니다.',
       '간헐적 강제 로그아웃의 원인이 <b>미들웨어의 리다이렉트 쿠키 누락</b>임을 프론트와 백엔드를 함께 추적해 찾아내고, 헬퍼로 재발을 막았습니다.',
-      '채팅 읽음 처리가 행마다 이벤트를 발생시켜 전체 이력을 다시 불러오던 문제를, 수신 페이로드를 <b>캐시에 직접 반영</b>하도록 바꿔 해결했습니다.',
-      'Gemini 구조화 출력으로 공고·견적 초안을 생성하고 발주서 PDF·이미지를 멀티모달로 추출했습니다. 모델 과부하 시 폴백 체인으로 무중단 처리했습니다.',
-      '전 API 라우트 보안 감사를 수행해 저장형 XSS 살균, 무인증 번역 프록시 차단, 업로드 MIME·용량 검증을 일괄 적용했습니다.'
+      '채팅 읽음 처리가 행마다 이벤트를 일으켜 전체 이력을 다시 불러오던 문제를, 받은 데이터를 <b>캐시에 바로 반영</b>하도록 바꿔 해결했습니다.',
+      '전체 API 보안 점검으로 저장형 XSS 살균, 무인증 번역 프록시 차단, 업로드 형식·용량 검증을 일괄 적용했습니다.'
     ],
     stack: ['Next.js 15', 'TypeScript', 'Supabase', 'TanStack Query', 'Zustand', 'next-intl', 'Gemini API', 'Vercel'],
     img: 'images/trade-cmarket.png',
+    gallery: [
+      { src: 'images/trade-cmarket.png', cap: 'MitraPay 대시보드' },
+      { src: 'images/trade-dashboard.jpg', cap: '바이어 대시보드 — 거래 요약과 할 일' },
+      { src: 'images/trade-quote.jpg', cap: '견적요청 등록 — 템플릿과 AI 초안 작성' },
+      { src: 'images/trade-contract.jpg', cap: '계약 관리 — 수령 확인·영수증 업로드' }
+    ],
     live: 'https://cmarket-hazel.vercel.app/', repo: 'https://github.com/aabyess/cmarket',
     pos: [17, -38]
   },
@@ -48,16 +71,24 @@ const PROJECTS = [
     id: 'reboot', no: '03', color: '#7d6ad6',
     name: 'RE:BOOT',
     full: 'RE:BOOT — 번아웃·자기관리 모임 커뮤니티',
-    period: '2026.02 — 2026.04', role: '부트캠프 팀 프로젝트',
-    one: '관심사 기반으로 모임을 탐색·참여·개설하는 커뮤니티 플랫폼에서 자유게시판 영역 전체를 담당했습니다.',
+    period: '2026.02 — 2026.04', role: '부트캠프 팀 프로젝트 · 자유게시판 담당',
+    one: '지친 일상에 에너지를 채우자는 콘셉트로, 관심사가 맞는 사람끼리 모임을 찾고·찜하고·만들고 후기를 남기는 커뮤니티 플랫폼입니다. 자유게시판 <b>커넥트</b>에서 자유롭게 이야기를 나눕니다.',
+    mine: [
+      '<b>자유게시판(커넥트) 영역 전체</b>를 맡았습니다. 글 목록·검색·정렬, 글 작성·상세, 좋아요까지 구현했습니다.',
+      '팀이 파일마다 문자열로 쓰던 React Query의 queryKey를 <b>객체로 모아 관리</b>하도록 바꿔 캐시 불일치와 중복 호출을 없앴습니다.',
+      '섹션마다 <b>ErrorBoundary</b>를 따로 둬, 일부 API가 실패해도 페이지 전체가 멈추지 않게 했습니다.'
+    ],
     pts: [
-      '좋아요를 누르면 <b>조회수가 3씩 오르던 버그</b>를 발견해, API가 3중 호출되던 원인을 찾아 중복 요청을 제거했습니다.',
-      'queryKey를 파일마다 문자열로 관리하던 방식을 <b>객체로 중앙화</b>해 캐시 불일치와 중복 호출을 없앴습니다.',
-      '좋아요 반응이 서버 응답 후에야 반영되어 생기던 지연을 <b>Optimistic Update</b>로 해결했습니다.',
-      '섹션마다 빈 상태·에러가 달라 섹션별 ErrorBoundary를 적용해, 일부 API가 실패해도 페이지 전체가 멈추지 않게 했습니다.'
+      '좋아요를 누르면 <b>조회수가 3씩 오르던 버그</b>를 찾아, API가 세 번 호출되던 원인을 없앴습니다.',
+      '좋아요가 서버 응답 뒤에야 반영되던 지연을 <b>Optimistic Update</b>로 바로 보이게 했습니다.'
     ],
     stack: ['Next.js', 'TypeScript', 'React Query', 'Zustand', 'Storybook', 'Jest'],
     img: 'images/reboot.png',
+    gallery: [
+      { src: 'images/reboot.png', cap: 'RE:BOOT 메인' },
+      { src: 'images/reboot-connect.jpg', cap: '커넥트(자유게시판) — 직접 맡은 영역' },
+      { src: 'images/reboot-meetup.jpg', cap: '모임 찾기 — 카테고리·지역·날짜 필터' }
+    ],
     live: 'https://reboot-codeit.vercel.app/', repo: 'https://github.com/aabyess/Reboot',
     pos: [-17, -60]
   },
@@ -66,14 +97,21 @@ const PROJECTS = [
     name: 'Myeonjeop-Mate',
     full: 'Myeonjeop-Mate — AI 기반 면접 준비 플랫폼',
     period: '2025.11 — 2025.12', role: '개인 프로젝트 · 1인 개발',
-    one: '이력서를 분석해 맞춤 면접 질문과 답변 피드백을 제공하는 서비스를 기획부터 API 연동까지 혼자 만들었습니다.',
+    one: '이력서를 올리면 AI가 내용을 분석해 나에게 맞는 면접 질문을 만들고, 답변을 쓰면 구조·내용·키워드별로 피드백을 주는 면접 준비 서비스입니다.',
+    mine: [
+      '기획부터 화면, OpenAI API 연동까지 <b>혼자</b> 만들었습니다.',
+      'PDF·Word 이력서에서 텍스트를 뽑아 프롬프트로 구조화하고, <b>맞춤 면접 질문을 자동 생성</b>했습니다.',
+      'AI 피드백을 JSON으로 받아 구조·내용·키워드·개선 예시 항목별로 바로 보여줍니다.'
+    ],
     pts: [
-      'PDF·Word 이력서에서 텍스트를 추출해 프롬프트로 구조화하고, <b>맞춤 면접 질문을 자동 생성</b>했습니다.',
-      'AI 피드백 응답을 JSON으로 파싱해 구조·내용·키워드·개선 예시 항목별로 즉시 렌더링했습니다.',
-      'API 호출 비용을 줄이려고 <b>사용자당 일일 요청 제한</b> 로직을 직접 구현했습니다.'
+      'API 호출 비용이 늘어나는 걸 막으려고 <b>사용자당 하루 요청 제한</b>을 직접 구현했습니다.'
     ],
     stack: ['React', 'OpenAI API', 'PDF.js', 'Mammoth'],
     img: 'images/interview.png',
+    gallery: [
+      { video: 'images/interview.mp4', poster: 'images/interview.png', cap: '이력서 업로드부터 질문 생성·피드백까지 시연' },
+      { src: 'images/interview.png', cap: '맞춤 면접 질문 화면' }
+    ],
     repo: 'https://github.com/aabyess/myeonjeop-mate',
     pos: [17, -82]
   },
@@ -82,14 +120,19 @@ const PROJECTS = [
     name: 'IGNIS',
     full: 'IGNIS — 사회공헌 플랫폼',
     period: '2025.03 — 2025.10', role: '팀 프로젝트',
-    one: '기부·펀딩·봉사 활동을 연결하는 온라인 사회공헌 플랫폼입니다.',
-    pts: [
-      'PortOne 결제를 연동하면서, 결제 완료 후 <b>서버 금액과 대조해 승인</b>하는 흐름을 직접 설계해 위변조를 막았습니다.',
-      '홈에서 기부·펀딩·봉사를 통합 조회하고 각 도메인에서 참여·등록까지 이어지는 사용자 플로우를 구현했습니다.',
-      '등록 폼에서 필수 항목 누락 시 유효성 메시지를 표시해 사용자 실수를 줄였습니다.'
+    one: '기부·펀딩·봉사 활동을 한곳에서 찾아보고 참여하거나 직접 등록할 수 있는 온라인 사회공헌 플랫폼입니다.',
+    mine: [
+      '<b>결제</b>: PortOne 결제를 연동하고, 결제가 끝나면 서버 금액과 대조한 뒤 승인하는 흐름을 설계해 금액 위변조를 막았습니다.',
+      '<b>사용자 흐름</b>: 홈에서 기부·펀딩·봉사를 한 번에 보고, 각 영역에서 참여·등록까지 이어지는 화면을 만들었습니다.',
+      '등록 폼에서 필수 항목이 빠지면 바로 안내해 입력 실수를 줄였습니다.'
     ],
+    pts: [],
     stack: ['React', 'Vite', 'React Router', 'Ant Design'],
     img: 'images/ignis.png',
+    gallery: [
+      { src: 'images/ignis.png', cap: 'IGNIS 메인' },
+      { src: 'images/ignis_home.png', cap: '홈 — 기부·펀딩·봉사 통합 조회' }
+    ],
     repo: 'https://github.com/aabyess/Ignis.git',
     pos: [-17, -104]
   },
@@ -98,11 +141,15 @@ const PROJECTS = [
     name: 'LOL Face Matcher',
     full: 'LOL Face Matcher — 얼굴 인식 챔피언 매칭',
     period: '2025.03 — 2025.06', role: '개인 프로젝트',
-    one: '얼굴 사진을 인식해 닮은 League of Legends 챔피언을 찾아주는 머신러닝 웹 서비스입니다.',
+    one: '얼굴 사진을 올리면 닮은 League of Legends 챔피언을 찾아주는 머신러닝 웹 서비스입니다.',
+    mine: [
+      '모델 선택부터 백엔드·프론트까지 <b>혼자</b> 만들었습니다.',
+      '성별을 고려한 코사인 유사도로 닮은꼴을 고르는 매칭 로직을 만들었습니다.',
+      'FastAPI로 업로드·추천 REST API와 DB 구조를 설계했습니다.'
+    ],
     pts: [
-      'dlib 기반 모델에서 <b>DeepFace(ArcFace)로 전환</b>해 챔피언 이미지 170장 기준 임베딩 성공률 100%를 달성했습니다.',
-      '성별을 고려한 코사인 유사도 알고리즘으로 닮은꼴 매칭을 구현했습니다.',
-      'FastAPI와 React 사이 CORS 문제를 파악해 해결하고, 업로드·추천 REST API와 DB 구조를 설계했습니다.'
+      'dlib 기반 모델을 <b>DeepFace(ArcFace)로 바꿔</b> 챔피언 이미지 170장 모두 임베딩에 성공했습니다.',
+      'FastAPI와 React 사이 CORS 문제를 원인부터 짚어 해결했습니다.'
     ],
     stack: ['React', 'FastAPI', 'Python', 'DeepFace', 'MySQL'],
     img: 'images/lol.png',
@@ -131,13 +178,51 @@ const PLAY = [
     desc: '빌드 도구 없이 HTML·JS만으로 만든 사이트. 3D 월드와 문서 페이지가 같은 데이터에서 그려집니다.' }
 ];
 
-const media = p => p.video
-  ? `<video src="${p.video}"${p.poster ? ` poster="${p.poster}"` : ''} autoplay loop muted playsinline preload="metadata"></video>`
-  : `<img src="${p.img}" alt="${p.name} 화면" loading="lazy" decoding="async" />`;
-
 const links = p => `
   ${p.live ? `<a class="live" href="${p.live}" target="_blank" rel="noopener">라이브 ↗</a>` : ''}
   ${p.repo ? `<a href="${p.repo}" target="_blank" rel="noopener">GitHub</a>` : ''}`;
+
+/* ── 이미지 여러 장 ──
+   큰 화면 + 좌우 버튼 + 장수 + 캡션 + 썸네일 줄. 게임 창과 문서 뷰가 같이 쓴다. */
+const galleryOf = p => p.gallery || [p.video ? { video: p.video, poster: p.poster } : { src: p.img }];
+const slideHTML = (g, alt) => g.video
+  ? `<video src="${g.video}"${g.poster ? ` poster="${g.poster}"` : ''} autoplay loop muted playsinline preload="metadata"></video>`
+  : `<img src="${g.src}" alt="${alt}" loading="lazy" decoding="async" />`;
+function galleryHTML(p) {
+  const gs = galleryOf(p), many = gs.length > 1;
+  return `<div class="gal" data-gal="${p.id}" style="--c:${p.color}">
+    <div class="gal-main">${slideHTML(gs[0], gs[0].cap || p.name + ' 화면')}
+      ${many ? `<button type="button" class="gal-nav prev" aria-label="이전 이미지">‹</button>
+      <button type="button" class="gal-nav next" aria-label="다음 이미지">›</button>
+      <span class="gal-count">1 / ${gs.length}</span>` : ''}
+    </div>
+    ${gs[0].cap ? `<p class="gal-cap">${gs[0].cap}</p>` : ''}
+    ${many ? `<div class="gal-thumbs">${gs.map((g, i) => `<button type="button" class="gal-th${i ? '' : ' on'}" data-i="${i}" aria-label="${g.cap || (i + 1) + '번째 이미지'}">
+        <img src="${g.poster || g.src}" alt="" loading="lazy" />${g.video ? '<span class="play">▶</span>' : ''}</button>`).join('')}</div>` : ''}
+  </div>`;
+}
+/* 갤러리를 살린다. 돌려주는 go(±1)로 키보드에서도 넘길 수 있다. */
+function bindGallery(root, p) {
+  const el = root.querySelector(`[data-gal="${p.id}"]`);
+  if (!el) return () => {};
+  const gs = galleryOf(p);
+  let i = 0;
+  const show = n => {
+    i = (n + gs.length) % gs.length;
+    el.querySelector('.gal-main > img, .gal-main > video').outerHTML = slideHTML(gs[i], gs[i].cap || p.name + ' 화면');
+    const cap = el.querySelector('.gal-cap'); if (cap) cap.textContent = gs[i].cap || '';
+    const cnt = el.querySelector('.gal-count'); if (cnt) cnt.textContent = `${i + 1} / ${gs.length}`;
+    el.querySelectorAll('.gal-th').forEach((b, k) => b.classList.toggle('on', k === i));
+    el.querySelector('.gal-th.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  };
+  el.querySelector('.prev')?.addEventListener('click', () => show(i - 1));
+  el.querySelector('.next')?.addEventListener('click', () => show(i + 1));
+  el.querySelectorAll('.gal-th').forEach(b => b.addEventListener('click', () => show(+b.dataset.i)));
+  return d => { if (gs.length > 1) show(i + d); };
+}
+/* 소개 아래 "맡은 일", "해결한 문제" */
+const listBlock = (title, items, cls = '') => items && items.length
+  ? `<div class="sec"><div class="sec-t">${title}</div><ul class="${cls}">${items.map(t => `<li>${t}</li>`).join('')}</ul></div>` : '';
 
 /* ════════════════════════════════════════════════════════════
    문서 뷰 렌더링
@@ -164,13 +249,12 @@ function renderDoc() {
       </div>
       <div class="pj-grid">
         <div class="pj-txt">
-          <ul class="pts" data-pts>
-            ${p.pts.map((t, i) => `<li class="${i >= VISIBLE_PTS ? 'hide' : ''}">${t}</li>`).join('')}
-          </ul>
+          ${listBlock('맡은 일', p.mine, 'pts')}
+          ${listBlock('해결한 문제', p.pts, 'pts')}
           <div class="stk">${p.stack.map(s => `<span>${s}</span>`).join('')}</div>
           <div class="lk">${links(p)}</div>
         </div>
-        <div class="pj-shot">${media(p)}</div>
+        <div class="pj-shot">${galleryHTML(p)}</div>
       </div>
     </article>`).join('');
 
@@ -181,6 +265,8 @@ function renderDoc() {
       <p class="pgc-d">${p.desc}</p>
       <div class="stk">${p.stack.map(s => `<span>${s}</span>`).join('')}</div>
     </div>`).join('');
+
+  PROJECTS.forEach(p => bindGallery(document.getElementById('d-projects'), p));
 
   /* 접힌 불릿 토글 */
   document.querySelectorAll('#doc-root [data-pts]').forEach(ul => {
@@ -904,6 +990,7 @@ async function initDrive() {
     /* 프로젝트 창이 떠 있으면 Space·Esc로 닫기만 하고 운전 입력은 받지 않는다 */
     if (panelOpen()) {
       if (e.code === 'Space' || e.code === 'Escape') { e.preventDefault(); closePanel(); }
+      if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') { e.preventDefault(); galGo(e.code === 'ArrowLeft' ? -1 : 1); }
       return;
     }
     /* 게시판 근처에서 Space는 브레이크가 아니라 "프로젝트 보기" */
@@ -1088,7 +1175,7 @@ async function initDrive() {
   const foundL = document.getElementById('g-found-l');
   const foundN = document.getElementById('g-found-n');
 
-  let current = null, promptFor = null;
+  let current = null, promptFor = null, galGo = () => {};
   const visited = new Set();
   const dim = document.getElementById('g-dim');
   const prompt = document.getElementById('g-prompt');
@@ -1186,16 +1273,15 @@ async function initDrive() {
     panel.style.setProperty('--c', p.color);
     pnNo.textContent = p.no;
     pnBd.innerHTML = `
-      <div class="shot">${media(p)}</div>
+      ${galleryHTML(p)}
       <div class="meta"><span class="per">${p.period}</span><span class="role">${p.role}</span></div>
       <div class="n">${p.full}</div>
       <p class="one">${p.one}</p>
-      <ul>${p.pts.map(t => `<li>${t}</li>`).join('')}</ul>
+      ${listBlock('맡은 일', p.mine)}
+      ${listBlock('해결한 문제', p.pts)}
       <div class="stk">${p.stack.map(s => `<span>${s}</span>`).join('')}</div>
       <div class="lk">${links(p)}</div>`;
-    /* .shot 안의 미디어가 카드 크기를 채우도록 */
-    const m = pnBd.querySelector('.shot > *');
-    if (m) { m.className = 'shot'; pnBd.querySelector('.shot').replaceWith(m); }
+    galGo = bindGallery(pnBd, p);
     pnBd.scrollTop = 0;   // 다른 프로젝트로 넘어왔을 때 이전 스크롤 위치가 남지 않게
     /* 창을 여는 순간 차·캐릭터를 세운다. 누르고 있던 키가 남아 창 뒤에서 계속 달리지 않게 */
     for (const k in keys) keys[k] = false;
