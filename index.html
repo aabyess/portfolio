@@ -206,6 +206,17 @@
     .proj-points { list-style: none; display: flex; flex-direction: column; gap: 5px; margin-bottom: 22px; }
     .proj-points li { font-size: 13px; color: var(--muted); padding-left: 16px; position: relative; line-height: 1.65; }
     .proj-points li::before { content: '—'; position: absolute; left: 0; color: var(--subtle); font-size: 11px; top: 2px; }
+    .proj-points li b, .proj-desc b { color: var(--text); font-weight: 600; }
+    .proj-row-body code { font-size: 0.9em; background: var(--surface); border: 1px solid var(--border); padding: 0 4px; border-radius: 4px; }
+
+    .proj-section-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: var(--accent); margin-bottom: 10px; }
+    .proj-trouble { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 24px; }
+    .trouble-item { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+    .trouble-title { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.5; margin-bottom: 8px; }
+    .trouble-item dl { display: grid; grid-template-columns: 30px 1fr; gap: 4px 8px; font-size: 12.5px; line-height: 1.65; color: var(--muted); }
+    .trouble-item dt { font-weight: 700; color: var(--subtle); }
+    .trouble-item dt.fix { color: var(--accent); }
+    .trouble-item dd { margin: 0; }
 
     .proj-bottom { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px; }
     .proj-stack { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -231,6 +242,7 @@
 
     @media (max-width: 760px) {
       .projects-grid { grid-template-columns: 1fr; }
+      .proj-trouble { grid-template-columns: 1fr; }
     }
 
     /* ── CONTACT ── */
@@ -378,15 +390,69 @@
             <span class="proj-badge">공모전 진행중 · 5인 팀</span>
           </div>
           <div class="proj-name-sm">놀러온나 — 한국관광공사 TourAPI 기반 부산 특화 예산 맞춤 여행 플랫폼</div>
-          <div class="proj-desc">홈·스팟·코스·한끗·마이페이지까지 서비스 전 페이지 프론트엔드를 1인으로 설계·구현한 부산 여행 플랫폼. 5인 팀(프론트 1, 백엔드 3, PM 1) 중 프론트엔드 전담.</div>
+          <div class="proj-desc">"예산·동행·분위기만 말하면" AI 여행 메이트 <b>온나</b>가 부산 코스를 짜 주고, 혼잡도 예측까지 반영해 붐비는 곳을 피하게 해 주는 여행 플랫폼. 홈에서 온나와 대화하거나 지역·예산·꼭 갈 곳을 고르면 AI가 코스를 만들고, 결과 페이지에서 지도·타임라인·예산 게이지를 보며 직접 다듬은 뒤 링크로 공유하거나 홈에 공개할 수 있습니다. 5인 팀(프론트 1, 백엔드 3, PM 1)에서 프론트엔드를 전담해 홈·스팟·혼잡도·코스·한끗·행사·마이페이지 등 21개 페이지를 설계·구현했고, 전체 502커밋 중 434커밋과 릴리즈 1.1.0 ~ 1.19.0 배포를 맡았습니다.</div>
+
+          <div class="proj-section-title">맡은 일</div>
           <ul class="proj-points">
-            <li>Kakao Maps SDK로 부산 16개 구 혼잡도 지도를 구현하고, 원형 마커를 실제 행정구역 경계 폴리곤으로 교체 — 구 클릭 시 붐비는 곳 TOP 5와 여유 스팟 패널을 거쳐 상세 모달까지 이어지는 탐색 흐름 설계</li>
-            <li>스팟 검색을 지역명·카테고리·무료 여부·초성까지 인식하는 통합 검색으로 확장하고, 검색·필터 결과에 맞춰 지도 범위가 자동 재조정되도록 구현</li>
-            <li>AI 코스 결과 페이지에 장소 순서 변경·제외, 드래그 정렬, 예산 게이지를 붙여 생성된 코스를 사용자가 직접 다듬을 수 있는 편집 흐름 구현</li>
-            <li>장소 매핑 테이블의 안전 상한이 3,000개로 하드코딩돼 실데이터 3,632개 중 632개가 누락되던 버그를 발견, 상한을 올리고 37회 순차 요청을 8개 단위 병렬로 바꿔 초기 로딩까지 개선</li>
-            <li>카카오 SDK 스크립트 로드 전에 지도 초기화를 시도해 발생하던 레이스 컨디션을, 스크립트 태그가 나타날 때까지 재확인 후 load 이벤트를 붙이는 폴백으로 해결</li>
-            <li>모바일 코스 편집에서 카드 전체 드래그가 목록 스크롤을 막던 문제를 matchMedia + useSyncExternalStore로 화면 크기를 감지해 데스크톱·모바일 드래그 방식을 분리해 해결</li>
+            <li><b>혼잡도 지도</b> — 부산 16개 구·군 행정경계(KOSTAT)를 Douglas-Peucker로 단순화한 32KB GeoJSON을 만들어 등급색 폴리곤으로 표시, 멀티폴리곤(사하구 등) 지원과 경계 로드 실패 시 원형 마커 폴백까지 구현. 같은 경계를 스팟 지도에 재사용해 구별 스팟 수를 채움 농도로 시각화</li>
+            <li><b>스마트 검색</b> — 동네 사전 21곳·카테고리 동의어 40여 개·초성("ㅎㅇㄷ" → 해운대)·공백 무시 정규화·일치 하이라이트를 지원하는 통합 검색 구현, 검색 결과에 맞춰 지도 범위 자동 재조정</li>
+            <li><b>AI 코스 편집</b> — motion <code>Reorder</code> 드래그 정렬, 장소 순서 변경·제외, 예산 대비 사용률·초과 경고를 보여주는 예산 게이지, 모바일에서는 지도 위·타임라인 아래·장소 추가 하단 시트로 레이아웃 재구성</li>
+            <li><b>코스 공유</b> — 공개 링크, 링크 공유와 홈 공개 분리, 공유 코스 좋아요·전체보기·검색, 카카오맵 길찾기 링크 연결</li>
+            <li><b>AI 메이트 '온나'</b> — 홈의 세 진입점(FAB·검색바·캐러셀)이 대화를 공유하도록 <code>AIChatProvider</code>로 상태를 통합하고, 누른 버튼 자리에서 커져 나오는 모달 모션과 채팅 우선 홈 히어로로 개편</li>
+            <li><b>품질·배포</b> — Vitest 단위 테스트 19개 파일, Storybook, 세션 만료(401) 시 로그인 유도, 연속 푸시 때 컨테이너 이름 충돌로 실패하던 GitHub Actions 배포에 concurrency 가드 추가, develop → main 릴리즈 흐름 운영</li>
           </ul>
+
+          <div class="proj-section-title">트러블슈팅</div>
+          <div class="proj-trouble">
+            <div class="trouble-item">
+              <div class="trouble-title">장소 632개가 매핑에서 누락</div>
+              <dl>
+                <dt>문제</dt><dd>일부 마커 모달에서 찜 상태가 표시되지 않음</dd>
+                <dt>원인</dt><dd>장소 ID 매핑 훅의 상한이 30페이지(3,000개)로 하드코딩돼 실데이터 3,632개 중 뒤쪽 632개가 빠짐</dd>
+                <dt class="fix">해결</dt><dd>첫 응답의 totalPages 기준으로 상한을 올리고, 37회 순차 요청을 8개 단위 <code>Promise.all</code> 병렬 요청으로 바꿔 초기 로딩까지 단축</dd>
+              </dl>
+            </div>
+            <div class="trouble-item">
+              <div class="trouble-title">검색창에 한 글자 칠 때마다 입력이 끊김</div>
+              <dl>
+                <dt>문제</dt><dd>타이핑 중 포커스가 풀리고 한글 조합이 깨짐</dd>
+                <dt>원인</dt><dd>글자마다 새 쿼리 키 → <code>isLoading</code> → 사이드바 전체가 스켈레톤으로 바뀌며 input이 언마운트됨</dd>
+                <dt class="fix">해결</dt><dd>300ms 디바운스 훅 + <code>keepPreviousData</code>로 이전 결과를 유지하고, 전체 스켈레톤은 첫 로딩에만 표시. fetch를 1.5초 지연시켜 재현·검증</dd>
+              </dl>
+            </div>
+            <div class="trouble-item">
+              <div class="trouble-title">"카페" 검색 결과 0건</div>
+              <dl>
+                <dt>문제</dt><dd>존재하는 카테고리인데 검색 결과가 비어 있음</dd>
+                <dt>원인</dt><dd>받아온 페이지 안에서만 클라이언트 필터링했는데 맛집·카페(3,104건)가 뒤쪽 페이지에 몰려 있었고, 결과 0건이면 무한스크롤 sentinel도 렌더되지 않아 다음 페이지를 못 받음</dd>
+                <dt class="fix">해결</dt><dd>지역·카테고리·키워드를 서버 파라미터 필터로 전환하고, sentinel을 목록 밖으로 빼 <code>rootMargin 200px</code>로 미리 로드</dd>
+              </dl>
+            </div>
+            <div class="trouble-item">
+              <div class="trouble-title">카카오 지도가 가끔 영영 뜨지 않음</div>
+              <dl>
+                <dt>문제</dt><dd>새로고침 타이밍에 따라 지도가 초기화되지 않음</dd>
+                <dt>원인</dt><dd>dynamic import로 지도 마운트가 늦어지며, SDK <code>&lt;script&gt;</code> 태그가 DOM에 들어오기 전에 감지를 시도하는 레이스 컨디션</dd>
+                <dt class="fix">해결</dt><dd>코스·혼잡도·스팟 지도 3곳에 태그가 나타날 때까지 재확인 후 load 이벤트를 붙이는 폴백 적용, 코스 지도의 폴링은 이벤트 방식으로 교체</dd>
+              </dl>
+            </div>
+            <div class="trouble-item">
+              <div class="trouble-title">모바일에서 스크롤하려다 코스 순서가 바뀜</div>
+              <dl>
+                <dt>문제</dt><dd>터치 기기에서 카드 위를 스크롤하면 드래그로 인식됨</dd>
+                <dt>원인</dt><dd>카드 전체가 드래그 영역이라 스크롤 제스처와 충돌</dd>
+                <dt class="fix">해결</dt><dd><code>matchMedia</code> + <code>useSyncExternalStore</code>로 화면 크기를 구독해 1024px 미만에선 그립 핸들로만 드래그, 데스크톱은 카드 전체 드래그 유지</dd>
+              </dl>
+            </div>
+            <div class="trouble-item">
+              <div class="trouble-title">코스 결과 페이지 무한 로딩</div>
+              <dl>
+                <dt>문제</dt><dd>생성이 끝났는데도 결과 화면이 계속 로딩 상태</dd>
+                <dt>원인</dt><dd>빈 배열 응답을 '아직 생성 중'으로 오인해 폴링이 멈추지 않음</dd>
+                <dt class="fix">해결</dt><dd>최대 60초 타임아웃과 실패 안내를 추가하고, 음식점·카페는 전용 모달로 분기하도록 상세 처리 정리</dd>
+              </dl>
+            </div>
+          </div>
         </div>
         <div class="proj-bottom">
           <div class="proj-stack">
@@ -422,14 +488,75 @@
             <span class="proj-badge">인턴 · 1인 개발</span>
           </div>
           <div class="proj-name-sm">Trade-Cmarket — 한국–인도네시아 B2B 무역 견적·계약 플랫폼</div>
-          <div class="proj-desc">발주 공고 → 견적 → 낙찰 → 계약 → 실시간 채팅으로 이어지는 B2B 거래 플로우 전체를 바이어·셀러 양면으로 기획부터 설계·구현까지 1인으로 담당한 인턴 프로젝트.</div>
+          <div class="proj-desc">한국과 인도네시아 기업이 언어 장벽 없이 거래하도록 돕는 B2B 플랫폼 <b>MitraPay</b>. 발주 공고 → 견적 제출 → 견적 비교·낙찰 → 계약 → 실시간 채팅 → 인보이스·송금 영수증 → 물품 수령 확인(BAST) → 상호 리뷰까지 거래 전 과정을 한 곳에서 처리합니다. 바이어·셀러·운영자 3개 역할을 기획부터 DB 설계·API·화면·배포까지 1인으로 개발한 인턴 프로젝트로, 한 달간 400여 커밋, API 라우트 45개, DB 마이그레이션 34개를 작성했습니다.</div>
+
+          <div class="proj-section-title">맡은 일</div>
           <ul class="proj-points">
-            <li>한국어·영어·인도네시아어 3개 국어 서비스를 next-intl로 다국어화하고, 사용자 생성 콘텐츠를 원문+감지언어+번역본(jsonb)으로 저장해 번역 생성을 서버로 강제하는 필드 단위 번역 파이프라인 설계 — 클라이언트발 번역 위조 차단</li>
-            <li>Supabase RLS + 서비스롤 API 이중 권한 구조 설계 — RLS로 행 접근을 통제하고, RLS를 우회하는 서비스롤 라우트엔 소유권·상태 전이 화이트리스트 검증을 직접 구현(완료 계약 되돌리기, 마감 공고 견적 제출 등 차단)</li>
-            <li>Gemini 구조화 출력(responseSchema)으로 공고·견적 AI 초안을 생성하고, 발주서 PDF·이미지를 멀티모달로 추출, 모델 과부하(503) 시 폴백 체인으로 무중단 처리</li>
-            <li>간헐적 강제 로그아웃의 원인이 미들웨어의 리다이렉트 쿠키 누락이라는 것을 프론트·백엔드를 함께 추적해 발견, 모든 리다이렉트에 쿠키를 전파하는 헬퍼로 재발 방지</li>
-            <li>채팅 읽음 처리가 행마다 UPDATE 이벤트를 발생시켜 전체 이력 refetch가 폭주하던 문제를 Realtime 페이로드를 setQueryData로 캐시에 직접 반영하도록 바꿔 해결</li>
-            <li>전 API 라우트 보안 감사를 수행해 저장형 XSS 살균, 무인증 번역 프록시 차단, 파일 업로드 MIME·용량 검증을 일괄 적용</li>
+            <li><b>3개 국어 번역 파이프라인</b> — next-intl로 한·인니·영 라우팅을 구성하고, 공고·견적·채팅·알림·기업정보 테이블에 <code>source_lang</code> + <code>translations(jsonb)</code>를 두어 저장 시점에 서버에서 DeepL로 나머지 언어를 미리 번역, 보는 사람의 UI 언어로 반환. 기존 데이터도 소급 번역</li>
+            <li><b>권한 구조</b> — Supabase SSR 인증 + 역할별(바이어·셀러·운영자) 미들웨어, 위조 가능한 <code>x-user-*</code> 헤더 제거 후 검증값만 주입. RLS로 행 접근을 통제하고, RLS를 우회하는 서비스롤 라우트엔 소유권·마감 여부·상태 전이 화이트리스트 검증을 직접 구현</li>
+            <li><b>거래 문서 자동화</b> — @react-pdf/renderer로 견적서·인보이스 PDF를 생성해 서명 URL로 제공하고 채팅 안에 썸네일로 첨부, 낙찰 시점에 인보이스 번호 확정. Edge Function + Cron으로 환율을 갱신해 견적 비교표를 IDR 기준으로 환산</li>
+            <li><b>실시간 채팅</b> — Supabase Realtime 채팅과 DB 트리거 기반 알림, 파일 첨부·입금 계좌·납품지 지도 카드, 한글 IME 이중 입력 방지</li>
+            <li><b>AI 공고 초안</b> — Gemini <code>responseSchema</code>로 구조화된 JSON을 강제하고 발주서 PDF·이미지에서 내용을 추출, 응답은 카테고리 allowlist와 HTML 살균으로 재검증</li>
+            <li><b>사업자 인증·요금제·운영</b> — 국세청 진위확인 API 즉시 인증과 서류 업로드 → 운영자 승인 큐, Free/Pro/Max 요금제(무료는 채팅 번역 월 50건 서버 집계), 공지·자료실·1:1 문의·회원 관리 운영자 화면, 대시보드 위젯 커스터마이징, Storybook 스토리 30개</li>
+          </ul>
+
+          <div class="proj-section-title">트러블슈팅</div>
+          <div class="proj-trouble">
+            <div class="trouble-item">
+              <div class="trouble-title">사용자가 간헐적으로 강제 로그아웃됨</div>
+              <dl>
+                <dt>문제</dt><dd>재현 패턴 없이 가끔 세션이 끊김</dd>
+                <dt>원인</dt><dd>미들웨어의 <code>getUser()</code>가 토큰을 갱신하면 새 쿠키가 응답에 실려야 하는데, <code>NextResponse.redirect()</code>가 이를 싣지 않아 브라우저엔 이미 소비된 refresh token만 남음</dd>
+                <dt class="fix">해결</dt><dd>모든 리다이렉트에 갱신된 쿠키를 복사하는 <code>buildRedirect()</code> 헬퍼로 통일해 재발 방지</dd>
+              </dl>
+            </div>
+            <div class="trouble-item">
+              <div class="trouble-title">채팅 refetch 폭주와 목록 과다 로딩</div>
+              <dl>
+                <dt>문제</dt><dd>메시지·읽음 처리 이벤트마다 전체 이력을 다시 받고, 채팅방 목록이 모든 방의 전체 메시지를 내려받음</dd>
+                <dt>원인</dt><dd>Realtime 이벤트(읽음 UPDATE 포함)를 받을 때마다 쿼리를 무효화하는 구조</dd>
+                <dt class="fix">해결</dt><dd>INSERT는 append·UPDATE는 해당 행만 교체하도록 캐시에 직접 반영, 방 요약 RPC와 <code>(quote_id, created_at desc)</code> 인덱스 추가, 최초 50개 페이지네이션과 행 단위 memo, 구독 직후 1회 동기화로 유실 메시지 보완</dd>
+              </dl>
+            </div>
+            <div class="trouble-item">
+              <div class="trouble-title">공개된 타사 정보로 사업자 인증 통과 가능</div>
+              <dl>
+                <dt>문제</dt><dd>남의 사업자번호로도 내 회사가 인증될 수 있는 보안 허점</dd>
+                <dt>원인</dt><dd>국세청 API는 번호의 실존 여부만 확인할 뿐 요청자 소유인지는 확인하지 않음</dd>
+                <dt class="fix">해결</dt><dd>가입 시 등록한 본인 사업자번호와 대조한 뒤에만 API를 호출하고, 다르면 400 반환·입력란 읽기전용 처리</dd>
+              </dl>
+            </div>
+            <div class="trouble-item">
+              <div class="trouble-title">AI 초안 생성이 과부하 때 500 에러</div>
+              <dl>
+                <dt>문제</dt><dd>Gemini 수요 폭증(503) 시 사용자에겐 알 수 없는 서버 오류로 보임</dd>
+                <dt>원인</dt><dd>단일 모델 호출에 실패 처리 분기가 없었음</dd>
+                <dt class="fix">해결</dt><dd>예비 모델로 순차 폴백하고, 전부 과부하일 때만 429로 재시도 안내. 계정에서 404가 나던 모델은 폴백 목록에서 교체</dd>
+              </dl>
+            </div>
+            <div class="trouble-item">
+              <div class="trouble-title">계약 취소 후 같은 견적 재낙찰 불가</div>
+              <dl>
+                <dt>문제</dt><dd>취소된 계약이 있는 견적을 다시 확정하면 DB 제약 위반</dd>
+                <dt>원인</dt><dd><code>contracts.quote_id</code> 전체에 유니크 제약이 걸려 취소 이력과 충돌</dd>
+                <dt class="fix">해결</dt><dd><code>status &lt;&gt; 'cancelled'</code> 조건의 부분 유니크 인덱스로 교체해 취소 이력은 보존하면서 재낙찰 허용</dd>
+              </dl>
+            </div>
+            <div class="trouble-item">
+              <div class="trouble-title">백그라운드 탭에서도 '읽음' 처리됨</div>
+              <dl>
+                <dt>문제</dt><dd>창을 보지 않아도 상대에게 읽음으로 표시되고, 빠른 재진입 시 안내 메시지가 중복 생성됨</dd>
+                <dt>원인</dt><dd>탭 가시성과 무관하게 읽음 API를 호출, 동시 진입 시 insert가 두 번 실행</dd>
+                <dt class="fix">해결</dt><dd><code>visibilityState</code>가 visible일 때만 읽음 처리하고 탭 복귀 시 밀린 읽음 반영, 진행 중인 Promise를 공유해 중복 insert 방지</dd>
+              </dl>
+            </div>
+          </div>
+
+          <div class="proj-section-title">보안 점검</div>
+          <ul class="proj-points">
+            <li>공고 HTML을 sanitize-html로 살균해 저장형 XSS 차단, 인가 판단을 검증되지 않은 <code>getSession()</code>에서 <code>getUser()</code>로 교체</li>
+            <li>인증 없이 열려 있던 번역 API를 로그인 필수·길이 제한으로 막고, 채팅 번역 전 참여자 검증으로 DeepL 쿼터 남용 차단</li>
+            <li>파일 업로드 MIME allowlist·5MB 제한, 계약 상태 변경 화이트리스트, 견적 번역 서버 생성으로 클라이언트 위조 차단</li>
           </ul>
         </div>
         <div class="proj-bottom">
