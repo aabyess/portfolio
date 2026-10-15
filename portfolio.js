@@ -21,7 +21,7 @@ const PROJECTS = [
       '스팟 검색을 지역명·카테고리·무료 여부·초성까지 인식하는 통합 검색으로 확장하고, 결과에 맞춰 지도 범위가 자동 재조정되도록 했습니다.'
     ],
     stack: ['Next.js', 'TypeScript', 'TailwindCSS v4', 'TanStack Query', 'Zustand', 'Kakao Maps SDK', 'Motion', 'Vitest'],
-    img: 'images/nolleo-onna.jpg',
+    img: 'images/nolleo-onna.png',
     live: 'https://www.nolleo-onna.site/', repo: 'https://github.com/nolleo-onna/nolleo-onna-frontend',
     pos: [-17, -16]
   },
@@ -41,7 +41,7 @@ const PROJECTS = [
     ],
     stack: ['Next.js 15', 'TypeScript', 'Supabase', 'TanStack Query', 'Zustand', 'next-intl', 'Gemini API', 'Vercel'],
     img: 'images/trade-cmarket.png',
-    repo: 'https://github.com/cmarketplace/Trade-Cmarket',
+    live: 'https://cmarket-hazel.vercel.app/', repo: 'https://github.com/aabyess/cmarket',
     pos: [17, -38]
   },
   {
@@ -255,7 +255,7 @@ addEventListener('hashchange', () => setView(viewFromHash(), { updateHash: false
 
 /* 차 모델. null로 두면 박스로 조립한 기본 차가 쓰인다.
    현재 모델은 Kenney Car Kit(CC0)의 hatchback-sports. models/README.md 참고. */
-const CAR_MODEL_URL = 'models/car.glb';
+const CAR_MODEL_URL = 'models/car-red.glb';   // Blender에서 빨간 도장·헤드라이트·루프랙으로 다듬은 차
 
 /* 바퀴 노드 이름. 앞에 있는 이름부터 찾는다.
    Blender에서 직접 만들 땐 wheel_fl 같은 이름을 쓰면 되고,
@@ -304,13 +304,12 @@ async function initDrive() {
      게시판이 도로 좌우에 번갈아 선다. 경계는 원이 아니라 사각형이다. */
   const CAR_LEN = 4.2, PAD_R = 7.5;
   const ROAD_HALF = 9;                                   // 포장도로 반폭
-  const BOUND = { x: 40, zMin: -142, zMax: 30 };         // 이동 가능 범위
+  const BOUND = { x: 39, zMin: -39, zMax: 39 };          // 가을 숲 월드(84×84) 안
 
   const NEON_PINK = 0xff3d9a, NEON_CYAN = 0x2de2ff, SUN_WARM = 0xff8c42;
 
   const scene = new THREE.Scene();
   /* 안개 색을 노을의 지평선 색에 맞춰야 멀리가 하늘로 자연스럽게 녹는다 */
-  scene.fog = new THREE.Fog(0x4a2a63, 60, 230);
 
   const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.5, 500);
 
@@ -324,126 +323,170 @@ async function initDrive() {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   document.getElementById('drive-root').appendChild(renderer.domElement);
 
-  /* ── 하늘 ──
-     큰 구의 안쪽에 그라디언트를 그린다. 위는 보라, 지평선은 주황. */
+  /* ════ 가을 숲 월드 ════
+     Blender에서 만든 장면을 glb로 내보내 쓰고, 지형 높이·풀 자리·가판대 좌표는 JSON으로 받는다.
+     웹에서 버거운 풀·낙엽·바람은 여기서 가볍게 다시 만든다. */
+  const WORLD = await (await fetch('models/autumn-world.json')).json();
+  const GRID = WORLD.grid;
+  const pathX = z => WORLD.path.amp * Math.sin(-WORLD.path.k * z);
+  /* Blender 격자(위가 +Y)를 웹 좌표(-Z가 앞)로 읽는다 */
+  function heightAt(x, z) {
+    const n = GRID.n;
+    const fx = Math.min(n - 1.001, Math.max(0, (x + GRID.half) / GRID.step));
+    const fy = Math.min(n - 1.001, Math.max(0, (-z + GRID.half) / GRID.step));
+    const ix = Math.floor(fx), iy = Math.floor(fy), tx = fx - ix, ty = fy - iy;
+    const h = (i, j) => GRID.h[j * n + i];
+    return (h(ix, iy) * (1 - tx) + h(ix + 1, iy) * tx) * (1 - ty) + (h(ix, iy + 1) * (1 - tx) + h(ix + 1, iy + 1) * tx) * ty;
+  }
+  function bridgeY(x, z) {
+    const B = WORLD.bridge;
+    if (z < B.z0 || z > B.z1 || Math.abs(x - pathX(z)) > B.halfW) return null;
+    return B.top + B.arch * Math.sin(Math.PI * (z - B.z0) / (B.z1 - B.z0));
+  }
+  /* 차·캐릭터가 밟는 높이. 다리 위면 다리, 아니면 지형 */
+  function groundY(x, z) {
+    const b = bridgeY(x, z);
+    if (b !== null) return b;
+    const onPath = Math.abs(x - pathX(z)) < WORLD.path.half;
+    return Math.max(heightAt(x, z), onPath ? 0.04 : -9, WORLD.stream.water - 0.25);
+  }
+
+  const timeU = { value: 0 };   // 바람·물결 셰이더 공용 시간
+
+  /* ── 하늘 · 안개 ── */
+  scene.fog = new THREE.Fog(0x6a3a6e, 38, 120);
   {
     const cv = document.createElement('canvas');
     cv.width = 8; cv.height = 256;
     const g = cv.getContext('2d');
     const grad = g.createLinearGradient(0, 0, 0, 256);
-    grad.addColorStop(0.00, '#180d33');   // 천정
-    grad.addColorStop(0.42, '#4a2a63');
-    grad.addColorStop(0.62, '#a8447a');
-    grad.addColorStop(0.78, '#ff6b5a');
-    grad.addColorStop(0.88, '#ffa751');
-    grad.addColorStop(1.00, '#ffd08a');   // 지평선
+    grad.addColorStop(0.00, '#2a1745');
+    grad.addColorStop(0.45, '#5b2f6e');
+    grad.addColorStop(0.70, '#9e4d78');
+    grad.addColorStop(0.86, '#e07a6a');
+    grad.addColorStop(1.00, '#ffb27a');
     g.fillStyle = grad; g.fillRect(0, 0, 8, 256);
     const tex = new THREE.CanvasTexture(cv);
     tex.colorSpace = THREE.SRGBColorSpace;
-    const sky = new THREE.Mesh(
+    scene.add(new THREE.Mesh(
       new THREE.SphereGeometry(320, 32, 20),
       new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, fog: false, depthWrite: false })
-    );
-    scene.add(sky);
-
-    /* 지평선에 걸린 해 — 차가 달려가는 -Z 쪽에 둔다 */
-    const sunCv = document.createElement('canvas');
-    sunCv.width = sunCv.height = 256;
-    const sg = sunCv.getContext('2d');
-    const rad = sg.createRadialGradient(128, 128, 10, 128, 128, 126);
-    rad.addColorStop(0, '#fff3c4');
-    rad.addColorStop(0.45, '#ffb347');
-    rad.addColorStop(0.8, 'rgba(255,90,120,.55)');
-    rad.addColorStop(1, 'rgba(255,60,140,0)');
-    sg.fillStyle = rad; sg.fillRect(0, 0, 256, 256);
-    /* 신스웨이브 해의 가로 줄무늬 */
-    sg.globalCompositeOperation = 'destination-out';
-    for (let i = 0; i < 6; i++) sg.fillRect(0, 150 + i * 16, 256, 5 + i * 0.9);
-    const sunTex = new THREE.CanvasTexture(sunCv);
-    sunTex.colorSpace = THREE.SRGBColorSpace;
-    const disc = new THREE.Mesh(
-      new THREE.PlaneGeometry(150, 150),
-      new THREE.MeshBasicMaterial({ map: sunTex, transparent: true, fog: false, depthWrite: false })
-    );
-    disc.position.set(0, 28, -290);
-    scene.add(disc);
+    ));
   }
 
-  /* ── 조명 ── */
-  scene.add(new THREE.HemisphereLight(0xff9d6e, 0x2a1440, 1.35));
-  const sun = new THREE.DirectionalLight(0xffb27a, 2.3);
-  sun.position.set(-26, 34, -120);        // 해 쪽에서 낮게 → 그림자가 길게 눕는다
+  /* ── 조명 — 낮게 깔린 노을 해 ── */
+  scene.add(new THREE.HemisphereLight(0xffc29a, 0x3a2050, 1.25));
+  const sun = new THREE.DirectionalLight(0xffa868, 2.6);
+  sun.position.set(-34, 38, 30);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
-  Object.assign(sun.shadow.camera, { left: -70, right: 70, top: 90, bottom: -90, near: 1, far: 300 });
-  sun.shadow.bias = -0.0006;
+  Object.assign(sun.shadow.camera, { left: -55, right: 55, top: 55, bottom: -55, near: 1, far: 160 });
+  sun.shadow.bias = -0.0008; sun.shadow.normalBias = 0.04;
   scene.add(sun);
-  /* 반대편에서 차가운 보라 필 — 어두운 면이 새까맣게 죽지 않게 */
-  const fill = new THREE.DirectionalLight(0x7a5cff, 0.85);
-  fill.position.set(40, 22, 60);
+  const fill = new THREE.DirectionalLight(0x9a7cff, 0.55);
+  fill.position.set(40, 20, -30);
   scene.add(fill);
 
-  /* ── 바닥 ── */
-  const gTex = (() => {
-    const s = 512, cv = document.createElement('canvas');
-    cv.width = cv.height = s;
-    const g = cv.getContext('2d');
-    g.fillStyle = '#1b0f2e'; g.fillRect(0, 0, s, s);
-    g.strokeStyle = 'rgba(45,226,255,.28)'; g.lineWidth = 2;
-    for (let i = 0; i <= s; i += 64) {
-      g.beginPath(); g.moveTo(i, 0); g.lineTo(i, s); g.stroke();
-      g.beginPath(); g.moveTo(0, i); g.lineTo(s, i); g.stroke();
-    }
-    const t = new THREE.CanvasTexture(cv);
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.repeat.set(34, 34);
-    t.colorSpace = THREE.SRGBColorSpace;
-    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
-    return t;
-  })();
-
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(620, 620),
-    new THREE.MeshStandardMaterial({ map: gTex, roughness: .95 })
-  );
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);
-
-  /* ── 도로 ── */
+  /* 월드 바깥 바닥 — 지형 가장자리가 허공에 뜨지 않게 */
   {
-    const zA = BOUND.zMax, zB = BOUND.zMin;
-    const len = zA - zB, midZ = (zA + zB) / 2;
-
-    const road = new THREE.Mesh(
-      new THREE.PlaneGeometry(ROAD_HALF * 2, len),
-      new THREE.MeshStandardMaterial({ color: 0x140c24, roughness: .78 })
-    );
-    road.rotation.x = -Math.PI / 2;
-    road.position.set(0, 0.02, midZ);
-    road.receiveShadow = true;
-    scene.add(road);
-
-    /* 양쪽 가장자리 네온 라인 */
-    for (const [x, col] of [[-ROAD_HALF, NEON_CYAN], [ROAD_HALF, NEON_PINK]]) {
-      const edge = new THREE.Mesh(
-        new THREE.BoxGeometry(0.42, 0.12, len),
-        new THREE.MeshBasicMaterial({ color: col, fog: false })
-      );
-      edge.position.set(x, 0.09, midZ);
-      scene.add(edge);
-    }
-
-    /* 중앙 점선 */
-    const dashMat = new THREE.MeshBasicMaterial({ color: 0xffe9b0 });
-    const dashGeo = new THREE.PlaneGeometry(0.5, 4.5);
-    for (let z = zA - 6; z > zB; z -= 11) {
-      const d = new THREE.Mesh(dashGeo, dashMat);
-      d.rotation.x = -Math.PI / 2;
-      d.position.set(0, 0.04, z);
-      scene.add(d);
-    }
+    const outer = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), new THREE.MeshStandardMaterial({ color: 0x6e3412, roughness: 1 }));
+    outer.rotation.x = -Math.PI / 2; outer.position.y = -0.6; outer.receiveShadow = true;
+    scene.add(outer);
   }
+
+  /* 셰이더에 바람을 끼워 넣는다. 높이(h)가 클수록 많이 흔들린다 */
+  function addWind(mat, code) {
+    mat.onBeforeCompile = sh => {
+      sh.uniforms.uTime = timeU;
+      sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n' + code);
+    };
+  }
+
+  /* ── Blender 월드 glb ── */
+  const worldManager = new THREE.LoadingManager();
+  new GLTFLoader(worldManager).load('models/autumn-world.glb', gltf => {
+    gltf.scene.traverse(o => {
+      if (!o.isMesh) return;
+      o.castShadow = true; o.receiveShadow = true;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) {
+        m.flatShading = true; m.needsUpdate = true;
+        if (o.name.includes('Leaves')) {
+          addWind(m, `float lw = sin(uTime*1.3 + position.x*0.45 + position.z*0.3) + 0.5*sin(uTime*2.3 + position.x*1.1);
+            transformed += vec3(0.07, 0.025, 0.05) * lw * smoothstep(1.5, 4.5, position.y);`);
+        }
+        if (o.name.includes('Water')) {
+          m.transparent = true; m.opacity = 0.9; m.roughness = 0.08;
+          m.emissive = new THREE.Color(0x4a2fb0); m.emissiveIntensity = 0.45;
+          addWind(m, `transformed.y += 0.05*sin(uTime*2.0 + position.x*1.6 + position.z*0.9);`);
+        }
+      }
+      if (o.name.includes('Water')) o.castShadow = false;
+    });
+    scene.add(gltf.scene);
+  });
+
+  /* ── 풀 — 인스턴스 하나로 수만 장, 셰이더로 바람에 눕는다 ── */
+  {
+    const blade = new THREE.BufferGeometry();
+    const w = 0.06, hgt = 0.5;
+    blade.setAttribute('position', new THREE.Float32BufferAttribute([
+      -w, 0, 0,  w, 0, 0,  0, hgt, 0,
+      0, 0, -w,  0, 0, w,  0, hgt, 0], 3));
+    blade.computeVertexNormals();
+    const gm = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .85, side: THREE.DoubleSide });
+    addWind(gm, `vec4 gw = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+      float gs = sin(uTime*1.8 + gw.x*0.35 + gw.z*0.25)*0.6 + sin(uTime*3.1 + gw.x*0.9 - gw.z*0.4)*0.25 + 0.25;
+      transformed.x += gs * position.y * 0.55; transformed.z += gs * position.y * 0.2;`);
+    const cols = [0xd99a4e, 0xc77a3a, 0xe8b868, 0xb0683a].map(c => new THREE.Color(c));
+    const spots = [];
+    const n = GRID.n;
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      if (GRID.mask[j * n + i] < 0.6) continue;
+      for (let k = 0; k < 2; k++) spots.push([-GRID.half + (i + Math.random() - .5) * GRID.step, GRID.half - (j + Math.random() - .5) * GRID.step]);
+    }
+    const grass = new THREE.InstancedMesh(blade, gm, spots.length);
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
+    spots.forEach(([x, z], i) => {
+      e.set((Math.random() - .5) * 0.5, Math.random() * Math.PI, (Math.random() - .5) * 0.5);
+      const k = 0.55 + Math.random() * 0.6;
+      m4.compose(ps.set(x, heightAt(x, z), z), q.setFromEuler(e), sc.set(k, k, k));
+      grass.setMatrixAt(i, m4);
+      grass.setColorAt(i, cols[i % 4]);
+    });
+    grass.receiveShadow = true;
+    scene.add(grass);
+  }
+
+  /* ── 날리는 낙엽 ── */
+  const fallingLeaves = (() => {
+    const N = 260;
+    const geo = new THREE.PlaneGeometry(0.22, 0.16);
+    const mesh = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: .7 }), N);
+    const cols = [0xe0461c, 0xff9a2e, 0xb3264d, 0xffc04d].map(c => new THREE.Color(c));
+    const st = [];
+    for (let i = 0; i < N; i++) {
+      st.push({ x: (Math.random() - .5) * 80, y: Math.random() * 10, z: (Math.random() - .5) * 80,
+        vy: 0.6 + Math.random() * 0.8, ph: Math.random() * 6.3, sp: 1 + Math.random() * 2 });
+      mesh.setColorAt(i, cols[i % 4]);
+    }
+    scene.add(mesh);
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), one = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
+    return (dt, t, cx, cz) => {
+      st.forEach((l, i) => {
+        l.y -= l.vy * dt;
+        l.x += (2.2 + Math.sin(t * 0.7 + l.ph) * 1.2) * dt;
+        l.z += Math.cos(t * 0.9 + l.ph) * 0.8 * dt;
+        if (l.y < heightAt(l.x, l.z) || Math.abs(l.x - cx) > 40 || Math.abs(l.z - cz) > 40) {
+          l.x = cx + (Math.random() - .7) * 60; l.z = cz + (Math.random() - .5) * 60; l.y = 6 + Math.random() * 6;
+        }
+        e.set(t * l.sp + l.ph, t * l.sp * 0.7, l.ph);
+        m4.compose(p.set(l.x, l.y, l.z), q.setFromEuler(e), one);
+        mesh.setMatrixAt(i, m4);
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+    };
+  })();
 
   /* 사각형 경계 안으로 되돌린다. 부딪혔으면 true. */
   function clampToBounds(pos) {
@@ -613,36 +656,108 @@ async function initDrive() {
     return sp;
   }
 
-  /* 출발 지점 안내는 노면에 새긴다. 공중에 띄우면 주행 시야를 정면으로 가린다. */
+
+  /* ── 장난감 이름 블록 ──
+     차로 들이받으면 장난감처럼 무너진다. 물리는 cannon-es로 계산하고, 차와 캐릭터는
+     물리에 끌려가지 않는 '키네마틱' 몸체로 넣어 블록만 밀어낸다. R로 다시 쌓는다. */
+  const CANNON = await import('cannon-es');
+  const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -24, 0) });
+  world.allowSleep = true;
+  world.defaultContactMaterial.friction = 0.42;
+  world.defaultContactMaterial.restitution = 0.12;
   {
-    const S = 1024, cv = document.createElement('canvas');
-    cv.width = cv.height = S;
-    const g = cv.getContext('2d');
-    g.translate(S / 2, S / 2);
-    g.textAlign = 'center';
-    g.fillStyle = '#fff3d6';
-    g.font = '800 150px Pretendard, system-ui, sans-serif';
-    g.fillText('최상호', 0, -150);
-    g.fillStyle = '#2de2ff';
-    g.font = '600 56px Pretendard, system-ui, sans-serif';
-    g.fillText('FULL-STACK DEVELOPER', 0, -66);
-    g.strokeStyle = '#ff3d9a'; g.lineWidth = 9;
-    g.beginPath(); g.moveTo(-210, -14); g.lineTo(210, -14); g.stroke();
-    g.fillStyle = 'rgba(255,243,214,.82)';
-    g.font = '500 56px Pretendard, system-ui, sans-serif';
-    g.fillText('직진하면 프로젝트가', 0, 80);
-    g.fillText('길 양옆에 있습니다', 0, 152);
-    const tex = new THREE.CanvasTexture(cv);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-    /* rotation.x=-90°면 캔버스 위쪽이 -Z를 향한다. 차가 -Z로 출발하므로 바로 읽힌다. */
-    const plate = new THREE.Mesh(
-      new THREE.PlaneGeometry(17, 17),
-      new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false })
+    const ground = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() });
+    ground.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+    world.addBody(ground);
+  }
+  const carBody = new CANNON.Body({ type: CANNON.Body.KINEMATIC, shape: new CANNON.Box(new CANNON.Vec3(1.05, 0.75, 2.15)) });
+  const personBody = new CANNON.Body({ type: CANNON.Body.KINEMATIC, shape: new CANNON.Sphere(0.55) });
+  /* 멈춰 있던 차가 '잠들면' 충돌 계산에서 빠져 블록을 그냥 통과한다 */
+  carBody.allowSleep = false; personBody.allowSleep = false;
+  world.addBody(carBody); world.addBody(personBody);
+
+  const toyBlocks = [];
+  const { RoundedBoxGeometry } = await import('three/addons/geometries/RoundedBoxGeometry.js');
+  const shade = (hex, k) => '#' + new THREE.Color(hex).multiplyScalar(k).getHexString();
+  const tint = (hex, k) => '#' + new THREE.Color(hex).lerp(new THREE.Color('#fff8ee'), k).getHexString();
+  /* 블록 앞면 타일: 밝은 둥근 패널 위에 블록 색 글자, 아래로 짙은 그림자를 깔아 도톰해 보이게 */
+  function tileTexture(ch, color) {
+    const S = 512, cv = document.createElement('canvas'); cv.width = cv.height = S;
+    const c = cv.getContext('2d');
+    const r = 70, m = 26;
+    c.beginPath(); c.roundRect(m, m, S - m * 2, S - m * 2, r);
+    c.fillStyle = tint(color, 0.82); c.fill();
+    c.lineWidth = 10; c.strokeStyle = tint(color, 0.55); c.stroke();
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.font = `900 ${ch.length > 1 ? 230 : 330}px Pretendard, system-ui, sans-serif`;
+    c.fillStyle = shade(color, 0.55); c.fillText(ch, S / 2 + 10, S / 2 + 30);   // 입체 그림자
+    c.fillStyle = color; c.fillText(ch, S / 2, S / 2 + 18);
+    c.fillStyle = 'rgba(255,255,255,.35)';                                        // 위쪽 반사광
+    c.beginPath(); c.roundRect(m + 30, m + 22, S - (m + 30) * 2, 34, 17); c.fill();
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    return t;
+  }
+  function toyBlock(ch, w, h, d, x, y, z, color, mass) {
+    const mesh = new THREE.Mesh(
+      new RoundedBoxGeometry(w, h, d, 4, Math.min(w, h, d) * 0.16),
+      new THREE.MeshPhysicalMaterial({ color, roughness: .38, clearcoat: .7, clearcoatRoughness: .25 })
     );
-    plate.rotation.x = -Math.PI / 2;
-    plate.position.set(0, 0.06, 6);
-    scene.add(plate);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    /* 앞·뒤에 타일을 붙인다 (뒤에서 봐도 글자가 보이게) */
+    const tile = new THREE.MeshStandardMaterial({ map: tileTexture(ch, color), transparent: true, roughness: .5 });
+    for (const side of [1, -1]) {
+      const pl = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.86, h * 0.86), tile);
+      pl.position.z = side * (d / 2 + 0.004);
+      if (side < 0) pl.rotation.y = Math.PI;
+      mesh.add(pl);
+    }
+    scene.add(mesh);
+    const body = new CANNON.Body({ mass, shape: new CANNON.Box(new CANNON.Vec3(w / 2, h / 2, d / 2)),
+      linearDamping: 0.08, angularDamping: 0.12, sleepSpeedLimit: 0.25, sleepTimeLimit: 0.6 });
+    body.position.set(x, y, z);
+    world.addBody(body);
+    const b = { mesh, body, home: new CANNON.Vec3(x, y, z) };
+    toyBlocks.push(b);
+    mesh.position.set(x, y, z);
+    return b;
+  }
+  /* 출발점 바로 앞 숲길 위 */
+  const NAME_Z = WORLD.start.z - 7, ROW_Z = WORLD.start.z - 4.6;
+  const NAME = [['최', '#ff6b3d'], ['상', '#1fa59c'], ['호', '#e8466e']];
+  NAME.forEach(([ch, c], i) => toyBlock(ch, 2.1, 2.1, 1.05, pathX(NAME_Z) + (i - 1) * 2.35, 1.05, NAME_Z, c, 3));
+  const SMALL = ['#f4a53c', '#3a9fc4', '#e8466e', '#2bb38f', '#8a6ad8'];
+  /* 작은 큐브 한 줄: FULLSTACK · DEV (가운데 한 칸 띄움) */
+  [...'FULLSTACK DEV'].forEach((ch, i) => { if (ch !== ' ') toyBlock(ch, 0.74, 0.74, 0.74, pathX(ROW_Z) + (i - 6) * 0.8, 0.37, ROW_Z, SMALL[i % 5], 0.6); });
+
+  function restackBlocks() {
+    /* 차나 캐릭터가 블록 자리에 서 있으면 다시 쌓는 순간 블록이 튕겨 나간다. 출발점으로 옮긴다 */
+    const inArea = p => Math.abs(p.x - pathX(NAME_Z)) < 6.5 && p.z > NAME_Z - 2.5 && p.z < ROW_Z + 2.5;
+    const sz = WORLD.start.z;
+    if (inArea(car.position)) { car.position.set(pathX(sz), groundY(pathX(sz), sz), sz); heading = Math.PI; speed = 0; prevCar.copy(car.position); }
+    if (person.visible && inArea(person.position)) person.position.set(pathX(sz) + 3, person.position.y, sz - 1);
+    for (const b of toyBlocks) {
+      b.body.position.copy(b.home);
+      b.body.quaternion.set(0, 0, 0, 1);
+      b.body.velocity.setZero(); b.body.angularVelocity.setZero();
+      b.body.wakeUp();
+    }
+  }
+  const prevCar = new THREE.Vector3();
+  function physicsStep(dt) {
+    /* 키네마틱 몸체는 속도를 넣어줘야 부딪힌 블록에 힘이 제대로 전달된다 */
+    carBody.velocity.set((car.position.x - prevCar.x) / dt, 0, (car.position.z - prevCar.z) / dt);
+    prevCar.copy(car.position);
+    carBody.position.set(car.position.x, car.position.y + 0.85, car.position.z);
+    carBody.quaternion.setFromEuler(0, car.rotation.y, 0);
+    if (person.visible) personBody.position.set(person.position.x, person.position.y + 0.9, person.position.z);
+    else personBody.position.set(0, -50, 0);
+    world.step(1 / 60, dt, 3);
+    for (const b of toyBlocks) {
+      if (b.body.position.y < -20) { b.body.position.copy(b.home); b.body.velocity.setZero(); }
+      b.mesh.position.copy(b.body.position);
+      b.mesh.quaternion.copy(b.body.quaternion);
+    }
   }
 
   /* ── 프로젝트 스테이션 ── */
@@ -650,60 +765,94 @@ async function initDrive() {
   const texLoader = new THREE.TextureLoader(manager);
   const stations = [];
 
+  /* 가판대 자리는 Blender에서 세운 6곳 (최신 프로젝트가 출발점에서 가장 가깝다) */
+  PROJECTS.forEach((p, i) => { const st = WORLD.stalls[i]; if (st) p.pos = [st.x, st.z]; });
   for (const p of PROJECTS) {
     const g = new THREE.Group();
-    g.position.set(p.pos[0], 0, p.pos[1]);
+    g.position.set(p.pos[0], Math.max(0, heightAt(p.pos[0], p.pos[1])), p.pos[1]);
+    g.scale.setScalar(0.62);   // 숲 길 폭에 맞춘 크기
     const col = new THREE.Color(p.color);
 
-    /* 어두운 노면 위라 패드는 깔고, 테두리만 네온으로 띄운다 */
-    const pad = new THREE.Mesh(
-      new THREE.CylinderGeometry(PAD_R, PAD_R, 0.22, 44),
-      new THREE.MeshStandardMaterial({ color: col.clone().multiplyScalar(0.38), roughness: .9 })
-    );
-    pad.position.y = 0.11; pad.receiveShadow = true;
-    g.add(pad);
+    /* ── 노점상 손수레 ──
+       가판대는 도로를 정면으로 보고 고정된다. 간판(face)만 따로 카메라를 향해 돈다. */
+    g.rotation.y = Math.atan2(pathX(p.pos[1]) - p.pos[0], 0.0001);   // 길 쪽을 본다
+    const wood = new THREE.MeshStandardMaterial({ color: 0x8a4a26, roughness: .85 });
+    const woodDark = new THREE.MeshStandardMaterial({ color: 0x4a2817, roughness: .9 });
+    const cream = new THREE.MeshStandardMaterial({ color: 0xfff1d8, roughness: .7 });
+    const paint = new THREE.MeshStandardMaterial({ color: col, roughness: .55 });
+    const add = (geo, mat, x, y, z, parent = g) => {
+      const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z);
+      m.castShadow = true; m.receiveShadow = true; parent.add(m); return m;
+    };
 
-    /* MeshBasic + fog:false — 조명·안개와 무관하게 항상 같은 밝기로 빛난다 */
+    /* 바닥에 깔린 색 원 — 가까이 가면 살짝 숨 쉬듯 커진다 */
     const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(PAD_R + 0.5, 0.16, 8, 56),
-      new THREE.MeshBasicMaterial({ color: col, fog: false })
+      new THREE.RingGeometry(PAD_R - 0.6, PAD_R, 48),
+      new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: .55, fog: false })
     );
-    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.3;
+    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.04;
     g.add(ring);
 
-    /* 패드마다 은은한 색광 — 멀리서도 어느 프로젝트인지 구분된다 */
-    const glow = new THREE.PointLight(col, 18, 26, 2);
-    glow.position.set(0, 3.4, 0);
+    /* 수레 몸통 + 색 띠 + 상판 */
+    add(new THREE.BoxGeometry(7, 1.5, 2.2), wood, 0, 1.05, 0);
+    add(new THREE.BoxGeometry(7.04, 0.45, 2.24), paint, 0, 1.25, 0);
+    add(new THREE.BoxGeometry(7.6, 0.18, 2.7), woodDark, 0, 1.88, 0.1);
+    /* 바퀴 두 개 */
+    for (const dx of [-2.6, 2.6]) {
+      const wh = add(new THREE.CylinderGeometry(0.62, 0.62, 0.25, 16), woodDark, dx, 0.62, 1.2);
+      wh.rotation.x = Math.PI / 2;
+    }
+    /* 기둥 네 개 */
+    for (const dx of [-3.4, 3.4]) for (const dz of [-0.9, 1.1]) add(new THREE.BoxGeometry(0.16, 2.6, 0.16), wood, dx, 3.1, dz);
+    /* 줄무늬 차양 — 앞으로 기울어진 판 여러 장 */
+    for (let i = 0; i < 9; i++) {
+      const a = add(new THREE.BoxGeometry(0.86, 0.08, 3.2), i % 2 ? cream : paint, -3.45 + i * 0.86, 4.55, 0.4);
+      a.rotation.x = 0.22;
+    }
+    /* 차양 끝 물결 장식 */
+    for (let i = 0; i < 9; i++) {
+      const f = add(new THREE.ConeGeometry(0.43, 0.42, 3), i % 2 ? cream : paint, -3.45 + i * 0.86, 4.08, 2.0);
+      f.rotation.set(Math.PI, Math.PI / 6, 0);
+    }
+    /* 전구 줄 */
+    const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffd98a, fog: false });
+    for (let i = 0; i < 11; i++) {
+      const x = -3.5 + i * 0.7;
+      add(new THREE.SphereGeometry(0.11, 8, 6), bulbMat, x, 3.86 - Math.sin(i / 10 * Math.PI) * 0.22, 2.15);
+    }
+    /* 상판 위 소품 — 상자와 번호판 */
+    add(new THREE.BoxGeometry(0.9, 0.7, 0.8), wood, -2.4, 2.32, 0.3).rotation.y = 0.3;
+    add(new THREE.BoxGeometry(0.7, 0.55, 0.7), paint, -1.55, 2.25, 0.5).rotation.y = -0.2;
+    add(new THREE.BoxGeometry(1.1, 0.8, 0.9), wood, 4.3, 0.4, 1.6).rotation.y = 0.5;
+    add(new THREE.BoxGeometry(0.8, 0.6, 0.7), paint, 4.6, 1.1, 1.5).rotation.y = 0.2;
+
+    /* 따뜻한 가판대 불빛 */
+    const glow = new THREE.PointLight(0xffb070, 14, 18, 2);
+    glow.position.set(0, 3.6, 1.6);
     g.add(glow);
 
+    /* 간판은 수레 뒤에 서서 카메라를 향해 돈다 */
+    const face = new THREE.Group();
+    face.position.set(0, 0, -2.6);
+    g.add(face);
     const boardW = 9.4, boardH = 5.9;
-    const postMat = new THREE.MeshStandardMaterial({ color: 0x241634, roughness: .85 });
-    for (const dx of [-3.4, 3.4]) {
-      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 4.6, 10), postMat);
-      post.position.set(dx, 2.3, 0); post.castShadow = true;
-      g.add(post);
-    }
-
+    for (const dx of [-3.4, 3.4]) add(new THREE.BoxGeometry(0.28, 5.2, 0.28), woodDark, dx, 2.6, -0.2, face);
     const frame = new THREE.Mesh(
-      new THREE.BoxGeometry(boardW + 0.5, boardH + 0.5, 0.3),
-      new THREE.MeshStandardMaterial({ color: 0x1a1030, roughness: .85 })
+      new THREE.BoxGeometry(boardW + 0.7, boardH + 0.7, 0.3),
+      woodDark
     );
-    frame.position.set(0, 4.6 + boardH / 2 - 0.4, 0);
+    frame.position.set(0, 5.1 + boardH / 2, 0);
     frame.castShadow = true;
-    g.add(frame);
-
-    /* 게시판 둘레 네온 띠 */
-    const edge = new THREE.Mesh(
-      new THREE.BoxGeometry(boardW + 0.9, boardH + 0.9, 0.16),
-      new THREE.MeshBasicMaterial({ color: col, fog: false })
-    );
-    edge.position.set(0, frame.position.y, -0.08);
-    g.add(edge);
+    face.add(frame);
+    /* 간판 테두리는 프로젝트 색 페인트 */
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(boardW + 1.1, boardH + 1.1, 0.16), paint);
+    edge.position.set(0, frame.position.y, -0.1);
+    face.add(edge);
 
     const screenMat = new THREE.MeshBasicMaterial({ color: 0xdfe6ea });
     const screen = new THREE.Mesh(new THREE.PlaneGeometry(boardW, boardH), screenMat);
     screen.position.set(0, frame.position.y, 0.17);
-    g.add(screen);
+    face.add(screen);
 
     /* 정지 이미지를 먼저 붙인다. 영상만 쓰면 재생 시작 전까지 게시판이 검게 남고,
        자동재생이 막힌 환경(절전 모드 등)에서는 영원히 검은 판이 된다. */
@@ -734,76 +883,10 @@ async function initDrive() {
 
     const label = labelSprite(p.name, p.role, p.color);
     label.position.set(0, frame.position.y + boardH / 2 + 2.1, 0);
-    g.add(label);
+    face.add(label);
 
     scene.add(g);
-    stations.push({ ...p, group: g, ring, label, labelY: label.position.y, phase: Math.random() * Math.PI * 2 });
-  }
-
-  /* ── 도로변 ──
-     야자수는 해를 등지고 실루엣으로, 가로등은 네온으로 리듬을 만든다.
-     무작위로 흩뿌리지 않고 도로를 따라 일정 간격으로 세운다. */
-  {
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x2a1b3d, roughness: 1 });
-    const frondMat = new THREE.MeshStandardMaterial({ color: 0x3d2a52, roughness: 1 });
-    const poleMat = new THREE.MeshStandardMaterial({ color: 0x241634, roughness: .85 });
-
-    const trunkGeo = new THREE.CylinderGeometry(0.2, 0.34, 7.5, 7);
-    const frondGeo = new THREE.ConeGeometry(0.55, 3.4, 5);
-    const poleGeo = new THREE.CylinderGeometry(0.16, 0.2, 7, 6);
-    const armGeo = new THREE.BoxGeometry(2.2, 0.18, 0.18);
-    const lampGeo = new THREE.BoxGeometry(1.5, 0.22, 0.5);
-
-    const palm = (x, z, s) => {
-      const g = new THREE.Group();
-      const tr = new THREE.Mesh(trunkGeo, trunkMat);
-      tr.position.y = 3.75; tr.rotation.z = (Math.random() - .5) * 0.16; tr.castShadow = true;
-      g.add(tr);
-      for (let i = 0; i < 7; i++) {
-        const f = new THREE.Mesh(frondGeo, frondMat);
-        const a = (i / 7) * Math.PI * 2;
-        f.position.set(Math.cos(a) * 1.15, 7.3, Math.sin(a) * 1.15);
-        f.rotation.set(Math.PI / 2.4 * Math.cos(a + Math.PI / 2), 0, Math.PI / 2.4 * -Math.sin(a + Math.PI / 2));
-        f.rotation.x += Math.PI;      // 잎이 바깥·아래로 처지게
-        f.castShadow = true;
-        g.add(f);
-      }
-      g.position.set(x, 0, z);
-      g.scale.setScalar(s);
-      g.rotation.y = Math.random() * Math.PI;
-      scene.add(g);
-    };
-
-    const lamp = (x, z, dir, col) => {
-      const g = new THREE.Group();
-      const p = new THREE.Mesh(poleGeo, poleMat);
-      p.position.y = 3.5; p.castShadow = true;
-      const arm = new THREE.Mesh(armGeo, poleMat);
-      arm.position.set(dir * 1.1, 6.9, 0);
-      const head = new THREE.Mesh(lampGeo, new THREE.MeshBasicMaterial({ color: col, fog: false }));
-      head.position.set(dir * 2.05, 6.78, 0);
-      g.add(p, arm, head);
-      g.position.set(x, 0, z);
-      scene.add(g);
-      /* 실제 광원은 달지 않는다. 가로등까지 점광원으로 만들면 씬 전체 광원이
-         20개 가까이 되어 저사양 기기에서 프레임이 무너진다. 발광 재질로 충분하다. */
-    };
-
-    /* 가로등: 도로를 따라 좌우 교대 */
-    let side = 1;
-    for (let z = BOUND.zMax - 8; z > BOUND.zMin + 6; z -= 26) {
-      lamp(side * (ROAD_HALF + 1.6), z, -side, side > 0 ? NEON_PINK : NEON_CYAN);
-      side *= -1;
-    }
-
-    /* 야자수: 도로 바깥쪽, 게시판을 가리지 않게 */
-    for (let z = BOUND.zMax - 4; z > BOUND.zMin; z -= 13) {
-      for (const sx of [-1, 1]) {
-        const x = sx * (ROAD_HALF + 13 + Math.random() * 16);
-        if (!stations.every(s => Math.hypot(x - s.pos[0], z - s.pos[1]) > PAD_R + 8)) continue;
-        palm(x, z + (Math.random() - .5) * 6, 0.75 + Math.random() * 0.5);
-      }
-    }
+    stations.push({ ...p, group: g, face, ring, label, labelY: label.position.y, phase: Math.random() * Math.PI * 2 });
   }
 
   /* ── 조작 ── */
@@ -818,6 +901,14 @@ async function initDrive() {
 
   addEventListener('keydown', e => {
     if (!driveActive) return;                 // 문서 뷰에서는 키를 가로채지 않는다
+    /* 프로젝트 창이 떠 있으면 Space·Esc로 닫기만 하고 운전 입력은 받지 않는다 */
+    if (panelOpen()) {
+      if (e.code === 'Space' || e.code === 'Escape') { e.preventDefault(); closePanel(); }
+      return;
+    }
+    /* 게시판 근처에서 Space는 브레이크가 아니라 "프로젝트 보기" */
+    if (e.code === 'Space' && promptFor) { e.preventDefault(); openPanel(promptFor); hideHint(); return; }
+    if (e.code === 'KeyR') { e.preventDefault(); restackBlocks(); return; }
     const k = KEYMAP[e.code];
     if (k) { keys[k] = true; e.preventDefault(); hideHint(); }
     if (e.code === 'KeyF') { e.preventDefault(); toggleVehicle(); hideHint(); }
@@ -839,9 +930,10 @@ async function initDrive() {
   });
 
   /* ── 주행 ── */
-  const MAX_FWD = 26, MAX_REV = 11, ACCEL = 19, BRAKE = 38, DRAG = 7.5, TURN = 1.75;
+  const MAX_FWD = 15, MAX_REV = 7, ACCEL = 12, BRAKE = 30, DRAG = 6, TURN = 1.9;
   let speed = 0, heading = Math.PI, steer = 0;
-  car.position.set(0, 0, 14);
+  const START_Z = WORLD.start.z;
+  car.position.set(pathX(START_Z), 0, START_Z);
 
   function drive(dt) {
     const want = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
@@ -866,6 +958,7 @@ async function initDrive() {
     car.position.z += Math.cos(heading) * speed * dt;
 
     if (clampToBounds(car.position)) speed *= 0.3;
+    car.position.y += (groundY(car.position.x, car.position.z) - car.position.y) * Math.min(1, dt * 12);
     car.rotation.y = heading;
 
     for (const w of parts.wheels) {
@@ -926,7 +1019,7 @@ async function initDrive() {
       limbs.legR.rotation.x = -swing;
       limbs.armL.rotation.x = -swing * 0.75;
       limbs.armR.rotation.x = swing * 0.75;
-      person.position.y = Math.abs(Math.sin(bob)) * 0.06 * moving;
+      person.position.y = groundY(person.position.x, person.position.z) + Math.abs(Math.sin(bob)) * 0.06 * moving;
     }
   }
 
@@ -979,6 +1072,10 @@ async function initDrive() {
     hint.innerHTML = `
       <div class="keys"><span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span></div>
       <span>${driving ? '운전해서 프로젝트에 가까이 가보세요' : '뛰어서 돌아다닐 수 있습니다'}</span>
+      <div class="keys"><span class="key">Space</span></div>
+      <span>자세히 보기</span>
+      <div class="keys"><span class="key">R</span></div>
+      <span>블록 다시 쌓기</span>
       <div class="keys"><span class="key">F</span></div>
       <span>${driving ? '내려서 걷기' : '차 타기'}</span>`;
   }
@@ -991,15 +1088,21 @@ async function initDrive() {
   const foundL = document.getElementById('g-found-l');
   const foundN = document.getElementById('g-found-n');
 
-  let current = null, dismissed = null;
+  let current = null, promptFor = null;
   const visited = new Set();
+  const dim = document.getElementById('g-dim');
+  const prompt = document.getElementById('g-prompt');
+  const promptName = prompt.querySelector('.nm');
+  const panelOpen = () => panel.classList.contains('open');
 
   function closePanel() {
     panel.classList.remove('open');
-    dismissed = current;
+    dim.classList.remove('on');
     current = null;
   }
   panel.querySelector('.x').addEventListener('click', closePanel);
+  dim.addEventListener('click', closePanel);
+  prompt.addEventListener('click', () => { if (promptFor) openPanel(promptFor); });
 
   /* ── 패널 너비 조절 ──
      왼쪽 가장자리를 드래그하거나, 손잡이에 초점을 두고 좌우 방향키로 조절한다.
@@ -1094,7 +1197,12 @@ async function initDrive() {
     const m = pnBd.querySelector('.shot > *');
     if (m) { m.className = 'shot'; pnBd.querySelector('.shot').replaceWith(m); }
     pnBd.scrollTop = 0;   // 다른 프로젝트로 넘어왔을 때 이전 스크롤 위치가 남지 않게
+    /* 창을 여는 순간 차·캐릭터를 세운다. 누르고 있던 키가 남아 창 뒤에서 계속 달리지 않게 */
+    for (const k in keys) keys[k] = false;
+    speed = 0; pSpeed = 0;
+    prompt.hidden = true;
     panel.classList.add('open');
+    dim.classList.add('on');
     if (!visited.has(p.id)) { visited.add(p.id); renderFound(); }
   }
 
@@ -1112,7 +1220,7 @@ async function initDrive() {
   /* 게시판은 도로 중앙에서 17유닛 떨어져 있다. 판정을 패드 언저리로 잡으면
      직진만 해서는 아무것도 열리지 않고 매번 길 밖으로 빠져야 한다.
      고속도로 광고판처럼 지나가면서 차례로 뜨도록 도로 폭을 덮는 거리로 잡는다. */
-  const ENTER_R = PAD_R + 11, LEAVE_R = PAD_R + 17;
+  const ENTER_R = 9, LEAVE_R = 13;   // 길 위로 지나가면 안내가 뜨는 거리
 
   /* 지금 조종 중인 쪽(차 또는 캐릭터)의 위치 */
   const activePos = () => (player.mode === 'onfoot' ? person.position : car.position);
@@ -1124,10 +1232,25 @@ async function initDrive() {
       const d = Math.hypot(me.x - s.pos[0], me.z - s.pos[1]);
       if (d < nearD) { nearD = d; near = s; }
     }
-    if (!near) return;
-    if (dismissed && (dismissed !== near.id || nearD > LEAVE_R)) dismissed = null;
-    if (nearD < ENTER_R && current !== near.id && dismissed !== near.id) openPanel(near);
+    /* 자동으로 열지 않는다. 가까이 오면 게시판 위에 "Space" 안내만 띄운다 */
+    promptFor = near && nearD < ENTER_R ? near : null;
+    if (!promptFor || panelOpen()) { prompt.hidden = true; return; }
+    if (prompt.hidden || prompt.dataset.id !== promptFor.id) {
+      prompt.dataset.id = promptFor.id;
+      prompt.style.setProperty('--c', promptFor.color);
+      promptName.textContent = promptFor.name;
+      prompt.hidden = false;
+    }
+    /* 게시판 이름표 바로 위 화면 좌표에 붙인다 */
+    promptFor.label.getWorldPosition(promptPt);
+    promptPt.y += 1.6;
+    promptPt.project(camera);
+    const x = (promptPt.x * 0.5 + 0.5) * innerWidth, y = (-promptPt.y * 0.5 + 0.5) * innerHeight;
+    const onScreen = promptPt.z < 1 && x > 90 && x < innerWidth - 90 && y > 70;
+    prompt.style.left = (onScreen ? x : innerWidth / 2) + 'px';
+    prompt.style.top = (onScreen ? Math.min(y, innerHeight - 120) : innerHeight - 110) + 'px';
   }
+  const promptPt = new THREE.Vector3();
 
   /* ── 카메라 ──
      차일 땐 멀찍이 높게, 도보일 땐 가깝고 낮게 따라붙는다. */
@@ -1137,7 +1260,7 @@ async function initDrive() {
   camera.position.copy(camPos);
 
   const CAM = {
-    driving: { back: 13.5, up: 6.6, ahead: 6, lookY: 1.6, ease: 0.0016 },
+    driving: { back: 10.5, up: 5.4, ahead: 5, lookY: 1.4, ease: 0.0016 },
     onfoot:  { back: 7.2,  up: 3.9, ahead: 3, lookY: 1.3, ease: 0.0006 }
   };
 
@@ -1148,11 +1271,11 @@ async function initDrive() {
     const h = onFoot ? camYaw : heading;
     const k = 1 - Math.pow(c.ease, dt);
 
-    camTarget.set(p.x - Math.sin(h) * c.back, c.up, p.z - Math.cos(h) * c.back);
+    camTarget.set(p.x - Math.sin(h) * c.back, p.y + c.up, p.z - Math.cos(h) * c.back);
     camPos.lerp(camTarget, k);
     camera.position.copy(camPos);
 
-    camTarget.set(p.x + Math.sin(h) * c.ahead, c.lookY, p.z + Math.cos(h) * c.ahead);
+    camTarget.set(p.x + Math.sin(h) * c.ahead, p.y + c.lookY, p.z + Math.cos(h) * c.ahead);
     camLook.lerp(camTarget, k);
     camera.lookAt(camLook);
   }
@@ -1165,6 +1288,9 @@ async function initDrive() {
     t += dt;
     if (player.mode === 'driving') drive(dt);
     else walk(dt);
+    physicsStep(dt);
+    timeU.value = t;
+    fallingLeaves(dt, t, activePos().x, activePos().z);
     updateCamera(dt);
     proximity();
 
@@ -1172,8 +1298,11 @@ async function initDrive() {
     for (const s of stations) {
       /* 캐릭터나 차가 아니라 카메라를 향하게 한다. 패드 한가운데에 서면 방향이
          0으로 붕괴해 게시판 뒷면이 보인다. 카메라는 늘 뒤쪽이라 각도가 안정적이다. */
-      const ang = Math.atan2(camera.position.x - s.pos[0], camera.position.z - s.pos[1]);
-      s.group.rotation.y += (ang - s.group.rotation.y) * Math.min(1, dt * 2.4);
+      /* 수레는 고정, 간판만 카메라 쪽으로 돈다 (수레 자체 회전을 빼서 지역 각도로 바꾼다) */
+      let ang = Math.atan2(camera.position.x - s.pos[0], camera.position.z - s.pos[1]) - s.group.rotation.y;
+      ang = Math.atan2(Math.sin(ang), Math.cos(ang));
+      ang = Math.max(-1.2, Math.min(1.2, ang));   // 뒤돌아 수레를 등지지 않게 제한
+      s.face.rotation.y += (ang - s.face.rotation.y) * Math.min(1, dt * 2.4);
       const d = Math.hypot(me.x - s.pos[0], me.z - s.pos[1]);
       const pulse = d < ENTER_R + 6 ? 1 + Math.sin(t * 4) * 0.035 : 1;
       s.ring.scale.set(pulse, pulse, 1);
@@ -1214,7 +1343,7 @@ async function initDrive() {
 
   if (new URLSearchParams(location.search).has('test')) {
     window.__drive = {
-      step, keys, stations,
+      step, keys, stations, toyBlocks: () => toyBlocks.map(b => ({ x: +b.body.position.x.toFixed(2), y: +b.body.position.y.toFixed(2), z: +b.body.position.z.toFixed(2) })), restackBlocks,
       pos: () => ({ x: +activePos().x.toFixed(2), z: +activePos().z.toFixed(2) }),
       teleport(x, z, h = 0) {
         const p = activePos();
