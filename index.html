@@ -148,6 +148,16 @@ body[data-view="drive"] #doc-root{display:none}
 #doc-root .lk a.live:hover{background:#09202f;border-color:#09202f;color:#fff}
 
 
+#doc-root #d-aiz .sh-d b{color:var(--text);font-weight:600}
+#doc-root #d-aiz .pj{border-color:color-mix(in srgb,#8b6cff 35%,var(--line))}
+#doc-root #d-aiz .pj-no{color:#7a5cf0}
+#doc-root #d-aiz .pj-role{color:#6b4fe0;background:rgba(139,108,255,.12)}
+#doc-root .pj-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:14px}
+#doc-root .pj-stats div{background:var(--sunk);border-radius:10px;padding:10px 12px}
+#doc-root .pj-stats dt{font-size:18px;font-weight:800;letter-spacing:-.02em}
+#doc-root .pj-stats dd{font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.4}
+#doc-root .ai-h{font-size:15px;font-weight:700;margin:30px 0 12px;letter-spacing:-.01em}
+@media(max-width:640px){#doc-root .pj-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 #doc-root #d-play{background:var(--sunk)}
 #doc-root .pg{display:grid;grid-template-columns:repeat(auto-fit,minmax(252px,1fr));gap:16px}
 #doc-root .pgc{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:19px 20px}
@@ -324,6 +334,37 @@ body.is-touch #g-found{bottom:150px;padding:10px 12px}
 #g-panel .sec-t{font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--c,#e8734a);margin:4px 0 9px}
 #g-panel .sec ul{margin-bottom:14px}
 
+
+/* ── 배경음악 ── */
+.g-music-btn{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font:inherit}
+.g-music-btn[aria-pressed="false"]{opacity:.62}
+.g-music-btn[aria-pressed="false"] svg{opacity:.5}
+#g-music{position:fixed;right:0;bottom:0;width:200px;height:200px;z-index:-1;opacity:0;pointer-events:none;overflow:hidden}
+#g-music iframe{width:200px;height:200px;border:0}
+body[data-view="doc"] #g-music{display:none}
+body[data-view="doc"] #g-intro{display:none}
+
+/* ── 영화 인트로 ── */
+#g-intro{position:fixed;inset:0;z-index:95;background:#07060b;color:#f4ede4;display:grid;place-items:center;
+  transition:opacity .9s ease;font-family:Pretendard,system-ui,sans-serif}
+#g-intro.out{opacity:0;pointer-events:none}
+#g-intro .cards{position:relative;width:min(640px,90vw);height:60vh}
+#g-intro .card{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:44px;
+  text-align:center;opacity:0;transform:translateY(10px);filter:blur(4px);transition:opacity 1s ease,transform 1.4s ease,filter 1s ease}
+#g-intro .card.on{opacity:1;transform:none;filter:none}
+#g-intro .pair{display:flex;flex-direction:column;align-items:center;gap:14px}
+#g-intro .k{font-size:13px;letter-spacing:.42em;color:#c9a27a;font-weight:600;padding-left:.42em}
+#g-intro .v{font-size:clamp(34px,6vw,58px);font-weight:800;letter-spacing:-.02em;line-height:1.15}
+#g-intro .v.list{font-size:clamp(16px,2.3vw,22px);font-weight:600;line-height:1.7;letter-spacing:0}
+#g-intro .v.sm{font-size:clamp(26px,4vw,40px)}
+#g-intro .v span{display:block;margin-top:8px;font-size:14px;font-weight:500;color:#a99c8e;letter-spacing:0}
+#g-intro .title .v{font-size:clamp(44px,8vw,80px)}
+#g-intro .title .k{letter-spacing:.3em}
+#g-intro .skip{position:absolute;right:max(20px,env(safe-area-inset-right,0px));bottom:22px;background:none;border:1px solid rgba(244,237,228,.25);
+  color:#cfc4b8;font:500 13px/1 Pretendard,system-ui,sans-serif;padding:9px 14px;border-radius:999px;cursor:pointer}
+#g-intro .skip:hover{border-color:rgba(244,237,228,.6);color:#fff}
+@media(prefers-reduced-motion:reduce){#g-intro .card{transition:opacity .3s}}
+
 /* ── 가까이 가면 뜨는 "Space" 안내 + 가운데 큰 프로젝트 창 ── */
 #g-prompt{position:fixed;left:0;top:0;z-index:42;transform:translate(-50%,-100%);
   display:flex;align-items:center;gap:9px;padding:9px 15px 9px 9px;border-radius:999px;
@@ -386,6 +427,7 @@ body.is-touch #g-prompt .space{display:none}
       <nav class="hd-nav">
         <a href="#d-skills">기술</a>
         <a href="#d-work">프로젝트</a>
+        <a href="#d-aiz">AI 활용</a>
         <a href="#d-play">사이드</a>
         <a href="#d-contact">연락</a>
         <button class="swap" data-go="drive" type="button">
@@ -442,6 +484,17 @@ body.is-touch #g-prompt .space{display:none}
       </div>
     </section>
 
+    <section id="d-aiz">
+      <div class="wrap">
+        <div class="sh">
+          <div class="sh-k">AI</div>
+          <h2>AI 활용</h2>
+          <p class="sh-d">AI에게 구현을 맡길 때는 <b>일을 나누고, 결과를 스스로 확인하게 하고, 근거 없는 "완료"를 돌려보내는 것</b>까지 제 일이라고 생각합니다.</p>
+        </div>
+        <div id="d-ai"></div>
+      </div>
+    </section>
+
     <section id="d-play">
       <div class="wrap">
         <div class="sh">
@@ -488,9 +541,61 @@ body.is-touch #g-prompt .space{display:none}
 
 <!-- ══════════ 게임 뷰 ══════════ -->
 <div id="drive-root">
+  <!-- 영화 인트로 — 페이지가 열리자마자 크레딧 3장면을 띄우고, 그동안 뒤에서 3D가 로딩된다.
+       클릭·Space·Enter·Esc로 건너뛴다. 같은 방문(탭)에서는 한 번만 나온다. -->
+  <div id="g-intro">
+    <div class="cards">
+      <div class="card">
+        <div class="pair"><div class="k">제작</div><div class="v">최상호</div></div>
+        <div class="pair"><div class="k">프로젝트</div><div class="v list">놀러온나 · Trade-Cmarket · RE:BOOT<br>Myeonjeop-Mate · IGNIS · LOL Face Matcher</div></div>
+      </div>
+      <div class="card">
+        <div class="pair"><div class="k">개발</div><div class="v">Claude</div></div>
+        <div class="pair"><div class="k">음악</div><div class="v sm">한석봉 ASMR<span>중세시대 선술집 Ambience</span></div></div>
+      </div>
+      <div class="card title"><div class="v">최상호</div><div class="k">Full-stack Developer</div></div>
+    </div>
+    <button class="skip" type="button">건너뛰기 ›</button>
+  </div>
+  <script>
+  (() => {
+    const el = document.getElementById('g-intro');
+    let seen = false;
+    try { seen = sessionStorage.getItem('portfolio.intro') === '1'; } catch (e) {}
+    const docFirst = /^#(doc|top|d-)/.test(location.hash);
+    if (seen || docFirst || new URLSearchParams(location.search).has('test')) { el.remove(); return; }
+    try { sessionStorage.setItem('portfolio.intro', '1'); } catch (e) {}
+    const cards = [...el.querySelectorAll('.card')];
+    const HOLD = [3200, 2600, 2300];
+    const timers = [];
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      timers.forEach(clearTimeout);
+      el.classList.add('out');
+      removeEventListener('keydown', onKey, true);
+      setTimeout(() => el.remove(), 950);
+    };
+    function onKey(e) {
+      e.stopImmediatePropagation();               /* 인트로 중엔 차가 움직이지 않게 */
+      if (['Space', 'Enter', 'Escape'].includes(e.code)) { e.preventDefault(); finish(); }
+    }
+    addEventListener('keydown', onKey, true);
+    el.addEventListener('click', finish);
+    let t = 250;
+    cards.forEach((c, i) => {
+      timers.push(setTimeout(() => c.classList.add('on'), t));
+      t += HOLD[i];
+      if (i < cards.length - 1) timers.push(setTimeout(() => c.classList.remove('on'), t));
+      t += 650;
+    });
+    timers.push(setTimeout(finish, t + 200));
+  })();
+  </script>
   <div id="g-load">
     <div class="n">최상호</div>
-    <div class="s">차를 몰고 돌아다니는 포트폴리오를 준비하고 있습니다</div>
+    <div class="s">프로젝트가 있는 가을 숲길을 불러오는 중이에요</div>
     <div class="bar"><i></i></div>
     <div class="p">0%</div>
   </div>
@@ -503,6 +608,10 @@ body.is-touch #g-prompt .space{display:none}
     </button>
     <div class="g-brand"><b>최상호</b><span>Full-stack Developer</span></div>
     <span class="sp"></span>
+    <button class="g-btn g-music-btn" id="g-music-btn" type="button" aria-pressed="true" title="배경음악 켜기/끄기 — ♪ 중세시대 선술집 Ambience · 한석봉 ASMR (YouTube)">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+      <span>음악 켜짐</span>
+    </button>
     <a class="g-btn" href="mailto:maeguming0000@gmail.com">연락하기</a>
   </div>
 
@@ -519,6 +628,9 @@ body.is-touch #g-prompt .space{display:none}
 
   <button id="g-prompt" type="button" hidden><span class="space">SPACE</span><span>프로젝트 보기</span><span class="nm"></span></button>
   <div id="g-dim"></div>
+  <!-- 배경음악: 유튜브 플레이어로 재생하되 화면에는 보이지 않게 둔다.
+       출처: 한석봉 ASMR — [ASMR] 유럽 중세시대 선술집 (https://youtu.be/FysE1sMun5s) -->
+  <div id="g-music" class="off" aria-hidden="true"><div id="g-music-player"></div></div>
 
   <div id="g-touch">
     <div class="tpad"><div class="tkey" data-k="left">◀</div><div class="tkey" data-k="right">▶</div></div>

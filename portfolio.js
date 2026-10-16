@@ -182,7 +182,58 @@ const PROJECTS = [
     img: 'images/lol.png',
     repo: 'https://github.com/aabyess/lol-face-matcher2',
     pos: [17, -126]
+  },
+  /* ai: true 인 프로젝트는 문서 뷰에서 "AI 활용" 구역에 따로 놓이고,
+     게임에서는 가판대 6곳이 아니라 다리 앞 AI 구역(pos)에 선다. */
+  {
+    id: 'gurandi', no: 'AI', color: '#8b6cff', ai: true,
+    name: '구랜디',
+    full: '구랜디 (GuRandi) — AI 에이전트 팀으로 만든 3D 랜덤 디펜스',
+    period: '2026.08 — 진행 중 (베타 0.3.24)', role: '취미 프로젝트 · AI 에이전트 팀 운영',
+    one: '워크래프트3 유즈맵 「원피스 랜덤 디펜스」를 <b>Unity 6로 옮긴 최대 4인 협동 랜덤 디펜스</b>입니다. 위습을 뽑기 포탈에 보내 무작위 유닛을 얻고, 재료를 모아 13단계 상위 등급으로 조합합니다. <b>기획·지시·검증·배포 판단은 제가 하고, 구현은 Claude Code 에이전트 4명으로 꾸린 팀</b>이 맡았습니다. 유닛 240여 기, 스킬 950여 개, 난이도 6종, 스토리 보스를 갖췄고 친구들에게 맥·윈도우 베타를 30여 회 배포했습니다.',
+    mine: [
+      '<b>AI 팀 설계</b>: 세션 4개를 PM(Opus)·게임 규칙·UI·3D 모델(Sonnet)로 나눴습니다. PM이 일을 나누고 리뷰·병합·push를 맡고, 지시와 보고는 「[PM → 역할]」 「[역할 → PM]」 형식으로 고정했습니다. 스크립트 한 줄로 팀원 셋을 새로 띄웁니다.',
+      '<b>하루 단위 인수인계</b>: 세션이 끝날 때 PM이 NEXT_SESSION.md에 끝난 일·막힌 일·제 답을 기다리는 일을 정리하고, 다음 날 새 PM이 한 줄 지시로 그대로 이어받게 했습니다. 제 결정과 반복된 실수는 한 사실당 파일 하나로 메모리 140여 개에 쌓았습니다.',
+      '<b>AI가 스스로 확인하는 환경</b>: AI가 파일에 명령을 쓰면 Unity 에디터가 플레이·클릭·자동 플레이·캡처를 실행하고 결과를 돌려주는 <b>에디터 브리지</b>, 에디터 없이 C# 컴파일 오류만 뽑는 검사, 깨진 프리팹·누락 에셋을 빌드 전에 막는 배포 관문을 먼저 만들었습니다.',
+      '<b>원본 데이터 디코더</b>: 원작 맵 파일(w3x)의 유닛·능력 데이터(w3u·w3a)와 트리거(JASS)를 직접 읽어 수치를 옮기게 했습니다.',
+      '<b>요금제 안에서 운영</b>: 월 $100 요금제로 4세션을 돌리려고 판단·리뷰는 Opus, 반복 구현은 Sonnet으로 나눴고, 대화가 길어지면 PM이 스스로 인수인계를 쓰고 새 세션으로 교체합니다.'
+    ],
+    pts: [
+      'AI가 도구 출력의 이름표만 보고 「고쳤습니다」라고 한 <b>틀린 완료 보고 4건</b>을 잡고, 보고는 실행 캡처·테스트·원본 수치를 근거로만 하도록 규칙을 세웠습니다.',
+      '이전 세션이 쓴 조사 문서의 수치를 사실로 믿고 밸런스를 맞춘 문제를 찾아, <b>원본 디코드 값만 근거로 240여 기를 다시 대조해 80여 기를 바로잡았습니다.</b>',
+      '여러 세션이 한 저장소에 동시에 커밋하며 변경이 섞이던 문제를 <b>경로 지정 커밋과 git worktree 분리</b>로 해결했습니다.',
+      '컨텍스트가 압축되면 확정된 결정을 잊던 문제를 결정은 메모리, 진행 상태는 NEXT_SESSION.md로 나눠 남기는 방식으로 막았습니다.'
+    ],
+    stats: [['3,331', '커밋 (AI 공동 작성 2,893)'], ['9.4만 줄', 'C# (런타임 + 에디터 도구)'], ['4명', 'Claude Code 에이전트'], ['30여 회', '친구 대상 베타 배포']],
+    stack: ['Unity 6 (URP)', 'C#', 'Photon Fusion', 'Claude Code', 'Opus · Sonnet', 'Blender MCP', 'Python'],
+    img: 'images/gurandi-combat_skill_effect.jpg',
+    gallery: [
+      { video: 'images/gurandi-flow.mp4', poster: 'images/gurandi-flow.jpg', cap: '위습 → 뽑기 → 조합 흐름 (AI 에이전트가 자동 플레이로 녹화)' },
+      { src: 'images/gurandi-combat_skill_effect.jpg', cap: '스킬 전투' },
+      { src: 'images/gurandi-boss_round.jpg', cap: '보스 라운드' },
+      { src: 'images/gurandi-combine_table.jpg', cap: '조합표 — 유닛 240여 기' },
+      { src: 'images/gurandi-title_menu.jpg', cap: '타이틀 · 혼자 하기 / 같이 하기' }
+    ],
+    repo: 'https://github.com/aabyess/GuRandi-AI-Dev',
+    pos: [-4.6, -10.5]
   }
+];
+
+/* AI를 어떻게 쓰는지 — 문서 뷰 "AI 활용" 구역의 작은 카드들.
+   how: 'dev' 는 AI와 함께 개발한 것, 'feat' 은 AI를 기능으로 넣은 것 */
+const AI_USE = [
+  { how: 'dev', icon: '🚗', name: '이 포트폴리오', tools: ['Claude Code', 'Blender MCP', 'Headless Chrome'],
+    desc: '가을 숲 월드는 Claude Code가 Blender MCP로 지형·나무·가판대 자리를 만들고, 웹 코드는 같은 세션이 작성했습니다. 고칠 때마다 헤드리스 Chrome으로 화면을 찍어 AI가 결과를 직접 보고 확인한 뒤 PR로 올리게 했습니다.' },
+  { how: 'dev', icon: '🪰', name: 'FlyKing — 초파리 뇌 × Blender 몸', tools: ['Claude Code', 'Blender', 'Python', 'Brian2'],
+    desc: '초파리 전뇌 커넥톰 시뮬레이션(Shiu et al. 2024, 공개 모델)을 Blender로 만든 초파리 몸(뼈 61개, NeuroMechFly 규격)에 연결하는 실험입니다. 몸 생성·리깅 스크립트와 걷기·몸단장 클립까지 AI와 함께 만들었습니다.' },
+  { how: 'feat', icon: '🌊', name: '놀러온나 — AI 여행 메이트 온나', tools: ['LLM 채팅', 'React'],
+    desc: '부산 여행자가 AI 메이트 온나에게 물어 예산 맞춤 코스를 받는 서비스입니다. 채팅 우선 홈, 누른 자리에서 커지는 채팅 모달, AI가 만든 코스를 순서 변경·제외·예산 게이지로 다듬는 편집 흐름을 만들었습니다.' },
+  { how: 'feat', icon: '🎙️', name: 'Myeonjeop-Mate — AI 모의면접', tools: ['OpenAI API', 'PDF.js'],
+    desc: '이력서를 올리면 OpenAI API가 맞춤 면접 질문을 만들고 답변에 피드백을 줍니다. API 비용을 막으려고 사용자당 하루 50회 사용량 제한을 직접 구현했습니다.' },
+  { how: 'feat', icon: '🧑‍🎤', name: 'LOL Face Matcher — 얼굴 인식', tools: ['DeepFace (ArcFace)', 'FastAPI'],
+    desc: 'DeepFace(ArcFace)로 얼굴 특징 벡터를 뽑아 성별을 고려한 코사인 유사도로 닮은 챔피언 Top 5를 찾습니다. dlib 모델에서 바꿔 챔피언 이미지 약 170장을 모두 임베딩했습니다.' },
+  { how: 'feat', icon: '🎤', name: 'AI 커버곡', tools: ['PyTorch', 'Demucs', 'RVC', 'Redis RQ'],
+    desc: 'Demucs로 원곡의 보컬을 분리하고 RVC로 다른 목소리로 바꿔 커버곡을 만드는 서비스입니다. 작업 큐 기반 변환 파이프라인과 결과물의 AI 생성 표시까지 구성했습니다.' }
 ];
 
 const SKILLS = [
@@ -193,16 +244,8 @@ const SKILLS = [
 ];
 
 const PLAY = [
-  { icon: '🎮', on: true, status: '개발 중', name: 'GuilRandomDefense', stack: ['Unity 6', 'C#', 'URP', 'NavMesh', 'ScriptableObject'],
-    desc: '워크래프트3 유즈맵 "원랜디"에서 영감을 받은 3D 랜덤 디펜스. 유닛 뽑기·조합, 웨이브, 난이도, 사이드 보스, 저장까지 구현했고 유닛·스킬·웨이브는 ScriptableObject 데이터로 정의해 밸런싱합니다. AI 에이전트를 PM·리서치·구현 역할로 나눠 협업합니다.' },
-  { icon: '🎤', on: true, status: '개발 중', name: 'AI 커버곡', stack: ['Python', 'FastAPI', 'PyTorch', 'Demucs', 'RVC', 'Redis RQ', 'Next.js'],
-    desc: '원곡에서 Demucs로 보컬을 분리하고 RVC로 다른 목소리로 바꿔 커버곡을 만드는 서비스. 유튜브 URL 수집(도메인 제한으로 SSRF 방지), 작업 큐 기반 변환 파이프라인, 결과물의 AI 생성 표시까지 구성했습니다.' },
-  { icon: '🪰', on: true, status: '실험 중', name: 'FlyKing — 초파리 뇌 × Blender 몸', stack: ['Python', 'Blender', 'Brian2'],
-    desc: '초파리 전뇌 커넥톰 시뮬레이션(Shiu et al. 2024, 공개 모델)을 직접 만든 Blender 초파리 몸(뼈 61개, NeuroMechFly 규격)에 연결하려는 개인 프로젝트. 몸 생성·리깅 스크립트와 걷기·몸단장 클립까지 만들었고, 뇌 신호를 관절 움직임으로 옮기는 단계를 준비 중입니다.' },
   { icon: '🤝', on: true, status: '개발 중', name: 'RentMate', stack: ['Next.js 16', 'React 19', 'TypeScript', 'Supabase', 'TanStack Query', 'TossPayments'],
-    desc: '시간제 동행·운동 메이트 매칭 플랫폼. 예약·결제·실시간 채팅·후기·신고·관리자를 도메인별로 나눠 설계하고, 성인인증·채팅 로그 보관 같은 법적 요구사항을 기능 설계에 반영했습니다.' },
-  { icon: '🚗', on: true, status: '라이브', name: '이 포트폴리오', stack: ['Three.js', 'Vanilla JS'],
-    desc: '빌드 도구 없이 HTML·JS만으로 만든 사이트. 3D 월드와 문서 페이지가 같은 데이터에서 그려집니다.' }
+    desc: '시간제 동행·운동 메이트 매칭 플랫폼. 예약·결제·실시간 채팅·후기·신고·관리자를 도메인별로 나눠 설계하고, 성인인증·채팅 로그 보관 같은 법적 요구사항을 기능 설계에 반영했습니다.' }
 ];
 
 const links = p => `
@@ -253,6 +296,60 @@ const listBlock = (title, items, cls = '', fold = 0) => items && items.length
   ? `<div class="sec"><div class="sec-t">${title}</div><ul class="${cls}"${fold ? ' data-pts' : ''}>${items.map((t, i) => `<li class="${fold && i >= fold ? 'hide' : ''}">${t}</li>`).join('')}</ul></div>` : '';
 
 /* ════════════════════════════════════════════════════════════
+   배경음악 — 유튜브 공식 플레이어(IFrame API)로 재생한다.
+   브라우저는 사용자가 한 번 조작하기 전엔 소리를 막으므로 첫 클릭/키 입력에 시작한다.
+   끄면 멈추고 카드도 숨긴다. 문서 뷰로 가면 멈추고 게임으로 돌아오면 다시 튼다.
+   ════════════════════════════════════════════════════════════ */
+function createMusic() {
+  const KEY = 'portfolio.music', VIDEO = 'FysE1sMun5s';
+  const btn = document.getElementById('g-music-btn'), card = document.getElementById('g-music');
+  if (!btn || !card) return null;
+  let want = true;
+  try { want = localStorage.getItem(KEY) !== 'off'; } catch { /* 저장소가 막혀도 기본은 켜짐 */ }
+  let player = null, ready = false, started = false;
+
+  const api = () => {
+    if (document.getElementById('yt-iframe-api')) return;
+    window.onYouTubeIframeAPIReady = () => {
+      player = new YT.Player('g-music-player', {
+        width: 200, height: 200, videoId: VIDEO,
+        playerVars: { controls: 0, start: 7, loop: 1, playlist: VIDEO, playsinline: 1, rel: 0, modestbranding: 1 },
+        events: { onReady: () => { ready = true; player.setVolume(35); sync(); } }
+      });
+    };
+    const sc = document.createElement('script');
+    sc.id = 'yt-iframe-api'; sc.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(sc);
+  };
+
+  function sync() {
+    const inGame = document.body.dataset.view === 'drive';
+    const on = want && started && inGame;
+    card.classList.toggle('off', !on);
+    btn.setAttribute('aria-pressed', String(want));
+    btn.querySelector('span').textContent = want ? '음악 켜짐' : '음악 꺼짐';
+    if (!ready) return;
+    if (on) player.playVideo(); else player.pauseVideo();
+  }
+  function start() {
+    if (started || !want || document.body.dataset.view !== 'drive') return;
+    started = true;
+    sync();
+  }
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    want = !want;
+    try { localStorage.setItem(KEY, want ? 'on' : 'off'); } catch { /* 무시 */ }
+    if (want) started = true;
+    sync();
+  });
+  addEventListener('pointerdown', start);
+  addEventListener('keydown', start);
+  api();
+  return { sync };
+}
+
+/* ════════════════════════════════════════════════════════════
    문서 뷰 렌더링
    ════════════════════════════════════════════════════════════ */
 const VISIBLE_PTS = 4;   // 나머지는 "더 보기"로 접는다
@@ -264,7 +361,7 @@ function renderDoc() {
       <ul class="sk-l">${g.items.map(([n, key]) => `<li class="${key ? 'k' : ''}">${n}</li>`).join('')}</ul>
     </div>`).join('');
 
-  document.getElementById('d-projects').innerHTML = PROJECTS.map(p => `
+  const pjCard = p => `
     <article class="pj">
       <div class="pj-top">
         <span class="pj-no">${p.no}</span>
@@ -274,6 +371,7 @@ function renderDoc() {
       <div class="pj-hd">
         <h3 class="pj-n">${p.full}</h3>
         <p class="pj-one">${p.one}</p>
+        ${p.stats ? `<dl class="pj-stats">${p.stats.map(([n, t]) => `<div><dt>${n}</dt><dd>${t}</dd></div>`).join('')}</dl>` : ''}
       </div>
       <div class="pj-grid">
         <div class="pj-txt">
@@ -284,7 +382,21 @@ function renderDoc() {
         </div>
         <div class="pj-shot">${galleryHTML(p)}</div>
       </div>
-    </article>`).join('');
+    </article>`;
+  document.getElementById('d-projects').innerHTML = PROJECTS.filter(p => !p.ai).map(pjCard).join('');
+  const aiCard = c => `
+    <div class="pgc">
+      <div class="pgc-t"><div class="pgc-i">${c.icon}</div></div>
+      <div class="pgc-n">${c.name}</div>
+      <p class="pgc-d">${c.desc}</p>
+      <div class="stk">${c.tools.map(s => `<span>${s}</span>`).join('')}</div>
+    </div>`;
+  document.getElementById('d-ai').innerHTML = `
+    <div class="pl">${PROJECTS.filter(p => p.ai).map(pjCard).join('')}</div>
+    <h3 class="ai-h">AI와 함께 개발한 것</h3>
+    <div class="pg">${AI_USE.filter(c => c.how === 'dev').map(aiCard).join('')}</div>
+    <h3 class="ai-h">AI를 기능으로 넣은 것</h3>
+    <div class="pg">${AI_USE.filter(c => c.how === 'feat').map(aiCard).join('')}</div>`;
 
   document.getElementById('d-pg').innerHTML = PLAY.map(p => `
     <div class="pgc">
@@ -294,7 +406,7 @@ function renderDoc() {
       <div class="stk">${p.stack.map(s => `<span>${s}</span>`).join('')}</div>
     </div>`).join('');
 
-  PROJECTS.forEach(p => bindGallery(document.getElementById('d-projects'), p));
+  PROJECTS.forEach(p => bindGallery(document.getElementById(p.ai ? 'd-ai' : 'd-projects'), p));
 
   /* 접힌 불릿 토글 */
   document.querySelectorAll('#doc-root [data-pts]').forEach(ul => {
@@ -327,6 +439,7 @@ const DOC_HASH = /^#(doc|top|d-)/;
 const viewFromHash = () => (DOC_HASH.test(location.hash) ? 'doc' : 'drive');
 
 let driveActive = false;
+let music = null;   // 아래 createMusic()이 채운다. setView가 화면을 바꿀 때 음악도 같이 켜고 끈다
 
 function setView(v, { updateHash = true } = {}) {
   document.body.dataset.view = v;
@@ -339,6 +452,8 @@ function setView(v, { updateHash = true } = {}) {
       history.replaceState(null, '', location.pathname + location.search);
     }
   }
+
+  if (music) music.sync();
 
   if (v === 'drive') {
     /* 3D 초기화가 어떤 이유로든 실패하면 로딩 화면에 갇히지 않고 문서 뷰로 넘긴다 */
@@ -546,6 +661,44 @@ async function initDrive() {
     };
   }
 
+  /* ── 나무 비우기 ──
+     Blender에서 나무가 줄기(EX_Trunks)·잎(EX_Leaves) 메시 하나로 합쳐져 나와서 한 그루씩 지울 수 없다.
+     가판대 6곳 밖에 세운 구역(AI 구역)은 그 자리 나무를 여기서 지운다.
+     땅에 닿은 줄기 정점을 모아 그루터기 위치를 찾고, 반경 r 안의 그루터기에 가장 가까운
+     삼각형(줄기·가지·잎)을 통째로 접어 없앤다. 반경 밖 나무는 잎이 반쯤 잘리지 않게 그대로 둔다. */
+  function clearTrees(root, spots, r) {
+    if (!spots.length) return;
+    root.updateMatrixWorld(true);
+    const trunks = [], leaves = [];
+    root.traverse(o => { if (!o.isMesh || !o.geometry.index) return; if (o.name.includes('Leaves')) leaves.push(o); else if (o.name.includes('Trunks')) trunks.push(o); });
+    if (!trunks.length) return;
+    const v = new THREE.Vector3(), near = (x, z, R) => spots.some(([sx, sz]) => Math.hypot(x - sx, z - sz) < R);
+    /* 그루터기: 땅 가까운 줄기 정점을 1유닛 안끼리 묶는다 */
+    const stumps = [];
+    for (const t of trunks) for (let i = 0, tp = t.geometry.attributes.position; i < tp.count; i++) {
+      v.fromBufferAttribute(tp, i).applyMatrix4(t.matrixWorld);
+      if (!near(v.x, v.z, r + 8) || v.y - heightAt(v.x, v.z) > 0.6) continue;
+      const s = stumps.find(s => Math.hypot(s.x - v.x, s.z - v.z) < 1.0);
+      if (s) { s.x = (s.x * s.n + v.x) / (s.n + 1); s.z = (s.z * s.n + v.z) / (s.n + 1); s.n++; }
+      else stumps.push({ x: v.x, z: v.z, n: 1 });
+    }
+    for (const s of stumps) s.kill = near(s.x, s.z, r);
+    if (!stumps.some(s => s.kill)) return;
+    for (const m of [...trunks, ...leaves]) {
+      const pos = m.geometry.attributes.position, idx = m.geometry.index, c = new THREE.Vector3();
+      for (let f = 0; f < idx.count; f += 3) {
+        c.set(0, 0, 0);
+        for (let k = 0; k < 3; k++) c.add(v.fromBufferAttribute(pos, idx.getX(f + k)));
+        c.multiplyScalar(1 / 3).applyMatrix4(m.matrixWorld);
+        if (!near(c.x, c.z, r + 6)) continue;
+        let best = null, bd = 6;
+        for (const s of stumps) { const d = Math.hypot(s.x - c.x, s.z - c.z); if (d < bd) { bd = d; best = s; } }
+        if (best && best.kill) { idx.setX(f, 0); idx.setX(f + 1, 0); idx.setX(f + 2, 0); }
+      }
+      idx.needsUpdate = true;
+    }
+  }
+
   /* ── Blender 월드 glb ── */
   const worldManager = new THREE.LoadingManager();
   /* 월드 glb는 Draco로 압축돼 있다(7.9MB → 1.1MB). 디코더는 three와 같은 버전의 CDN에서 받는다 */
@@ -574,6 +727,7 @@ async function initDrive() {
       if (o.name.includes('Water')) o.castShadow = false;
     });
     scene.add(gltf.scene);
+    clearTrees(gltf.scene, PROJECTS.filter(p => p.ai).map(p => p.pos), 7.5);
   });
 
   /* ── 풀 — 브루노 시몽 숲처럼 짧고 뾰족한 풀을 촘촘히 ──
@@ -1109,10 +1263,10 @@ async function initDrive() {
       add(new THREE.BoxGeometry(0.14, 5.2, 0.14), woodDark, -4.7, 2.6, 1.0);
       const fcv = document.createElement('canvas'); fcv.width = 128; fcv.height = 256;
       const fc = fcv.getContext('2d');
-      fc.fillStyle = '#f3e7d0'; fc.fillRect(0, 0, 128, 256);
-      fc.fillStyle = '#b3241a'; fc.fillRect(0, 0, 128, 14); fc.fillRect(0, 242, 128, 14);
-      fc.fillStyle = '#1d1512'; fc.font = '900 92px serif'; fc.textAlign = 'center'; fc.textBaseline = 'middle';
-      fc.fillText('酒', 64, 128);
+      fc.fillStyle = p.ai ? '#1c1533' : '#f3e7d0'; fc.fillRect(0, 0, 128, 256);
+      fc.fillStyle = p.ai ? p.color : '#b3241a'; fc.fillRect(0, 0, 128, 14); fc.fillRect(0, 242, 128, 14);
+      fc.fillStyle = p.ai ? '#e9e2ff' : '#1d1512'; fc.font = p.ai ? '900 64px sans-serif' : '900 92px serif'; fc.textAlign = 'center'; fc.textBaseline = 'middle';
+      fc.fillText(p.ai ? 'AI' : '酒', 64, 128);
       const ftex = new THREE.CanvasTexture(fcv); ftex.colorSpace = THREE.SRGBColorSpace;
       const flag = add(new THREE.PlaneGeometry(1.0, 2.0), new THREE.MeshStandardMaterial({ map: ftex, side: THREE.DoubleSide, roughness: .9 }), -4.15, 4.0, 1.0);
       flag.userData.flag = true;
@@ -1128,8 +1282,39 @@ async function initDrive() {
       for (const [x, z] of [[-0.4, 0.7], [0.1, 0.9]]) add(new THREE.CylinderGeometry(0.22, 0.13, 0.14, 12), bowl, x, 2.04, z);
     }
 
+    /* ── AI 구역 ── 간판 위에 떠서 도는 빛나는 결정, 길가에 "AI 활용 구역" 푯말 */
+    let crystal = null;
+    if (p.ai) {
+      crystal = add(new THREE.OctahedronGeometry(1.1, 0),
+        new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 1.4, roughness: .25, metalness: .1, flatShading: true }),
+        boardW / 2 + 1.6, frame.position.y + boardH / 2 - 0.4, 0.4, face);
+      crystal.castShadow = false;
+      const cg = new THREE.PointLight(p.color, 10, 16, 2);
+      cg.position.copy(crystal.position);
+      face.add(cg);
+
+      const scv = document.createElement('canvas'); scv.width = 512; scv.height = 160;
+      const sc = scv.getContext('2d');
+      sc.fillStyle = '#5a3420'; sc.fillRect(0, 0, 512, 160);
+      sc.fillStyle = '#3a2214'; sc.fillRect(0, 0, 512, 10); sc.fillRect(0, 150, 512, 10);
+      sc.fillStyle = p.color; sc.fillRect(26, 34, 92, 92);
+      sc.fillStyle = '#fff'; sc.font = '900 48px sans-serif'; sc.textAlign = 'center'; sc.textBaseline = 'middle';
+      sc.fillText('AI', 72, 82);
+      sc.fillStyle = '#fff3df'; sc.font = '800 52px sans-serif'; sc.textAlign = 'left';
+      sc.fillText('AI 활용 구역', 140, 84);
+      const stex = new THREE.CanvasTexture(scv); stex.colorSpace = THREE.SRGBColorSpace;
+      /* 수레 앞, 길 가장자리에 서서 오는 차를 본다 */
+      const sign = new THREE.Group();
+      sign.position.set(5.6, 0, 6.5);
+      sign.rotation.y = -0.7;
+      g.add(sign);
+      add(new THREE.BoxGeometry(0.22, 3.4, 0.22), woodDark, 0, 1.7, 0, sign);
+      const board = add(new THREE.BoxGeometry(5.2, 1.62, 0.16), new THREE.MeshBasicMaterial({ map: stex }), 0, 3.2, 0.14, sign);
+      board.material = [woodDark, woodDark, woodDark, woodDark, board.material, woodDark];
+    }
+
     scene.add(g);
-    stations.push({ ...p, group: g, face, ring, label, labelY: label.position.y, phase: Math.random() * Math.PI * 2 });
+    stations.push({ ...p, group: g, face, ring, label, crystal, labelY: label.position.y, phase: Math.random() * Math.PI * 2 });
   }
 
   /* ── 선술집 앞 빨간 플라스틱 의자와 둥근 테이블 ──
@@ -1759,6 +1944,7 @@ async function initDrive() {
       const pulse = d < ENTER_R + 6 ? 1 + Math.sin(t * 4) * 0.035 : 1;
       s.ring.scale.set(pulse, pulse, 1);
       s.label.position.y = s.labelY + Math.sin(t * 1.3 + s.phase) * 0.18;
+      if (s.crystal) { s.crystal.rotation.y = t * 0.9; s.crystal.position.y = s.labelY - 2.5 + Math.sin(t * 1.6) * 0.3; }
     }
   }
 
@@ -1832,4 +2018,5 @@ async function initDrive() {
 }
 
 /* 시작 */
+music = createMusic();
 setView(viewFromHash(), { updateHash: false });
