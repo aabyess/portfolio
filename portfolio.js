@@ -270,7 +270,7 @@ function createMusic() {
     window.onYouTubeIframeAPIReady = () => {
       player = new YT.Player('g-music-player', {
         width: 200, height: 200, videoId: VIDEO,
-        playerVars: { controls: 1, loop: 1, playlist: VIDEO, playsinline: 1, rel: 0, modestbranding: 1 },
+        playerVars: { controls: 0, start: 7, loop: 1, playlist: VIDEO, playsinline: 1, rel: 0, modestbranding: 1 },
         events: { onReady: () => { ready = true; player.setVolume(35); sync(); } }
       });
     };

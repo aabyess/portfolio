@@ -329,14 +329,8 @@ body.is-touch #g-found{bottom:150px;padding:10px 12px}
 .g-music-btn{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font:inherit}
 .g-music-btn[aria-pressed="false"]{opacity:.62}
 .g-music-btn[aria-pressed="false"] svg{opacity:.5}
-#g-music{position:fixed;right:16px;bottom:84px;z-index:41;width:216px;padding:8px;border-radius:14px;
-  background:var(--panel);backdrop-filter:blur(12px);border:1px solid var(--line);box-shadow:0 8px 24px rgba(0,0,0,.25);
-  transition:opacity .3s,transform .3s}
-#g-music.off{opacity:0;transform:translateY(12px);pointer-events:none}
-#g-music iframe{display:block;width:200px;height:200px;border:0;border-radius:9px;background:#000}
-#g-music .cr{margin:7px 2px 1px;font-size:11px;line-height:1.45;color:var(--muted)}
-#g-music .cr a{color:inherit;font-weight:600}
-body.is-touch #g-music{bottom:170px}
+#g-music{position:fixed;right:0;bottom:0;width:200px;height:200px;z-index:-1;opacity:0;pointer-events:none;overflow:hidden}
+#g-music iframe{width:200px;height:200px;border:0}
 body[data-view="doc"] #g-music{display:none}
 
 /* ── 가까이 가면 뜨는 "Space" 안내 + 가운데 큰 프로젝트 창 ── */
@@ -518,7 +512,7 @@ body.is-touch #g-prompt .space{display:none}
     </button>
     <div class="g-brand"><b>최상호</b><span>Full-stack Developer</span></div>
     <span class="sp"></span>
-    <button class="g-btn g-music-btn" id="g-music-btn" type="button" aria-pressed="true" title="배경음악 켜기/끄기">
+    <button class="g-btn g-music-btn" id="g-music-btn" type="button" aria-pressed="true" title="배경음악 켜기/끄기 — ♪ 중세시대 선술집 Ambience · 한석봉 ASMR (YouTube)">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
       <span>음악 켜짐</span>
     </button>
@@ -538,11 +532,9 @@ body.is-touch #g-prompt .space{display:none}
 
   <button id="g-prompt" type="button" hidden><span class="space">SPACE</span><span>프로젝트 보기</span><span class="nm"></span></button>
   <div id="g-dim"></div>
-  <!-- 배경음악: 유튜브 공식 플레이어를 그대로 쓴다 (음원을 따로 내려받아 올리지 않는다) -->
-  <div id="g-music" class="off" aria-label="배경음악">
-    <div id="g-music-player"></div>
-    <p class="cr">♪ <a href="https://youtu.be/FysE1sMun5s" target="_blank" rel="noopener">중세시대 선술집 Ambience</a><br>한석봉 ASMR · YouTube</p>
-  </div>
+  <!-- 배경음악: 유튜브 플레이어로 재생하되 화면에는 보이지 않게 둔다.
+       출처: 한석봉 ASMR — [ASMR] 유럽 중세시대 선술집 (https://youtu.be/FysE1sMun5s) -->
+  <div id="g-music" class="off" aria-hidden="true"><div id="g-music-player"></div></div>
 
   <div id="g-touch">
     <div class="tpad"><div class="tkey" data-k="left">◀</div><div class="tkey" data-k="right">▶</div></div>
