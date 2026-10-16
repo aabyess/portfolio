@@ -948,7 +948,6 @@ async function initDrive() {
       b.body.velocity.setZero(); b.body.angularVelocity.setZero();
       b.body.wakeUp();
     }
-    bowlingDown = 0; bowlingDone = false;
   }
   const prevCar = new THREE.Vector3();
   function physicsStep(dt) {
@@ -1193,7 +1192,7 @@ async function initDrive() {
     };
   })();
 
-  /* ── 볼링 — 숲길 끝쪽에 핀 10개. 차로 쓰러뜨리면 알림이 뜬다 (브루노 시몽 사이트의 볼링장에서 따왔다) ── */
+  /* ── 화면 가운데 잠깐 뜨는 알림 ── */
   const toast = (() => {
     const el = document.createElement('div');
     el.id = 'g-toast';
@@ -1207,46 +1206,6 @@ async function initDrive() {
       clearTimeout(timer); timer = setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translate(-50%,-50%) scale(.9)'; }, ms);
     };
   })();
-  const bowlingPins = [];
-  let bowlingDown = 0, bowlingDone = false;
-  {
-    const PZ = -30.6;
-    const profile = [[0, 0], [0.1, 0], [0.15, 0.12], [0.16, 0.3], [0.11, 0.52], [0.07, 0.62], [0.09, 0.72], [0.08, 0.8], [0, 0.82]].map(([r, y]) => new THREE.Vector2(r, y));
-    const pinGeo = new THREE.LatheGeometry(profile, 14); pinGeo.translate(0, -0.41, 0);
-    const pinMat = new THREE.MeshStandardMaterial({ color: 0xf6f1e8, roughness: .35 });
-    const ringMat = new THREE.MeshStandardMaterial({ color: 0xd2382b, roughness: .4 });
-    for (let row = 0; row < 4; row++) for (let i = 0; i <= row; i++) {
-      const z = PZ - row * 0.62, x = pathX(z) + (i - row / 2) * 0.66;
-      const pin = new THREE.Mesh(pinGeo, pinMat);
-      const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.08, 0.05, 12), ringMat); ring.position.y = 0.2;
-      pin.add(ring); pin.castShadow = true;
-      scene.add(pin);
-      const body = new CANNON.Body({ mass: 0.45, shape: new CANNON.Cylinder(0.1, 0.15, 0.82, 10), linearDamping: 0.05, angularDamping: 0.1, sleepSpeedLimit: 0.2, sleepTimeLimit: 0.8 });
-      body.position.set(x, 0.42, z);
-      world.addBody(body);
-      pin.position.set(x, 0.42, z);
-      const b = { mesh: pin, body, home: new CANNON.Vec3(x, 0.42, z) };
-      toyBlocks.push(b); bowlingPins.push(b);
-    }
-    const sign = labelSprite('볼링', '차로 핀을 쓰러뜨려 보세요', '#d2382b');
-    sign.position.set(pathX(PZ) + 2.6, 2.6, PZ - 0.8);
-    sign.scale.multiplyScalar(0.45);
-    scene.add(sign);
-  }
-  const upV = new THREE.Vector3();
-  function checkBowling() {
-    let down = 0;
-    for (const b of bowlingPins) {
-      upV.set(0, 1, 0).applyQuaternion(b.mesh.quaternion);
-      if (upV.y < 0.6 || Math.hypot(b.body.position.x - b.home.x, b.body.position.z - b.home.z) > 0.8) down++;
-    }
-    if (down > bowlingDown) {
-      bowlingDown = down;
-      if (down === bowlingPins.length && !bowlingDone) { bowlingDone = true; toast('스트라이크! 🎳<div style="font:500 13px system-ui;opacity:.75;margin-top:4px">R로 다시 세울 수 있어요</div>', 2600); }
-      else if (!bowlingDone) toast(`핀 ${down} / ${bowlingPins.length}`, 1100);
-    }
-  }
-
   /* ── 차 디테일: 헤드라이트, 흙먼지, 경적 ── */
   for (const sx of [-0.62, 0.62]) {
     const hl = new THREE.SpotLight(0xffe2b0, 30, 32, Math.PI / 7, 0.55, 1.6);
@@ -1296,16 +1255,21 @@ async function initDrive() {
 
   /* ── 연락처 조형물 — 출발점 옆에 GitHub·메일·전화. 다가가서 Space를 누르면 열린다 (브루노 시몽 사이트에서 따왔다) ── */
   const RoundedBoxC = RoundedBoxGeometry;
+  /* 클립보드에 복사하고 알림. 복사가 막힌 환경이면 값을 크게 보여줘서 직접 적을 수 있게 한다 */
+  function copyText(text, msg) {
+    const done = () => toast(`${msg}<div style="font:500 14px system-ui;opacity:.8;margin-top:4px">${text}</div>`, 2000);
+    const fail = () => toast(text, 3000);
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(done, fail); else fail();
+  }
   const CONTACTS = [
     { id: 'c-github', kind: 'link', name: 'GitHub', sub: 'github.com/aabyess', color: '#2b3137', glyph: 'GitHub', verb: '열기',
       act: () => window.open('https://github.com/aabyess', '_blank', 'noopener') },
-    { id: 'c-mail', kind: 'link', name: '이메일', sub: 'maeguming0000@gmail.com', color: '#d94a38', glyph: '✉', verb: '메일 쓰기',
-      act: () => { location.href = 'mailto:maeguming0000@gmail.com'; } },
+    { id: 'c-mail', kind: 'link', name: '이메일', sub: 'maeguming0000@gmail.com', color: '#d94a38', glyph: '✉', verb: '주소 복사',
+      act: () => copyText('maeguming0000@gmail.com', '메일 주소를 복사했어요') },
     { id: 'c-phone', kind: 'link', name: '전화', sub: '010-3322-7250', color: '#2a9d76', glyph: '☎', verb: '번호 복사',
       act: () => {
         if (document.body.classList.contains('is-touch')) { location.href = 'tel:01033227250'; return; }
-        const done = () => toast('전화번호를 복사했어요<div style="font:500 14px system-ui;opacity:.8;margin-top:4px">010-3322-7250</div>', 2000);
-        navigator.clipboard?.writeText('010-3322-7250').then(done, () => toast('010-3322-7250', 2600)) ?? toast('010-3322-7250', 2600);
+        copyText('010-3322-7250', '전화번호를 복사했어요');
       } }
   ];
   const contacts = [];
@@ -1334,6 +1298,7 @@ async function initDrive() {
     icon.position.y = 1.75; icon.castShadow = true;
     const label = labelSprite(c.name, c.sub, c.color);
     label.scale.multiplyScalar(0.3); label.position.y = 3.05;
+    label.visible = false;   // 흰 이름표는 숨긴다. Space 안내 위치를 잡는 기준점으로만 쓴다
     g.add(ped, icon, label);
     scene.add(g);
     contacts.push({ ...c, pos: [x, z], group: g, icon, label, phase: i * 1.7 });
@@ -1777,7 +1742,6 @@ async function initDrive() {
     fireflies(t);
     for (const c of contacts) { c.icon.position.y = 1.75 + Math.sin(t * 1.4 + c.phase) * 0.12; c.icon.rotation.y = Math.sin(t * 0.6 + c.phase) * 0.35; }
     dust(dt);
-    checkBowling();
     fallingLeaves(dt, t, activePos().x, activePos().z);
     updateCamera(dt);
     proximity();
