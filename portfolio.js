@@ -467,40 +467,69 @@ async function initDrive() {
 
   const timeU = { value: 0 };   // 바람·물결 셰이더 공용 시간
 
-  /* ── 하늘 · 안개 ── */
-  /* 해가 막 진 저녁 — 선술집 불빛이 살아나는 시간 */
+  /* ── 하늘 · 안개 · 시간 흐름 ──
+     약 2분 30초에 한 바퀴: 저녁 → 깊은 밤 → 다시 저녁. night(0~1)에 맞춰 하늘·안개·빛을 섞는다. */
   scene.fog = new THREE.Fog(0x2a1a33, 26, 100);
-  {
-    const cv = document.createElement('canvas');
-    cv.width = 8; cv.height = 256;
-    const g = cv.getContext('2d');
-    const grad = g.createLinearGradient(0, 0, 0, 256);
-    grad.addColorStop(0.00, '#0e0a22');
-    grad.addColorStop(0.45, '#241538');
-    grad.addColorStop(0.70, '#4f2546');
-    grad.addColorStop(0.86, '#9c4436');
-    grad.addColorStop(1.00, '#e0844a');
-    g.fillStyle = grad; g.fillRect(0, 0, 8, 256);
-    const tex = new THREE.CanvasTexture(cv);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    scene.add(new THREE.Mesh(
-      new THREE.SphereGeometry(320, 32, 20),
-      new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, fog: false, depthWrite: false })
-    ));
-  }
+  const C = h => new THREE.Color(h);
+  const DUSK  = { top: C(0x0e0a22), mid: C(0x4f2546), hor: C(0xe0844a), fog: C(0x2a1a33), hemi: 0.7,  sun: 1.35, fill: 0.45, exp: 1.1 };
+  const NIGHT = { top: C(0x03040e), mid: C(0x0c1430), hor: C(0x2a2048), fog: C(0x0b0d1c), hemi: 0.32, sun: 0.0,  fill: 0.6,  exp: 1.0 };
+  const skyU = { top: { value: DUSK.top.clone() }, mid: { value: DUSK.mid.clone() }, hor: { value: DUSK.hor.clone() } };
+  scene.add(new THREE.Mesh(new THREE.SphereGeometry(320, 32, 20), new THREE.ShaderMaterial({
+    uniforms: skyU, side: THREE.BackSide, depthWrite: false, fog: false,
+    vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+    fragmentShader: `uniform vec3 top; uniform vec3 mid; uniform vec3 hor; varying vec3 vP;
+      void main(){ float h = clamp(vP.y, 0.0, 1.0);
+        vec3 c = mix(hor, mid, smoothstep(0.0, 0.18, h)); c = mix(c, top, smoothstep(0.18, 0.6, h));
+        gl_FragColor = vec4(c, 1.0); }`
+  })));
+  /* 밤에만 보이는 별 */
+  const stars = (() => {
+    const N = 900, a = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+      const th = Math.random() * Math.PI * 2, ph = Math.acos(0.15 + Math.random() * 0.85);
+      a.set([Math.sin(ph) * Math.cos(th) * 300, Math.cos(ph) * 300, Math.sin(ph) * Math.sin(th) * 300], i * 3);
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(a, 3));
+    const m = new THREE.PointsMaterial({ color: 0xffffff, size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false });
+    scene.add(new THREE.Points(g, m));
+    return m;
+  })();
 
-  /* ── 조명 — 낮게 깔린 노을 해 ── */
-  scene.add(new THREE.HemisphereLight(0xffb48a, 0x1a1030, 0.7));
-  const sun = new THREE.DirectionalLight(0xff9050, 1.35);   // 지평선에 걸린 마지막 햇빛
+  /* ── 조명 ── */
+  const hemi = new THREE.HemisphereLight(0xffb48a, 0x1a1030, DUSK.hemi);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xff9050, DUSK.sun);   // 지평선에 걸린 마지막 햇빛
   sun.position.set(-40, 16, 34);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -55, right: 55, top: 55, bottom: -55, near: 1, far: 160 });
   sun.shadow.bias = -0.0008; sun.shadow.normalBias = 0.04;
   scene.add(sun);
-  const fill = new THREE.DirectionalLight(0x7088ff, 0.45);   // 푸른 달빛
+  const fill = new THREE.DirectionalLight(0x7088ff, DUSK.fill);   // 푸른 달빛
   fill.position.set(40, 20, -30);
   scene.add(fill);
+
+  /* 선술집 불빛과 차 헤드라이트는 밤이 깊을수록 밝아진다 (아래에서 채운다) */
+  const nightGlow = { lights: [], lanterns: [], bulbs: [], heads: [] };
+  const DAY_PERIOD = 150;
+  let night = 0;
+  function updateDayNight(t) {
+    night = 0.5 - 0.5 * Math.cos(t / DAY_PERIOD * Math.PI * 2);
+    const k = night;
+    skyU.top.value.copy(DUSK.top).lerp(NIGHT.top, k);
+    skyU.mid.value.copy(DUSK.mid).lerp(NIGHT.mid, k);
+    skyU.hor.value.copy(DUSK.hor).lerp(NIGHT.hor, k);
+    scene.fog.color.copy(DUSK.fog).lerp(NIGHT.fog, k);
+    hemi.intensity = DUSK.hemi + (NIGHT.hemi - DUSK.hemi) * k;
+    sun.intensity = DUSK.sun + (NIGHT.sun - DUSK.sun) * k;
+    fill.intensity = DUSK.fill + (NIGHT.fill - DUSK.fill) * k;
+    renderer.toneMappingExposure = DUSK.exp + (NIGHT.exp - DUSK.exp) * k;
+    stars.opacity = Math.max(0, (k - 0.35) / 0.65) * 0.9;
+    for (const l of nightGlow.lights) l.intensity = 12 + 14 * k;
+    for (const m of nightGlow.lanterns) m.emissiveIntensity = 1.1 + 1.0 * k;
+    for (const m of nightGlow.bulbs) m.color.setHex(0xffd98a).multiplyScalar(1.1 + 0.9 * k);
+    for (const h of nightGlow.heads) h.intensity = 30 + 120 * k;
+  }
 
   /* 월드 바깥 바닥 — 지형 가장자리가 허공에 뜨지 않게 */
   {
@@ -547,63 +576,89 @@ async function initDrive() {
     scene.add(gltf.scene);
   });
 
-  /* ── 풀 — 휘어진 풀잎 3장짜리 포기를 인스턴스로 깐다 ──
-     뿌리는 어둡고 끝은 밝게, 끝으로 갈수록 바람에 더 휜다. 일부는 키 큰 풀로 섞는다. */
+  /* ── 풀 — 브루노 시몽 숲처럼 짧고 뾰족한 풀을 촘촘히 ──
+     차나 사람이 지나간 자리는 눕고, 몇 초에 걸쳐 다시 일어난다.
+     밟힌 정도는 월드를 덮는 128×128 텍스처(trail)에 적고 셰이더가 읽는다. */
+  const TRAIL_N = 128;
+  const trailData = new Uint8Array(TRAIL_N * TRAIL_N * 4);
+  const trailTex = new THREE.DataTexture(trailData, TRAIL_N, TRAIL_N, THREE.RGBAFormat);
+  trailTex.magFilter = trailTex.minFilter = THREE.LinearFilter;
+  trailTex.needsUpdate = true;
+  const trailCells = (x, z) => [Math.round((x + GRID.half) / (GRID.half * 2) * (TRAIL_N - 1)), Math.round((z + GRID.half) / (GRID.half * 2) * (TRAIL_N - 1))];
+  let trailAcc = 0;
+  /* 매 프레임: 전체를 조금씩 회복시키고(다시 자람), 지나가는 자리를 눕힌다 */
+  function updateTrail(dt, stamps) {
+    trailAcc += dt * 46;                   // 1초에 46만큼 회복 → 꽉 눌린 풀이 약 5.5초면 다시 선다
+    const dec = Math.floor(trailAcc); trailAcc -= dec;
+    if (dec) for (let i = 0; i < trailData.length; i += 4) { const v = trailData[i]; if (v) trailData[i] = v > dec ? v - dec : 0; }
+    for (const [x, z, r] of stamps) {
+      const [cx, cz] = trailCells(x, z), rc = Math.ceil(r / (GRID.half * 2) * TRAIL_N);
+      for (let j = cz - rc; j <= cz + rc; j++) for (let i = cx - rc; i <= cx + rc; i++) {
+        if (i < 0 || j < 0 || i >= TRAIL_N || j >= TRAIL_N) continue;
+        const d = Math.hypot(i - cx, j - cz) / rc;
+        if (d > 1) continue;
+        const k = (j * TRAIL_N + i) * 4, v = Math.round(255 * Math.min(1, (1 - d) * 1.6));
+        if (v > trailData[k]) trailData[k] = v;
+      }
+    }
+    trailTex.needsUpdate = true;
+  }
   {
-    const H = 0.55, W = 0.05, SEG = 3;
+    const H = 0.42, W = 0.035;
     const pos = [], idx = [];
-    for (let b = 0; b < 3; b++) {
-      const a = b * Math.PI * 2 / 3 + 0.3;
-      const dx = Math.cos(a), dz = Math.sin(a);            // 풀잎이 눕는 방향
-      const px = -dz, pz = dx;                              // 풀잎 폭 방향
-      const base = pos.length / 3;
-      for (let s = 0; s <= SEG; s++) {
-        const t = s / SEG, y = t * H * (0.85 + b * 0.12);
-        const w = W * Math.pow(1 - t, 0.7) * (s === SEG ? 0 : 1);
-        const bend = t * t * 0.16;
-        const cx = dx * (0.02 + bend), cz = dz * (0.02 + bend);
-        pos.push(cx - px * w, y, cz - pz * w, cx + px * w, y, cz + pz * w);
-      }
-      for (let s = 0; s < SEG; s++) {
-        const i0 = base + s * 2;
-        idx.push(i0, i0 + 1, i0 + 2, i0 + 1, i0 + 3, i0 + 2);
-      }
+    for (let b = 0; b < 4; b++) {                           // 한 포기 = 뾰족한 풀잎 4장
+      const a = b * Math.PI / 2 + 0.4 + (b % 2) * 0.3;
+      const dx = Math.cos(a), dz = Math.sin(a), px = -dz, pz = dx;
+      const base = pos.length / 3, h = H * (0.8 + (b % 3) * 0.15);
+      pos.push(dx * 0.03 - px * W, 0, dz * 0.03 - pz * W, dx * 0.03 + px * W, 0, dz * 0.03 + pz * W,
+               dx * 0.07 - px * W * 0.55, h * 0.5, dz * 0.07 - pz * W * 0.55, dx * 0.07 + px * W * 0.55, h * 0.5, dz * 0.07 + pz * W * 0.55,
+               dx * 0.13, h, dz * 0.13);
+      idx.push(base, base + 1, base + 2, base + 1, base + 3, base + 2, base + 2, base + 3, base + 4);
     }
     const tuft = new THREE.BufferGeometry();
     tuft.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     tuft.setIndex(idx);
     tuft.computeVertexNormals();
 
-    const gm = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .82, side: THREE.DoubleSide });
+    const gm = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .85, side: THREE.DoubleSide });
     gm.onBeforeCompile = sh => {
       sh.uniforms.uTime = timeU;
-      sh.vertexShader = 'uniform float uTime;\nvarying float vH;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
-        vH = clamp(position.y / ${H.toFixed(2)}, 0.0, 1.0);
+      sh.uniforms.uTrail = { value: trailTex };
+      sh.uniforms.uHalf = { value: GRID.half };
+      sh.vertexShader = 'uniform float uTime; uniform sampler2D uTrail; uniform float uHalf;\nvarying float vH; varying float vPatch; varying float vPress;\n' +
+        sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
         vec4 gw = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
-        float gs = sin(uTime*1.8 + gw.x*0.35 + gw.z*0.25)*0.6 + sin(uTime*3.1 + gw.x*0.9 - gw.z*0.4)*0.25 + 0.3;
-        float bendW = vH * vH;
-        transformed.x += gs * bendW * 0.32; transformed.z += gs * bendW * 0.12;`);
-      sh.fragmentShader = 'varying float vH;\n' + sh.fragmentShader.replace('#include <color_fragment>',
-        '#include <color_fragment>\n diffuseColor.rgb *= mix(0.42, 1.18, vH);');
+        vH = clamp(position.y / ${H.toFixed(2)}, 0.0, 1.0);
+        /* 위치별 얼룩 — 큰 사인 무늬 두 개를 겹쳐 색이 은은하게 달라지게 */
+        vPatch = 0.5 + 0.25 * sin(gw.x * 0.21 + sin(gw.z * 0.17) * 2.0) + 0.25 * sin(gw.z * 0.13 - gw.x * 0.07);
+        float press = texture2D(uTrail, (gw.xz + uHalf) / (uHalf * 2.0)).r;
+        vPress = press;
+        transformed.y *= 1.0 - press * 0.82;                       // 밟히면 눕는다
+        float gs = sin(uTime*1.7 + gw.x*0.33 + gw.z*0.27)*0.55 + sin(uTime*2.9 + gw.x*0.8 - gw.z*0.45)*0.2 + 0.3;
+        float bw = vH * vH * (1.0 - press);
+        transformed.x += gs * bw * 0.22; transformed.z += gs * bw * 0.09;`);
+      sh.fragmentShader = 'varying float vH; varying float vPatch; varying float vPress;\n' + sh.fragmentShader.replace('#include <color_fragment>',
+        `#include <color_fragment>
+        vec3 dry = vec3(0.86, 0.55, 0.22), lush = vec3(0.62, 0.52, 0.18);
+        diffuseColor.rgb *= mix(dry, lush, vPatch) * 1.35;
+        diffuseColor.rgb *= mix(0.38, 1.12, vH) * (1.0 - vPress * 0.1);`);
     };
-    const cols = [0xdca052, 0xc98340, 0xedc070, 0xb8703c, 0xd28a3a].map(c => new THREE.Color(c));
-    const tall = new THREE.Color(0xa86a34);
     const spots = [];
     const n = GRID.n;
     for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
       if (GRID.mask[j * n + i] < 0.6) continue;
-      const cnt = Math.random() < 0.5 ? 2 : 3;
+      const cnt = 3 + (Math.random() < 0.5 ? 1 : 0);
       for (let k = 0; k < cnt; k++) spots.push([-GRID.half + (i + Math.random() - .5) * GRID.step, GRID.half - (j + Math.random() - .5) * GRID.step]);
     }
     const grass = new THREE.InstancedMesh(tuft, gm, spots.length);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
+    const tint = new THREE.Color();
     spots.forEach(([x, z], i) => {
-      e.set((Math.random() - .5) * 0.25, Math.random() * Math.PI * 2, (Math.random() - .5) * 0.25);
-      const isTall = Math.random() < 0.08;
-      const k = 0.7 + Math.random() * 0.6, ky = isTall ? k * (1.7 + Math.random() * 0.6) : k;
-      m4.compose(ps.set(x, heightAt(x, z), z), q.setFromEuler(e), sc.set(k, ky, k));
+      e.set((Math.random() - .5) * 0.2, Math.random() * Math.PI * 2, (Math.random() - .5) * 0.2);
+      const k = 0.75 + Math.random() * 0.55;
+      m4.compose(ps.set(x, heightAt(x, z), z), q.setFromEuler(e), sc.set(k, k * (0.85 + Math.random() * 0.4), k));
       grass.setMatrixAt(i, m4);
-      grass.setColorAt(i, isTall ? tall : cols[(Math.random() * cols.length) | 0]);
+      grass.setColorAt(i, tint.setScalar(0.88 + Math.random() * 0.24));
     });
     grass.receiveShadow = true;
     scene.add(grass);
@@ -883,7 +938,7 @@ async function initDrive() {
 
   function restackBlocks() {
     /* 차나 캐릭터가 블록 자리에 서 있으면 다시 쌓는 순간 블록이 튕겨 나간다. 출발점으로 옮긴다 */
-    const inArea = p => Math.abs(p.x - pathX(NAME_Z)) < 6.5 && p.z > NAME_Z - 2.5 && p.z < ROW_Z + 2.5;
+    const inArea = p => toyBlocks.some(b => Math.hypot(p.x - b.home.x, p.z - b.home.z) < 2.8);
     const sz = WORLD.start.z;
     if (inArea(car.position)) { car.position.set(pathX(sz), groundY(pathX(sz), sz), sz); heading = Math.PI; speed = 0; prevCar.copy(car.position); }
     if (person.visible && inArea(person.position)) person.position.set(pathX(sz) + 3, person.position.y, sz - 1);
@@ -893,6 +948,7 @@ async function initDrive() {
       b.body.velocity.setZero(); b.body.angularVelocity.setZero();
       b.body.wakeUp();
     }
+    bowlingDown = 0; bowlingDone = false;
   }
   const prevCar = new THREE.Vector3();
   function physicsStep(dt) {
@@ -966,7 +1022,8 @@ async function initDrive() {
       f.rotation.set(Math.PI, Math.PI / 6, 0);
     }
     /* 전구 줄 */
-    const bulbMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffd98a).multiplyScalar(2.6), fog: false, toneMapped: false });
+    const bulbMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffd98a).multiplyScalar(1.1), fog: false, toneMapped: false });
+    nightGlow.bulbs.push(bulbMat);
     for (let i = 0; i < 11; i++) {
       const x = -3.5 + i * 0.7;
       add(new THREE.SphereGeometry(0.11, 8, 6), bulbMat, x, 3.86 - Math.sin(i / 10 * Math.PI) * 0.22, 2.15);
@@ -978,7 +1035,8 @@ async function initDrive() {
     add(new THREE.BoxGeometry(0.8, 0.6, 0.7), paint, 4.6, 1.1, 1.5).rotation.y = 0.2;
 
     /* 따뜻한 가판대 불빛 */
-    const glow = new THREE.PointLight(0xff9a4a, 34, 24, 2);
+    const glow = new THREE.PointLight(0xff9a4a, 12, 20, 2);
+    nightGlow.lights.push(glow);
     glow.position.set(0, 3.6, 1.6);
     g.add(glow);
 
@@ -1039,7 +1097,8 @@ async function initDrive() {
 
     /* ── 선술집 꾸밈 ── 빨간 등롱, 酒 깃발, 항아리. 의자·테이블은 물리 몸체라 아래에서 따로 놓는다 */
     {
-      const lanternMat = new THREE.MeshStandardMaterial({ color: 0xc8261c, emissive: 0xff4a1e, emissiveIntensity: 2.4, roughness: .6 });
+      const lanternMat = new THREE.MeshStandardMaterial({ color: 0xc8261c, emissive: 0xff4a1e, emissiveIntensity: 1.1, roughness: .6 });
+      nightGlow.lanterns.push(lanternMat);
       const capMat = new THREE.MeshStandardMaterial({ color: 0x1b1210, roughness: .8 });
       for (const x of [-2.6, 0, 2.6]) {
         add(new THREE.CylinderGeometry(0.34, 0.34, 0.62, 14), lanternMat, x, 3.25, 2.05).castShadow = false;
@@ -1134,11 +1193,158 @@ async function initDrive() {
     };
   })();
 
+  /* ── 볼링 — 숲길 끝쪽에 핀 10개. 차로 쓰러뜨리면 알림이 뜬다 (브루노 시몽 사이트의 볼링장에서 따왔다) ── */
+  const toast = (() => {
+    const el = document.createElement('div');
+    el.id = 'g-toast';
+    Object.assign(el.style, { position: 'fixed', left: '50%', top: '18%', transform: 'translate(-50%,-50%) scale(.9)', zIndex: 44,
+      padding: '12px 22px', borderRadius: '14px', background: 'rgba(20,12,28,.82)', color: '#fff', font: '800 22px/1.2 Pretendard, system-ui, sans-serif',
+      letterSpacing: '-.01em', boxShadow: '0 10px 30px rgba(0,0,0,.35)', opacity: '0', transition: 'opacity .25s, transform .25s', pointerEvents: 'none', textAlign: 'center' });
+    document.getElementById('drive-root').appendChild(el);
+    let timer = 0;
+    return (html, ms = 1600) => {
+      el.innerHTML = html; el.style.opacity = '1'; el.style.transform = 'translate(-50%,-50%) scale(1)';
+      clearTimeout(timer); timer = setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translate(-50%,-50%) scale(.9)'; }, ms);
+    };
+  })();
+  const bowlingPins = [];
+  let bowlingDown = 0, bowlingDone = false;
+  {
+    const PZ = -30.6;
+    const profile = [[0, 0], [0.1, 0], [0.15, 0.12], [0.16, 0.3], [0.11, 0.52], [0.07, 0.62], [0.09, 0.72], [0.08, 0.8], [0, 0.82]].map(([r, y]) => new THREE.Vector2(r, y));
+    const pinGeo = new THREE.LatheGeometry(profile, 14); pinGeo.translate(0, -0.41, 0);
+    const pinMat = new THREE.MeshStandardMaterial({ color: 0xf6f1e8, roughness: .35 });
+    const ringMat = new THREE.MeshStandardMaterial({ color: 0xd2382b, roughness: .4 });
+    for (let row = 0; row < 4; row++) for (let i = 0; i <= row; i++) {
+      const z = PZ - row * 0.62, x = pathX(z) + (i - row / 2) * 0.66;
+      const pin = new THREE.Mesh(pinGeo, pinMat);
+      const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.08, 0.05, 12), ringMat); ring.position.y = 0.2;
+      pin.add(ring); pin.castShadow = true;
+      scene.add(pin);
+      const body = new CANNON.Body({ mass: 0.45, shape: new CANNON.Cylinder(0.1, 0.15, 0.82, 10), linearDamping: 0.05, angularDamping: 0.1, sleepSpeedLimit: 0.2, sleepTimeLimit: 0.8 });
+      body.position.set(x, 0.42, z);
+      world.addBody(body);
+      pin.position.set(x, 0.42, z);
+      const b = { mesh: pin, body, home: new CANNON.Vec3(x, 0.42, z) };
+      toyBlocks.push(b); bowlingPins.push(b);
+    }
+    const sign = labelSprite('볼링', '차로 핀을 쓰러뜨려 보세요', '#d2382b');
+    sign.position.set(pathX(PZ) + 2.6, 2.6, PZ - 0.8);
+    sign.scale.multiplyScalar(0.45);
+    scene.add(sign);
+  }
+  const upV = new THREE.Vector3();
+  function checkBowling() {
+    let down = 0;
+    for (const b of bowlingPins) {
+      upV.set(0, 1, 0).applyQuaternion(b.mesh.quaternion);
+      if (upV.y < 0.6 || Math.hypot(b.body.position.x - b.home.x, b.body.position.z - b.home.z) > 0.8) down++;
+    }
+    if (down > bowlingDown) {
+      bowlingDown = down;
+      if (down === bowlingPins.length && !bowlingDone) { bowlingDone = true; toast('스트라이크! 🎳<div style="font:500 13px system-ui;opacity:.75;margin-top:4px">R로 다시 세울 수 있어요</div>', 2600); }
+      else if (!bowlingDone) toast(`핀 ${down} / ${bowlingPins.length}`, 1100);
+    }
+  }
+
+  /* ── 차 디테일: 헤드라이트, 흙먼지, 경적 ── */
+  for (const sx of [-0.62, 0.62]) {
+    const hl = new THREE.SpotLight(0xffe2b0, 30, 32, Math.PI / 7, 0.55, 1.6);
+    hl.position.set(sx, 0.85, 2.0);
+    hl.target.position.set(sx * 1.4, 0, 12);
+    car.add(hl, hl.target);
+    nightGlow.heads.push(hl);
+  }
+  const dust = (() => {
+    const N = 70, mesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.22, 0),
+      new THREE.MeshStandardMaterial({ color: 0xc89a6a, roughness: 1, transparent: true, opacity: .55, depthWrite: false }), N);
+    mesh.frustumCulled = false;
+    scene.add(mesh);
+    const P = Array.from({ length: N }, () => ({ life: 0 }));
+    let next = 0, acc = 0;
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
+    return dt => {
+      const fast = Math.abs(speed) > 5 && player.mode === 'driving';
+      acc += fast ? dt * Math.abs(speed) * 1.4 : 0;
+      while (acc > 1) {
+        acc -= 1;
+        const p = P[next]; next = (next + 1) % N;
+        const back = -1.6 * Math.sign(speed), side = (Math.random() < .5 ? -1 : 1) * 0.8;
+        const fx = Math.sin(heading), fz = Math.cos(heading);
+        Object.assign(p, { life: 1, x: car.position.x + fx * back + fz * side, y: car.position.y + 0.2, z: car.position.z + fz * back - fx * side,
+          vx: (Math.random() - .5) * 0.8, vy: 0.6 + Math.random() * 0.6, vz: (Math.random() - .5) * 0.8, s: 0.6 + Math.random() * 0.6 });
+      }
+      P.forEach((p, i) => {
+        if (p.life > 0) { p.life -= dt * 1.2; p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; }
+        const k = Math.max(0, p.life);
+        m4.compose(v.set(p.x || 0, p.y || -50, p.z || 0), q, sc.setScalar(k > 0 ? p.s * (1.6 - k) : 0.0001));
+        mesh.setMatrixAt(i, m4);
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+    };
+  })();
+  let audio = null;
+  function honk() {
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      const t0 = audio.currentTime, g = audio.createGain();
+      g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.18, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.42);
+      g.connect(audio.destination);
+      for (const f of [415, 523]) { const o = audio.createOscillator(); o.type = 'square'; o.frequency.value = f; o.connect(g); o.start(t0); o.stop(t0 + 0.45); }
+    } catch { /* 소리를 못 내는 환경이면 조용히 넘어간다 */ }
+  }
+
+  /* ── 연락처 조형물 — 출발점 옆에 GitHub·메일·전화. 다가가서 Space를 누르면 열린다 (브루노 시몽 사이트에서 따왔다) ── */
+  const RoundedBoxC = RoundedBoxGeometry;
+  const CONTACTS = [
+    { id: 'c-github', kind: 'link', name: 'GitHub', sub: 'github.com/aabyess', color: '#2b3137', glyph: 'GitHub', verb: '열기',
+      act: () => window.open('https://github.com/aabyess', '_blank', 'noopener') },
+    { id: 'c-mail', kind: 'link', name: '이메일', sub: 'maeguming0000@gmail.com', color: '#d94a38', glyph: '✉', verb: '메일 쓰기',
+      act: () => { location.href = 'mailto:maeguming0000@gmail.com'; } },
+    { id: 'c-phone', kind: 'link', name: '전화', sub: '010-3322-7250', color: '#2a9d76', glyph: '☎', verb: '번호 복사',
+      act: () => {
+        if (document.body.classList.contains('is-touch')) { location.href = 'tel:01033227250'; return; }
+        const done = () => toast('전화번호를 복사했어요<div style="font:500 14px system-ui;opacity:.8;margin-top:4px">010-3322-7250</div>', 2000);
+        navigator.clipboard?.writeText('010-3322-7250').then(done, () => toast('010-3322-7250', 2600)) ?? toast('010-3322-7250', 2600);
+      } }
+  ];
+  const contacts = [];
+  CONTACTS.forEach((c, i) => {
+    const z = WORLD.start.z - 0.5 - i * 4.6, x = pathX(z) + 6.6 + i * 0.6;
+    const g = new THREE.Group();
+    g.position.set(x, Math.max(0, heightAt(x, z)), z);
+    g.rotation.y = -0.75;                                       // 길과 출발점 쪽을 본다
+    const ped = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.7, 1.5), new THREE.MeshStandardMaterial({ color: 0x4a2817, roughness: .9 }));
+    ped.position.y = 0.35; ped.castShadow = ped.receiveShadow = true;
+    const cv = document.createElement('canvas'); cv.width = cv.height = 256;
+    const cx = cv.getContext('2d');
+    cx.fillStyle = c.color; cx.fillRect(0, 0, 256, 256);
+    cx.fillStyle = '#fff'; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+    cx.font = c.glyph.length > 2 ? '800 58px Pretendard, system-ui, sans-serif' : '150px system-ui, sans-serif';
+    cx.fillText(c.glyph, 128, 136);
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+    const side = new THREE.MeshPhysicalMaterial({ color: c.color, roughness: .35, clearcoat: .6 });
+    const face = new THREE.MeshStandardMaterial({ map: tex, roughness: .4 });
+    const icon = new THREE.Mesh(new RoundedBoxC(1.6, 1.6, 0.45, 4, 0.18), side);
+    for (const sd of [1, -1]) {
+      const pl = new THREE.Mesh(new THREE.PlaneGeometry(1.36, 1.36), face);
+      pl.position.z = sd * 0.23; if (sd < 0) pl.rotation.y = Math.PI;
+      icon.add(pl);
+    }
+    icon.position.y = 1.75; icon.castShadow = true;
+    const label = labelSprite(c.name, c.sub, c.color);
+    label.scale.multiplyScalar(0.3); label.position.y = 3.05;
+    g.add(ped, icon, label);
+    scene.add(g);
+    contacts.push({ ...c, pos: [x, z], group: g, icon, label, phase: i * 1.7 });
+  });
+
   /* ── 조작 ── */
   const keys = Object.create(null);
   const KEYMAP = {
     ArrowUp: 'fwd', KeyW: 'fwd', ArrowDown: 'back', KeyS: 'back',
-    ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Space: 'brake'
+    ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Space: 'brake',
+    ShiftLeft: 'boost', ShiftRight: 'boost'
   };
   const hint = document.getElementById('g-hint');
   let hintHidden = false;
@@ -1153,8 +1359,9 @@ async function initDrive() {
       return;
     }
     /* 게시판 근처에서 Space는 브레이크가 아니라 "프로젝트 보기" */
-    if (e.code === 'Space' && promptFor) { e.preventDefault(); openPanel(promptFor); hideHint(); return; }
+    if (e.code === 'Space' && promptFor) { e.preventDefault(); activate(promptFor); hideHint(); return; }
     if (e.code === 'KeyR') { e.preventDefault(); restackBlocks(); return; }
+    if (e.code === 'KeyH' && !e.repeat) { e.preventDefault(); honk(); return; }
     const k = KEYMAP[e.code];
     if (k) { keys[k] = true; e.preventDefault(); hideHint(); }
     if (e.code === 'KeyF') { e.preventDefault(); toggleVehicle(); hideHint(); }
@@ -1185,7 +1392,8 @@ async function initDrive() {
     const want = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
     steer += (want - steer) * Math.min(1, dt * 9);
 
-    if (keys.fwd) speed += ACCEL * dt;
+    const boost = keys.boost && player.mode === 'driving';
+    if (keys.fwd) speed += ACCEL * (boost ? 1.7 : 1) * dt;
     else if (keys.back) speed -= ACCEL * dt;
     else {
       const d = DRAG * dt;
@@ -1195,7 +1403,8 @@ async function initDrive() {
       const d = BRAKE * dt;
       speed = Math.abs(speed) <= d ? 0 : speed - Math.sign(speed) * d;
     }
-    speed = Math.max(-MAX_REV, Math.min(MAX_FWD, speed));
+    speed = Math.max(-MAX_REV, Math.min(boost ? MAX_FWD * 1.6 : MAX_FWD, speed));
+    if (!boost && speed > MAX_FWD) speed = Math.max(MAX_FWD, speed - BRAKE * 0.5 * dt);
 
     const grip = Math.min(1, Math.abs(speed) / 5);
     heading += steer * TURN * dt * grip * Math.sign(speed || 1);
@@ -1205,15 +1414,27 @@ async function initDrive() {
 
     if (clampToBounds(car.position)) speed *= 0.3;
     car.position.y += (groundY(car.position.x, car.position.z) - car.position.y) * Math.min(1, dt * 12);
+    car.rotation.order = 'YXZ';
     car.rotation.y = heading;
+    /* 경사를 따라 앞뒤로 기운다 (언덕·다리) */
+    {
+      const fx = Math.sin(heading), fz = Math.cos(heading);
+      const hf = groundY(car.position.x + fx * 1.4, car.position.z + fz * 1.4), hb = groundY(car.position.x - fx * 1.4, car.position.z - fz * 1.4);
+      car.rotation.x += (-Math.atan2(hf - hb, 2.8) - car.rotation.x) * Math.min(1, dt * 10);
+    }
 
     for (const w of parts.wheels) {
       if (w.front) w.steerNode.rotation.y = steer * 0.42;
       w.spinNode.rotation.x += speed * dt / w.r;
     }
     const tilt = -steer * grip * 0.055;
-    for (const m of parts.tilt) m.rotation.z = tilt;
+    /* 서스펜션 — 가속하면 뒤로 앉고, 브레이크면 앞으로 쏠린다 */
+    accSm += (((speed - lastSpeed) / Math.max(dt, 1e-4)) - accSm) * Math.min(1, dt * 6);
+    lastSpeed = speed;
+    const pitch = Math.max(-0.07, Math.min(0.07, -accSm * 0.0045));
+    for (const m of parts.tilt) { m.rotation.z = tilt; m.rotation.x = pitch; }
   }
+  let accSm = 0, lastSpeed = 0;
 
   /* ── 도보 ──
      차에서 내려 뛰어다니는 모드. 방향키는 카메라 기준으로 해석하고
@@ -1317,13 +1538,11 @@ async function initDrive() {
     const driving = player.mode === 'driving';
     hint.innerHTML = `
       <div class="keys"><span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span></div>
-      <span>${driving ? '운전해서 프로젝트에 가까이 가보세요' : '뛰어서 돌아다닐 수 있습니다'}</span>
-      <div class="keys"><span class="key">Space</span></div>
-      <span>자세히 보기</span>
-      <div class="keys"><span class="key">R</span></div>
-      <span>블록 다시 쌓기</span>
-      <div class="keys"><span class="key">F</span></div>
-      <span>${driving ? '내려서 걷기' : '차 타기'}</span>`;
+      <span>${driving ? '운전' : '걷기'}</span>
+      <div class="keys"><span class="key">Space</span></div><span>보기·열기</span>
+      ${driving ? '<div class="keys"><span class="key">Shift</span></div><span>부스트</span><div class="keys"><span class="key">H</span></div><span>경적</span>' : ''}
+      <div class="keys"><span class="key">R</span></div><span>다시 쌓기</span>
+      <div class="keys"><span class="key">F</span></div><span>${driving ? '내리기' : '타기'}</span>`;
   }
   updateHint();
 
@@ -1339,6 +1558,8 @@ async function initDrive() {
   const dim = document.getElementById('g-dim');
   const prompt = document.getElementById('g-prompt');
   const promptName = prompt.querySelector('.nm');
+  const promptVerb = prompt.querySelector('.space + span');
+  const activate = p => { if (p.kind === 'link') p.act(); else openPanel(p); };
   const panelOpen = () => panel.classList.contains('open');
 
   function closePanel() {
@@ -1348,7 +1569,7 @@ async function initDrive() {
   }
   panel.querySelector('.x').addEventListener('click', closePanel);
   dim.addEventListener('click', closePanel);
-  prompt.addEventListener('click', () => { if (promptFor) openPanel(promptFor); });
+  prompt.addEventListener('click', () => { if (promptFor) activate(promptFor); });
 
   /* ── 패널 너비 조절 ──
      왼쪽 가장자리를 드래그하거나, 손잡이에 초점을 두고 좌우 방향키로 조절한다.
@@ -1475,15 +1696,21 @@ async function initDrive() {
     let near = null, nearD = Infinity;
     for (const s of stations) {
       const d = Math.hypot(me.x - s.pos[0], me.z - s.pos[1]);
-      if (d < nearD) { nearD = d; near = s; }
+      if (d < ENTER_R && d < nearD) { nearD = d; near = s; }
     }
-    /* 자동으로 열지 않는다. 가까이 오면 게시판 위에 "Space" 안내만 띄운다 */
-    promptFor = near && nearD < ENTER_R ? near : null;
+    /* 연락처 조형물은 더 가까이 가야 뜬다. 가판대보다 가까우면 조형물이 우선 */
+    for (const c of contacts) {
+      const d = Math.hypot(me.x - c.pos[0], me.z - c.pos[1]);
+      if (d < 4.2 && d < nearD) { nearD = d; near = c; }
+    }
+    /* 자동으로 열지 않는다. 가까이 오면 위에 "Space" 안내만 띄운다 */
+    promptFor = near;
     if (!promptFor || panelOpen()) { prompt.hidden = true; return; }
     if (prompt.hidden || prompt.dataset.id !== promptFor.id) {
       prompt.dataset.id = promptFor.id;
       prompt.style.setProperty('--c', promptFor.color);
       promptName.textContent = promptFor.name;
+      promptVerb.textContent = promptFor.kind === 'link' ? promptFor.verb : '프로젝트 보기';
       prompt.hidden = false;
     }
     /* 게시판 이름표 바로 위 화면 좌표에 붙인다 */
@@ -1534,8 +1761,23 @@ async function initDrive() {
     if (player.mode === 'driving') drive(dt);
     else walk(dt);
     physicsStep(dt);
+    {
+      /* 차 바퀴 자리와 차체, 걷는 사람 발 아래를 눕힌다 */
+      const stamps = [];
+      if (Math.abs(speed) > 0.3 || player.mode === 'driving') {
+        const fx = Math.sin(heading), fz = Math.cos(heading);
+        for (const [f, sd] of [[1.3, 0.85], [1.3, -0.85], [-1.3, 0.85], [-1.3, -0.85]])
+          stamps.push([car.position.x + fx * f + fz * sd, car.position.z + fz * f - fx * sd, 0.9]);
+      }
+      if (person.visible) stamps.push([person.position.x, person.position.z, 0.7]);
+      updateTrail(dt, stamps);
+    }
     timeU.value = t;
+    updateDayNight(t);
     fireflies(t);
+    for (const c of contacts) { c.icon.position.y = 1.75 + Math.sin(t * 1.4 + c.phase) * 0.12; c.icon.rotation.y = Math.sin(t * 0.6 + c.phase) * 0.35; }
+    dust(dt);
+    checkBowling();
     fallingLeaves(dt, t, activePos().x, activePos().z);
     updateCamera(dt);
     proximity();
@@ -1563,7 +1805,7 @@ async function initDrive() {
   const { OutputPass } = await import('three/addons/postprocessing/OutputPass.js');
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.7, 0.55, 1.0));
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.45, 0.5, 1.0));
   composer.addPass(new OutputPass());
 
   function loop() {
