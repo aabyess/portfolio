@@ -86,8 +86,13 @@ Blender에서 앞코를 -Y로 두고 내보내면 glTF에서 +Z가 됩니다. �
 
 # 캐릭터 모델
 
-차에서 내려 뛰어다니는 캐릭터입니다. 현재는 **박스로 조립한 기본 캐릭터**가
-팔다리를 흔드는 방식으로 움직입니다. 별도 모델 파일이 없어도 동작합니다.
+차에서 내려 걸어 다니는 캐릭터입니다.
+
+현재 캐릭터: **Quaternius — Casual Character** (CC0) `person.glb` (1.4MB, Idle·Walk·Run 포함)
+출처: <https://poly.pizza/m/kZ3DmIoGip> · 라이선스 CC0 (퍼블릭 도메인)
+
+기본은 걷기(Walk), Shift를 누르면 달리기(Run)이고, 클립 재생 속도를 이동 속도에 맞춥니다.
+`CHAR_MODEL_URL`을 `null`로 바꾸면 박스로 조립한 기본 캐릭터로 돌아갑니다.
 
 리깅된 `.glb`로 교체하려면 `portfolio.js`의 `CHAR_MODEL_URL`에 경로를 넣으면 됩니다.
 
@@ -104,7 +109,8 @@ glb 안의 애니메이션 클립에서 `Armature|Run` 같은 접두사를 떼�
 | 상태 | 찾는 이름 | 없을 때 |
 |---|---|---|
 | 서 있을 때 | `idle` | 애니메이션 없이 정지 |
-| 뛸 때 | `run` | `walk`로 대체 |
+| 걸을 때 | `walk` | `run`으로 대체 |
+| 뛸 때 (Shift) | `run` | `walk`로 대체 |
 
 ## 쓸 만한 CC0 에셋
 

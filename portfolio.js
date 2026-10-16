@@ -498,7 +498,7 @@ const WHEEL_SPEC = [
 
 /* 캐릭터 모델. null이면 박스로 조립한 기본 캐릭터를 쓴다.
    리깅된 .glb를 넣으면 애니메이션(idle/run)을 자동으로 찾아 쓴다. */
-const CHAR_MODEL_URL = null;
+const CHAR_MODEL_URL = 'models/person.glb';   // Quaternius Casual Character (CC0)
 const CHAR_HEIGHT = 1.95;   // 월드 기준 키. glb도 여기에 맞춰 크기를 맞춘다.
 
 let driveReady = false;
@@ -643,7 +643,7 @@ async function initDrive() {
     for (const l of nightGlow.lights) l.intensity = 12 + 14 * k;
     for (const m of nightGlow.lanterns) m.emissiveIntensity = 1.1 + 1.0 * k;
     for (const m of nightGlow.bulbs) m.color.setHex(0xffd98a).multiplyScalar(1.1 + 0.9 * k);
-    for (const h of nightGlow.heads) h.intensity = 30 + 120 * k;
+    for (const h of nightGlow.heads) h.intensity = 12 + 28 * k;   // 밤에도 앞 블록이 하얗게 날아가지 않을 만큼만
   }
 
   /* 월드 바깥 바닥 — 지형 가장자리가 허공에 뜨지 않게 */
@@ -972,9 +972,12 @@ async function initDrive() {
 
   if (CHAR_MODEL_URL) new GLTFLoader().load(CHAR_MODEL_URL, gltf => {
     const model = gltf.scene;
-    const size = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());
+    /* 스킨 메시는 본 변형까지 반영한 실제 정점으로 재야 크기가 맞는다 (precise) */
+    model.updateMatrixWorld(true);
+    const size = new THREE.Box3().setFromObject(model, true).getSize(new THREE.Vector3());
     if (size.y > 0.0001) model.scale.setScalar(CHAR_HEIGHT / size.y);
-    const b = new THREE.Box3().setFromObject(model);
+    model.updateMatrixWorld(true);
+    const b = new THREE.Box3().setFromObject(model, true);
     const c = b.getCenter(new THREE.Vector3());
     model.position.x -= c.x; model.position.z -= c.z; model.position.y -= b.min.y;
     model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
@@ -1393,7 +1396,7 @@ async function initDrive() {
   })();
   /* ── 차 디테일: 헤드라이트, 흙먼지, 경적 ── */
   for (const sx of [-0.62, 0.62]) {
-    const hl = new THREE.SpotLight(0xffe2b0, 30, 32, Math.PI / 7, 0.55, 1.6);
+    const hl = new THREE.SpotLight(0xffe2b0, 12, 26, Math.PI / 7, 0.6, 1.6);
     hl.position.set(sx, 0.85, 2.0);
     hl.target.position.set(sx * 1.4, 0, 12);
     car.add(hl, hl.target);
@@ -1533,7 +1536,7 @@ async function initDrive() {
   });
 
   /* ── 주행 ── */
-  const MAX_FWD = 15, MAX_REV = 7, ACCEL = 12, BRAKE = 30, DRAG = 6, TURN = 1.9;
+  const MAX_FWD = 10, MAX_REV = 5, ACCEL = 9, BRAKE = 30, DRAG = 6, TURN = 1.9;
   let speed = 0, heading = Math.PI, steer = 0;
   const START_Z = WORLD.start.z;
   car.position.set(pathX(START_Z), 0, START_Z);
@@ -1589,7 +1592,8 @@ async function initDrive() {
   /* ── 도보 ──
      차에서 내려 뛰어다니는 모드. 방향키는 카메라 기준으로 해석하고
      캐릭터는 가려는 방향으로 부드럽게 돌아선다 (3인칭 게임의 일반적인 방식). */
-  const RUN_SPEED = 11, RUN_ACCEL = 46, RUN_DRAG = 34, TURN_SNAP = 11;
+  /* 기본은 걷고 Shift를 누르면 뛴다 */
+  const WALK_SPEED = 4.2, RUN_SPEED = 9, RUN_ACCEL = 30, RUN_DRAG = 26, TURN_SNAP = 11;
   let pHeading = Math.PI, pSpeed = 0, camYaw = Math.PI, bob = 0;
 
   /* 각도는 -π~π를 넘나들어서 그냥 보간하면 한 바퀴 돌아버린다 */
@@ -1610,7 +1614,8 @@ async function initDrive() {
       const len = Math.hypot(dx, dz) || 1;
       dx /= len; dz /= len;
       pHeading = angLerp(pHeading, Math.atan2(dx, dz), dt * TURN_SNAP);
-      pSpeed = Math.min(RUN_SPEED, pSpeed + RUN_ACCEL * dt);
+      const top = keys.boost ? RUN_SPEED : WALK_SPEED;
+      pSpeed = pSpeed > top ? Math.max(top, pSpeed - RUN_DRAG * dt) : Math.min(top, pSpeed + RUN_ACCEL * dt);
     } else {
       pSpeed = Math.max(0, pSpeed - RUN_DRAG * dt);
     }
@@ -1626,8 +1631,11 @@ async function initDrive() {
 
     const moving = pSpeed / RUN_SPEED;
     if (charMixer) {
-      playClip(moving > 0.05 ? 'run' : 'idle');
+      /* 걸음·달리기 클립 속도를 실제 이동 속도에 맞춰 발이 미끄러지지 않게 한다 */
+      playClip(pSpeed < 0.3 ? 'idle' : pSpeed < WALK_SPEED + 1 ? 'walk' : 'run');
+      if (charAction) charAction.timeScale = pSpeed < 0.3 ? 1 : pSpeed < WALK_SPEED + 1 ? Math.max(0.5, pSpeed / WALK_SPEED) : pSpeed / RUN_SPEED * 1.1;
       charMixer.update(dt);
+      person.position.y = groundY(person.position.x, person.position.z);
     } else {
       /* 기본 캐릭터는 팔다리를 직접 흔든다 */
       bob += dt * (4 + moving * 9);
@@ -1642,7 +1650,7 @@ async function initDrive() {
 
   /* glb 캐릭터용 — 같은 클립이면 다시 시작하지 않고 부드럽게 교차시킨다 */
   function playClip(name) {
-    const clip = charClips[name] || charClips[name === 'run' ? 'walk' : 'idle'];
+    const clip = charClips[name] || charClips[name === 'run' ? 'walk' : name === 'walk' ? 'run' : 'idle'];
     if (!clip || !charMixer) return;
     if (charAction && charAction.getClip() === clip) return;
     const next = charMixer.clipAction(clip);
@@ -1690,7 +1698,7 @@ async function initDrive() {
       <div class="keys"><span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span></div>
       <span>${driving ? '운전' : '걷기'}</span>
       <div class="keys"><span class="key">Space</span></div><span>보기·열기</span>
-      ${driving ? '<div class="keys"><span class="key">Shift</span></div><span>부스트</span><div class="keys"><span class="key">H</span></div><span>경적</span>' : ''}
+      ${driving ? '<div class="keys"><span class="key">Shift</span></div><span>부스트</span><div class="keys"><span class="key">H</span></div><span>경적</span>' : '<div class="keys"><span class="key">Shift</span></div><span>달리기</span>'}
       <div class="keys"><span class="key">R</span></div><span>다시 쌓기</span>
       <div class="keys"><span class="key">F</span></div><span>${driving ? '내리기' : '타기'}</span>`;
   }
