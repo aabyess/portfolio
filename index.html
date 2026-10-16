@@ -148,6 +148,16 @@ body[data-view="drive"] #doc-root{display:none}
 #doc-root .lk a.live:hover{background:#09202f;border-color:#09202f;color:#fff}
 
 
+#doc-root #d-aiz .sh-d b{color:var(--text);font-weight:600}
+#doc-root #d-aiz .pj{border-color:color-mix(in srgb,#8b6cff 35%,var(--line))}
+#doc-root #d-aiz .pj-no{color:#7a5cf0}
+#doc-root #d-aiz .pj-role{color:#6b4fe0;background:rgba(139,108,255,.12)}
+#doc-root .pj-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:14px}
+#doc-root .pj-stats div{background:var(--sunk);border-radius:10px;padding:10px 12px}
+#doc-root .pj-stats dt{font-size:18px;font-weight:800;letter-spacing:-.02em}
+#doc-root .pj-stats dd{font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.4}
+#doc-root .ai-h{font-size:15px;font-weight:700;margin:30px 0 12px;letter-spacing:-.01em}
+@media(max-width:640px){#doc-root .pj-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 #doc-root #d-play{background:var(--sunk)}
 #doc-root .pg{display:grid;grid-template-columns:repeat(auto-fit,minmax(252px,1fr));gap:16px}
 #doc-root .pgc{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:19px 20px}
@@ -417,6 +427,7 @@ body.is-touch #g-prompt .space{display:none}
       <nav class="hd-nav">
         <a href="#d-skills">기술</a>
         <a href="#d-work">프로젝트</a>
+        <a href="#d-aiz">AI 활용</a>
         <a href="#d-play">사이드</a>
         <a href="#d-contact">연락</a>
         <button class="swap" data-go="drive" type="button">
@@ -470,6 +481,17 @@ body.is-touch #g-prompt .space{display:none}
           <h2>프로젝트</h2>
         </div>
         <div class="pl" id="d-projects"></div>
+      </div>
+    </section>
+
+    <section id="d-aiz">
+      <div class="wrap">
+        <div class="sh">
+          <div class="sh-k">AI</div>
+          <h2>AI 활용</h2>
+          <p class="sh-d">AI에게 구현을 맡길 때는 <b>일을 나누고, 결과를 스스로 확인하게 하고, 근거 없는 "완료"를 돌려보내는 것</b>까지 제 일이라고 생각합니다.</p>
+        </div>
+        <div id="d-ai"></div>
       </div>
     </section>
 
