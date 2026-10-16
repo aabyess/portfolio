@@ -253,6 +253,60 @@ const listBlock = (title, items, cls = '', fold = 0) => items && items.length
   ? `<div class="sec"><div class="sec-t">${title}</div><ul class="${cls}"${fold ? ' data-pts' : ''}>${items.map((t, i) => `<li class="${fold && i >= fold ? 'hide' : ''}">${t}</li>`).join('')}</ul></div>` : '';
 
 /* ════════════════════════════════════════════════════════════
+   배경음악 — 유튜브 공식 플레이어(IFrame API)로 재생한다.
+   브라우저는 사용자가 한 번 조작하기 전엔 소리를 막으므로 첫 클릭/키 입력에 시작한다.
+   끄면 멈추고 카드도 숨긴다. 문서 뷰로 가면 멈추고 게임으로 돌아오면 다시 튼다.
+   ════════════════════════════════════════════════════════════ */
+function createMusic() {
+  const KEY = 'portfolio.music', VIDEO = 'FysE1sMun5s';
+  const btn = document.getElementById('g-music-btn'), card = document.getElementById('g-music');
+  if (!btn || !card) return null;
+  let want = true;
+  try { want = localStorage.getItem(KEY) !== 'off'; } catch { /* 저장소가 막혀도 기본은 켜짐 */ }
+  let player = null, ready = false, started = false;
+
+  const api = () => {
+    if (document.getElementById('yt-iframe-api')) return;
+    window.onYouTubeIframeAPIReady = () => {
+      player = new YT.Player('g-music-player', {
+        width: 200, height: 200, videoId: VIDEO,
+        playerVars: { controls: 1, loop: 1, playlist: VIDEO, playsinline: 1, rel: 0, modestbranding: 1 },
+        events: { onReady: () => { ready = true; player.setVolume(35); sync(); } }
+      });
+    };
+    const sc = document.createElement('script');
+    sc.id = 'yt-iframe-api'; sc.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(sc);
+  };
+
+  function sync() {
+    const inGame = document.body.dataset.view === 'drive';
+    const on = want && started && inGame;
+    card.classList.toggle('off', !on);
+    btn.setAttribute('aria-pressed', String(want));
+    btn.querySelector('span').textContent = want ? '음악 켜짐' : '음악 꺼짐';
+    if (!ready) return;
+    if (on) player.playVideo(); else player.pauseVideo();
+  }
+  function start() {
+    if (started || !want || document.body.dataset.view !== 'drive') return;
+    started = true;
+    sync();
+  }
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    want = !want;
+    try { localStorage.setItem(KEY, want ? 'on' : 'off'); } catch { /* 무시 */ }
+    if (want) started = true;
+    sync();
+  });
+  addEventListener('pointerdown', start);
+  addEventListener('keydown', start);
+  api();
+  return { sync };
+}
+
+/* ════════════════════════════════════════════════════════════
    문서 뷰 렌더링
    ════════════════════════════════════════════════════════════ */
 const VISIBLE_PTS = 4;   // 나머지는 "더 보기"로 접는다
@@ -327,6 +381,7 @@ const DOC_HASH = /^#(doc|top|d-)/;
 const viewFromHash = () => (DOC_HASH.test(location.hash) ? 'doc' : 'drive');
 
 let driveActive = false;
+let music = null;   // 아래 createMusic()이 채운다. setView가 화면을 바꿀 때 음악도 같이 켜고 끈다
 
 function setView(v, { updateHash = true } = {}) {
   document.body.dataset.view = v;
@@ -339,6 +394,8 @@ function setView(v, { updateHash = true } = {}) {
       history.replaceState(null, '', location.pathname + location.search);
     }
   }
+
+  if (music) music.sync();
 
   if (v === 'drive') {
     /* 3D 초기화가 어떤 이유로든 실패하면 로딩 화면에 갇히지 않고 문서 뷰로 넘긴다 */
@@ -1832,4 +1889,5 @@ async function initDrive() {
 }
 
 /* 시작 */
+music = createMusic();
 setView(viewFromHash(), { updateHash: false });
