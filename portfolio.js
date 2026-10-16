@@ -432,7 +432,7 @@ async function initDrive() {
   renderer.setSize(innerWidth, innerHeight);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;    // 네온이 하얗게 타지 않게
-  renderer.toneMappingExposure = 1.15;
+  renderer.toneMappingExposure = 1.1;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   document.getElementById('drive-root').appendChild(renderer.domElement);
@@ -468,17 +468,18 @@ async function initDrive() {
   const timeU = { value: 0 };   // 바람·물결 셰이더 공용 시간
 
   /* ── 하늘 · 안개 ── */
-  scene.fog = new THREE.Fog(0x6a3a6e, 38, 120);
+  /* 해가 막 진 저녁 — 선술집 불빛이 살아나는 시간 */
+  scene.fog = new THREE.Fog(0x2a1a33, 26, 100);
   {
     const cv = document.createElement('canvas');
     cv.width = 8; cv.height = 256;
     const g = cv.getContext('2d');
     const grad = g.createLinearGradient(0, 0, 0, 256);
-    grad.addColorStop(0.00, '#2a1745');
-    grad.addColorStop(0.45, '#5b2f6e');
-    grad.addColorStop(0.70, '#9e4d78');
-    grad.addColorStop(0.86, '#e07a6a');
-    grad.addColorStop(1.00, '#ffb27a');
+    grad.addColorStop(0.00, '#0e0a22');
+    grad.addColorStop(0.45, '#241538');
+    grad.addColorStop(0.70, '#4f2546');
+    grad.addColorStop(0.86, '#9c4436');
+    grad.addColorStop(1.00, '#e0844a');
     g.fillStyle = grad; g.fillRect(0, 0, 8, 256);
     const tex = new THREE.CanvasTexture(cv);
     tex.colorSpace = THREE.SRGBColorSpace;
@@ -489,15 +490,15 @@ async function initDrive() {
   }
 
   /* ── 조명 — 낮게 깔린 노을 해 ── */
-  scene.add(new THREE.HemisphereLight(0xffc29a, 0x3a2050, 1.25));
-  const sun = new THREE.DirectionalLight(0xffa868, 2.6);
-  sun.position.set(-34, 38, 30);
+  scene.add(new THREE.HemisphereLight(0xffb48a, 0x1a1030, 0.7));
+  const sun = new THREE.DirectionalLight(0xff9050, 1.35);   // 지평선에 걸린 마지막 햇빛
+  sun.position.set(-40, 16, 34);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -55, right: 55, top: 55, bottom: -55, near: 1, far: 160 });
   sun.shadow.bias = -0.0008; sun.shadow.normalBias = 0.04;
   scene.add(sun);
-  const fill = new THREE.DirectionalLight(0x9a7cff, 0.55);
+  const fill = new THREE.DirectionalLight(0x7088ff, 0.45);   // 푸른 달빛
   fill.position.set(40, 20, -30);
   scene.add(fill);
 
@@ -518,7 +519,13 @@ async function initDrive() {
 
   /* ── Blender 월드 glb ── */
   const worldManager = new THREE.LoadingManager();
-  new GLTFLoader(worldManager).load('models/autumn-world.glb', gltf => {
+  /* 월드 glb는 Draco로 압축돼 있다(7.9MB → 1.1MB). 디코더는 three와 같은 버전의 CDN에서 받는다 */
+  const { DRACOLoader } = await import('three/addons/loaders/DRACOLoader.js');
+  const draco = new DRACOLoader();
+  draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/');
+  const worldLoader = new GLTFLoader(worldManager);
+  worldLoader.setDRACOLoader(draco);
+  worldLoader.load('models/autumn-world.glb', gltf => {
     gltf.scene.traverse(o => {
       if (!o.isMesh) return;
       o.castShadow = true; o.receiveShadow = true;
@@ -959,7 +966,7 @@ async function initDrive() {
       f.rotation.set(Math.PI, Math.PI / 6, 0);
     }
     /* 전구 줄 */
-    const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffd98a, fog: false });
+    const bulbMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffd98a).multiplyScalar(2.6), fog: false, toneMapped: false });
     for (let i = 0; i < 11; i++) {
       const x = -3.5 + i * 0.7;
       add(new THREE.SphereGeometry(0.11, 8, 6), bulbMat, x, 3.86 - Math.sin(i / 10 * Math.PI) * 0.22, 2.15);
@@ -971,7 +978,7 @@ async function initDrive() {
     add(new THREE.BoxGeometry(0.8, 0.6, 0.7), paint, 4.6, 1.1, 1.5).rotation.y = 0.2;
 
     /* 따뜻한 가판대 불빛 */
-    const glow = new THREE.PointLight(0xffb070, 14, 18, 2);
+    const glow = new THREE.PointLight(0xff9a4a, 34, 24, 2);
     glow.position.set(0, 3.6, 1.6);
     g.add(glow);
 
@@ -1029,9 +1036,103 @@ async function initDrive() {
     label.position.set(0, frame.position.y + boardH / 2 + 2.1, 0);
     face.add(label);
 
+
+    /* ── 선술집 꾸밈 ── 빨간 등롱, 酒 깃발, 항아리. 의자·테이블은 물리 몸체라 아래에서 따로 놓는다 */
+    {
+      const lanternMat = new THREE.MeshStandardMaterial({ color: 0xc8261c, emissive: 0xff4a1e, emissiveIntensity: 2.4, roughness: .6 });
+      const capMat = new THREE.MeshStandardMaterial({ color: 0x1b1210, roughness: .8 });
+      for (const x of [-2.6, 0, 2.6]) {
+        add(new THREE.CylinderGeometry(0.34, 0.34, 0.62, 14), lanternMat, x, 3.25, 2.05).castShadow = false;
+        add(new THREE.CylinderGeometry(0.2, 0.2, 0.08, 10), capMat, x, 3.6, 2.05);
+        add(new THREE.CylinderGeometry(0.2, 0.2, 0.08, 10), capMat, x, 2.9, 2.05);
+        add(new THREE.CylinderGeometry(0.015, 0.015, 0.5, 4), capMat, x, 3.87, 2.05);
+      }
+      /* 酒 깃발 — 수레 옆 장대 */
+      add(new THREE.BoxGeometry(0.14, 5.2, 0.14), woodDark, -4.7, 2.6, 1.0);
+      const fcv = document.createElement('canvas'); fcv.width = 128; fcv.height = 256;
+      const fc = fcv.getContext('2d');
+      fc.fillStyle = '#f3e7d0'; fc.fillRect(0, 0, 128, 256);
+      fc.fillStyle = '#b3241a'; fc.fillRect(0, 0, 128, 14); fc.fillRect(0, 242, 128, 14);
+      fc.fillStyle = '#1d1512'; fc.font = '900 92px serif'; fc.textAlign = 'center'; fc.textBaseline = 'middle';
+      fc.fillText('酒', 64, 128);
+      const ftex = new THREE.CanvasTexture(fcv); ftex.colorSpace = THREE.SRGBColorSpace;
+      const flag = add(new THREE.PlaneGeometry(1.0, 2.0), new THREE.MeshStandardMaterial({ map: ftex, side: THREE.DoubleSide, roughness: .9 }), -4.15, 4.0, 1.0);
+      flag.userData.flag = true;
+      /* 막걸리 항아리 */
+      const jarPts = [[0, 0], [0.42, 0.04], [0.62, 0.45], [0.58, 0.85], [0.36, 1.1], [0.38, 1.18], [0, 1.18]].map(([r, y]) => new THREE.Vector2(r, y));
+      const jarMat = new THREE.MeshStandardMaterial({ color: 0x5a2e1a, roughness: .35 });
+      add(new THREE.LatheGeometry(jarPts, 16), jarMat, 4.4, 0, -0.6);
+      add(new THREE.LatheGeometry(jarPts, 16), jarMat, 5.1, 0, 0.2).scale.setScalar(0.7);
+      /* 상판 위 술병과 사발 */
+      const bottle = new THREE.MeshStandardMaterial({ color: 0x2f9a58, emissive: 0x1f6a3a, emissiveIntensity: .5, roughness: .15, transparent: true, opacity: .9 });
+      const bowl = new THREE.MeshStandardMaterial({ color: 0xf1e6cf, roughness: .5 });
+      for (const [x, z] of [[0.6, 0.3], [1.0, 0.6], [1.35, 0.2]]) add(new THREE.CylinderGeometry(0.1, 0.12, 0.5, 10), bottle, x, 2.22, z);
+      for (const [x, z] of [[-0.4, 0.7], [0.1, 0.9]]) add(new THREE.CylinderGeometry(0.22, 0.13, 0.14, 12), bowl, x, 2.04, z);
+    }
+
     scene.add(g);
     stations.push({ ...p, group: g, face, ring, label, labelY: label.position.y, phase: Math.random() * Math.PI * 2 });
   }
+
+  /* ── 선술집 앞 빨간 플라스틱 의자와 둥근 테이블 ──
+     차로 부딪히면 넘어지고 R로 다시 세운다 (장난감 블록과 같은 목록에 넣는다) */
+  {
+    const stoolMat = new THREE.MeshStandardMaterial({ color: 0xc8312b, roughness: .45 });
+    const tableMat = new THREE.MeshStandardMaterial({ color: 0x7a4a2a, roughness: .7 });
+    const v = new THREE.Vector3();
+    for (const st of stations) {
+      st.group.updateMatrixWorld(true);
+      const place = (mesh, shape, lx, lz, h, mass) => {
+        st.group.localToWorld(v.set(lx, 0, lz));
+        const y = h / 2 + 0.01;
+        mesh.castShadow = true; mesh.receiveShadow = true;
+        scene.add(mesh);
+        const body = new CANNON.Body({ mass, shape, linearDamping: 0.1, angularDamping: 0.15, sleepSpeedLimit: 0.25, sleepTimeLimit: 0.6 });
+        body.position.set(v.x, y, v.z);
+        world.addBody(body);
+        mesh.position.set(v.x, y, v.z);
+        toyBlocks.push({ mesh, body, home: new CANNON.Vec3(v.x, y, v.z) });
+      };
+      /* 그룹이 0.62배라 크기는 월드 기준으로 바로 잡는다 */
+      const tH = 0.7, tR = 0.62;
+      const table = new THREE.Group();
+      const top = new THREE.Mesh(new THREE.CylinderGeometry(tR, tR, 0.07, 18), tableMat); top.position.y = tH / 2 - 0.035;
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.12, tH, 8), tableMat);
+      top.castShadow = leg.castShadow = true;
+      table.add(top, leg);
+      place(table, new CANNON.Cylinder(tR, tR, tH, 10), 0, 4.6, tH, 1.2);
+      for (let k = 0; k < 4; k++) {
+        const a = k * Math.PI / 2 + Math.PI / 4;
+        const stool = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.17, 0.42, 12), stoolMat);
+        place(stool, new CANNON.Cylinder(0.2, 0.17, 0.42, 10), Math.cos(a) * 1.75, 4.6 + Math.sin(a) * 1.75, 0.42, 0.35);
+      }
+    }
+  }
+
+  /* ── 반딧불 — 선술집 근처에 많이, 숲에는 드문드문 ── */
+  const fireflies = (() => {
+    const N = 150, pts = [];
+    for (let i = 0; i < N; i++) {
+      const st = stations[i % stations.length];
+      const near = i < 96;
+      const x = near ? st.pos[0] + (Math.random() - .5) * 9 : (Math.random() - .5) * 76;
+      const z = near ? st.pos[1] + (Math.random() - .5) * 9 : (Math.random() - .5) * 76;
+      pts.push({ x, z, y: 0.6 + Math.random() * 2.2, ph: Math.random() * 6.3, sp: 0.5 + Math.random() });
+    }
+    const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.045, 6, 4),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffd98a).multiplyScalar(3), toneMapped: false, fog: false }), N);
+    scene.add(mesh);
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3();
+    return t => {
+      pts.forEach((f, i) => {
+        const blink = 0.55 + 0.45 * Math.sin(t * 3 * f.sp + f.ph);
+        p.set(f.x + Math.sin(t * 0.4 * f.sp + f.ph) * 0.8, heightAt(f.x, f.z) + f.y + Math.sin(t * 0.9 + f.ph) * 0.3, f.z + Math.cos(t * 0.35 * f.sp + f.ph) * 0.8);
+        m4.compose(p, q, sc.setScalar(blink));
+        mesh.setMatrixAt(i, m4);
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+    };
+  })();
 
   /* ── 조작 ── */
   const keys = Object.create(null);
@@ -1434,6 +1535,7 @@ async function initDrive() {
     else walk(dt);
     physicsStep(dt);
     timeU.value = t;
+    fireflies(t);
     fallingLeaves(dt, t, activePos().x, activePos().z);
     updateCamera(dt);
     proximity();
@@ -1454,18 +1556,29 @@ async function initDrive() {
     }
   }
 
+  /* ── 빛 번짐 — 등롱·전구·반딧불처럼 밝은 것만 은은하게 번진다 ── */
+  const { EffectComposer } = await import('three/addons/postprocessing/EffectComposer.js');
+  const { RenderPass } = await import('three/addons/postprocessing/RenderPass.js');
+  const { UnrealBloomPass } = await import('three/addons/postprocessing/UnrealBloomPass.js');
+  const { OutputPass } = await import('three/addons/postprocessing/OutputPass.js');
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.7, 0.55, 1.0));
+  composer.addPass(new OutputPass());
+
   function loop() {
     requestAnimationFrame(loop);
     const dt = Math.min(clock.getDelta(), 0.05);   // 탭 복귀 시 delta 폭주 방지
     if (!driveActive) return;                      // 문서 뷰일 땐 그리지 않는다
     step(dt);
-    renderer.render(scene, camera);
+    composer.render();
   }
 
   addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
+    composer.setSize(innerWidth, innerHeight);
   });
 
   /* ── 로딩 ── */
