@@ -2363,6 +2363,24 @@ async function initDrive() {
     onOpen() { for (const k in keys) keys[k] = false; pSpeed = 0; speed = 0; if (weapons) weapons.holster(); },
   });
 
+  /* ── 배경 소리: 바람·낙엽·개울·선술집 웅성거림·새·귀뚜라미·부엉이·개구리·발소리 (audio.js, 전부 합성음) ── */
+  const { createAudio } = await import('./audio.js');
+  const ambience = createAudio({
+    getPlayerPos: () => activePos(),
+    getCamera: () => camera,
+    getNight: () => night,
+    getSeason: () => seasons.season,
+    isMusicOn: () => document.getElementById('g-music-btn')?.getAttribute('aria-pressed') === 'true',
+    isVisible: () => driveActive,
+    getNpcs: () => npcs,
+    getStalls: () => stations.map(s => s.group.position),
+    isMoving: () => (player.mode === 'onfoot'
+      ? { speed: (tavern.seated || fishing.active) ? 0 : pSpeed, mode: 'onfoot' }
+      : { speed: Math.abs(speed), mode: rides.current }),
+    onFoot: () => player.mode === 'onfoot',
+    pathX, roadHalf: WORLD.path.half, bridge: WORLD.bridge, stream: WORLD.stream,
+  });
+
   /* 오른쪽 마우스를 누르고 있는 동안 어깨 너머로 살짝 줌 (떼면 돌아온다) */
   let zoomHeld = false, zoomK = 0;
   const baseFov = camera.fov;
@@ -2440,6 +2458,7 @@ async function initDrive() {
     if (village) village.update(dt, t);
     if (festival) festival.update(dt, t);
     if (pageant) pageant.update(dt, t);
+    ambience.update(dt, t);
     if (castle) castle.update(dt, t);
     vprops.update(dt, t);
     if (animals) animals.update(dt, t);
