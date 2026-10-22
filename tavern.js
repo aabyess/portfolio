@@ -4,6 +4,8 @@
    걸어서 빈 의자 1.2 m 안에 가면 "E 앉기" 가 뜬다. E → 의자로 다가가 앉는다.
    앉아 있는 동안 오른쪽 아래 주문판에서 술을 고른다(1~4 키 또는 클릭).
    잠시 뒤 오른손에 나무 잔이 생기고, E 를 길게 누르거나 "마시기" 로 한 모금씩 마신다(3모금 = 한 잔).
+   [서빙] npcs API(addActor)가 있으면 서빙 아가씨(npc-barmaid.glb, 없으면 npc-maid) 한 명이 그 가판대 건물 옆 문가에서
+   잔을 받아 들고 걸어와 인사하며 건넨다(약 3~6초, 주문판 "서빙 중…"). portfolio.js 쪽 추가 연결은 없다. 테스트 주소(?test)면 window.__tavern.
    세 잔 넘게 마시면 화면이 살짝 흔들리는 '취기'가 오고 천천히 깬다
    (prefers-reduced-motion 이면 흔들림 없이 가장자리만 살짝 붉어진다).
    E 짧게 / WASD / Esc → 일어난다.
@@ -202,6 +204,10 @@ export const DRINKS = [
 ];
 const START_COINS = 20, SIP_COUNT = 3, SIT_R = 1.2;
 const SIP_TIME = 1.7, SERVE_DELAY = 1.6, HOLD_E = 0.25;
+/* 서빙 아가씨 (npcs.js 배우 하나가 플레이어가 앉은 가판대를 맡는다) */
+const MAID_SPEED = 1.9, MAID_SERVE_MAX = 25;     // m/s, 이 초가 지나도 못 오면 그냥 잔을 내준다
+const MAID_LINES = [d => `주문하신 ${d} 나왔어요~`, () => '시원할 때 드세요!', () => '임금님도 즐겨 드시는 술이에요♪',
+  () => '맛있게 드세요, 손님~', d => `${d} 한 잔 대령이요♪`, () => '천천히 드세요~ 헤헤'];
 const DRUNK_AT = 3, SOBER_RATE = 1 / 45;          // 3잔부터 취기, 45초에 한 잔씩 깬다
 
 export const HUD_HINT = 'E 앉기 · 1~4 주문 · E 길게 마시기';
@@ -431,6 +437,7 @@ export function createTavern({
     if (onSit) onSit(seat);
     renderPanel();
     panel.hidden = false;
+    maidToStall();      // 서빙 아가씨가 이 가판대 카운터로 (안 보이면 나타나고, 가까우면 걸어온다)
     return true;
   }
   const hipLocal = new V(0, 0.95, 0);
@@ -471,22 +478,28 @@ export function createTavern({
     let line;
     if (S.coins >= d.price) { S.coins -= d.price; line = LINES_ORDER[(Math.random() * LINES_ORDER.length) | 0]; }
     else line = LINES_DEBT[(Math.random() * LINES_DEBT.length) | 0];
-    S.drink = { def: d, phase: 'wait' }; S.serveT = SERVE_DELAY;
+    S.drink = { def: d, phase: 'wait', maid: false }; S.serveT = SERVE_DELAY;
+    if (maidOrder()) { S.drink.maid = true; S.serveT = MAID_SERVE_MAX; }   // 서빙 아가씨가 가져온다 (못 오면 25초 뒤 그냥 나온다)
     say(`${line} <b>${d.name}</b>`);
     if (onOrder) onOrder(d);
     renderPanel();
     return true;
   }
-  function serve() {
+  function serve(maidLine = null) {
+    if (!S.drink || S.drink.phase !== 'wait') return;
     const d = S.drink.def;
+    if (!maidLine) maidCancel();
     S.drink.phase = 'hold'; S.sips = SIP_COUNT;
     liqMat.color.setHex(d.liquid); foamMat.color.setHex(d.foam);
     setFill(1); mug.visible = true; mug.scale.setScalar(0.01);
     clunk();
     // 그 가판대 주인이 잔을 내민다 (npcs.barkeeperServe)
-    const api = getNpcs && getNpcs();
-    if (api && api.barkeeperServe && api.stalls && S.seat) { const si = api.stalls.indexOf(S.seat.stall); if (si >= 0) api.barkeeperServe(si); }
-    say(`여기 있어요, ${d.name} 한 잔!`);
+    if (maidLine) say(maidLine, '서빙');
+    else {
+      const api = getNpcs && getNpcs();
+      if (api && api.barkeeperServe && api.stalls && S.seat) { const si = api.stalls.indexOf(S.seat.stall); if (si >= 0) api.barkeeperServe(si); }
+      say(`여기 있어요, ${d.name} 한 잔!`);
+    }
     renderPanel();
   }
   function sip() {
@@ -501,11 +514,253 @@ export function createTavern({
     const waiting = S.drink && S.drink.phase === 'wait';
     for (const it of items) it.disabled = !!S.drink;
     drinkBtn.disabled = !holding;
-    if (waiting) stEl.textContent = `${S.drink.def.name} 나오는 중…`;
+    if (waiting) stEl.textContent = S.drink.maid ? `서빙 중… (${S.drink.def.name})` : `${S.drink.def.name} 나오는 중…`;
     else if (holding) stEl.innerHTML = `${S.drink.def.name} <span class="sips">${'<b></b>'.repeat(S.sips)}${'<b class="e"></b>'.repeat(SIP_COUNT - S.sips)}</span>`;
     else stEl.textContent = S.drinks ? `${S.drinks}잔째… 한 잔 더?` : '무엇을 드릴까요?';
     const lv = Math.min(5, Math.ceil(S.drunk - 1e-6));
     dots.forEach((b, i) => b.classList.toggle('on', i < lv));
+  }
+
+
+  /* ════ 서빙 아가씨 ════
+     배우 하나(npc-barmaid.glb, 없으면 npc-maid.glb)를 npcs.addActor 로 만들어 플레이어가 앉은 가판대를 맡긴다.
+     주문 → 카운터(술집 주인 옆)에서 잔을 들고 → 수레 옆으로 돌아 나와 테이블 둘레를 따라 → 플레이어 의자 옆에 서서
+     인사하며 말풍선 → 잔이 플레이어 손으로 → 카운터로 돌아가 쉬거나 테이블 둘레를 거닌다.
+     맞거나 잡혀 넘어지면 npcs.js 가 평소처럼 넘어뜨렸다 일으키고, 일어나면 하던 일을 이어서 한다.
+     좌표: 테이블 중심 기준 가판대 좌표(앞 +Z) → stall.x/z/rotY 로 월드 변환. 건물 크기는 frameOf() 가 잰다 */
+  const M = { n: null, stall: null, side: 1, job: 'off', path: [], pi: 0, t: 0, idleT: 0, knocked: false, line: '', farT: 0 };
+  const RING_R = 2.75;
+  const _mp = new V(), _box = new THREE.Box3();
+  function maidApi() { const api = getNpcs && getNpcs(); return api && api.addActor && api.actorOn && api.isActing ? api : null; }
+  function ensureMaid() {
+    if (M.n) return M.n;
+    const api = maidApi(); if (!api) return null;
+    M.n = api.addActor('npc-barmaid', { fallback: 'maid' });
+    M.n.bubbleH = 2.25;     // 어깨 너머 카메라에서도 말풍선이 화면 안에 들게 조금 낮게
+    /* 모델에 잔(Prop.R 의 Wood/Foam 메시)이 없으면 이 파일의 나무 잔을 복제해 Prop.R 에 단다.
+       Prop.R 의 scale(클립 + propShow)이 그대로 보이기/숨기기가 된다 */
+    const hasMug = M.n.meshes.some(m => [].concat(m.material).some(x => x && /Wood|Foam|Mug/i.test(x.name || '')));
+    if (!hasMug && M.n.propBone) {
+      const c = mug.clone(true);
+      c.visible = true; c.position.set(0, 0, 0); c.rotation.set(0, 0, 0); c.scale.setScalar(1);
+      const H = mug.userData.H, y = -H / 2 + H * 0.92;
+      c.traverse(o => {
+        if (o.material === liqMat || o.material === foamMat) { o.visible = true; o.position.y = o.material === foamMat ? y + 0.004 : y; }
+      });
+      M.n.propBone.add(c);
+      M.mugProp = c;
+    }
+    return M.n;
+  }
+  /* 가판대 좌표계: 테이블 중심이 원점, +Z = 가판대 앞(손님 쪽), +X = 가판대 왼쪽(rotY 기준) */
+  function L2W(st, lx, lz) {
+    const c = Math.cos(st.rotY || 0), s = Math.sin(st.rotY || 0);
+    return { x: st.x + lx * c + lz * s, z: st.z - lx * s + lz * c };
+  }
+  function W2L(st, x, z) {
+    const c = Math.cos(st.rotY || 0), s = Math.sin(st.rotY || 0), dx = x - st.x, dz = z - st.z;
+    return { x: dx * c - dz * s, z: dx * s + dz * c };
+  }
+  /* 술집 건물의 바닥 둘레(반폭 hw, 앞면 front)를 한 번 재 둔다 — 술집 주인(stall.bar)은 건물 안이라
+     아가씨는 건물 옆 문가(카운터 끝)에서 잔을 받아 나온다. 건물을 못 찾으면 기본값 */
+  function frameOf(st) {
+    if (st._maidF) return st._maidF;
+    const F = { hw: 4.5, front: -0.5 };
+    const bl = st.bar ? W2L(st, st.bar.x, st.bar.z) : null;
+    if (bl) F.front = Math.min(-0.3, bl.z + 1.9);
+    let g = null, bd = 1e9;
+    for (const o of scene.children) {
+      if ((!o.isGroup && o.type !== 'Object3D') || /^NPC_/.test(o.name)) continue;   // 사람(NPC_*)은 빼고 가판대 그룹만
+      if (Math.abs(Math.atan2(Math.sin(o.rotation.y - (st.rotY || 0)), Math.cos(o.rotation.y - (st.rotY || 0)))) > 0.05) continue;
+      const d = Math.hypot(o.position.x - st.x, o.position.z - st.z);
+      if (d > 0.5 && d < 6 && d < bd) { bd = d; g = o; }
+    }
+    if (g) {
+      g.updateMatrixWorld(true);
+      const gy = g.position.y;
+      let hw = 0, front = -1e9;
+      g.traverse(o => {
+        if (!o.isMesh || !o.visible) return;
+        _box.setFromObject(o);
+        if (_box.isEmpty() || _box.min.y - gy > 0.6 || _box.max.y - gy < 0.3) return;   // 땅에 닿은 것만 (간판·지붕·바닥 원 제외)
+        const a = W2L(st, _box.min.x, _box.min.z), b = W2L(st, _box.max.x, _box.max.z);
+        const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), z0 = Math.min(a.z, b.z), z1 = Math.max(a.z, b.z);
+        if (Math.hypot((x0 + x1) / 2, (z0 + z1) / 2) < 1.4 || x1 - x0 > 14) return;       // 테이블·의자, 너무 큰 것 제외
+        hw = Math.max(hw, Math.abs(x0), Math.abs(x1)); front = Math.max(front, z1);
+      });
+      if (hw > 1 && front > -6) { F.hw = Math.min(hw, 6.5); F.front = Math.min(front, 0); }
+    }
+    st._maidF = F;
+    return F;
+  }
+  /* 아가씨 '카운터'(잔 받는 곳) = 건물 옆 문가, 모서리 = 건물 앞 모서리 바깥 */
+  function counterL(st, side) { const F = frameOf(st); return { x: side * (F.hw + 0.6), z: F.front - 1.3 }; }
+  function cornerL(st, side) { const F = frameOf(st); return { x: side * (F.hw + 0.6), z: F.front + 0.9 }; }
+  function counterPt(st, side) { const c = counterL(st, side); return L2W(st, c.x, c.z); }
+  /* 카운터 → 의자 옆까지 길 (월드 점 배열). 첫 점이 카운터, 끝 점이 의자 옆 */
+  function routeTo(st, seat) {
+    seatXZ(seat, _mp);
+    const sl = W2L(st, _mp.x, _mp.z), F = frameOf(st);
+    /* 앉은 사람의 왼쪽 0.85 m (어깨 너머 카메라가 오른쪽 뒤에 있으니 왼쪽에 서야 얼굴이 보인다) */
+    const r = Math.hypot(sl.x, sl.z) || 1, dx = -sl.x / r, dz = -sl.z / r;      // 테이블을 보는 방향
+    const sp = { x: sl.x + dz * 0.85 + dx * 0.1, z: sl.z - dx * 0.85 + dz * 0.1 };
+    sp.z = Math.max(sp.z, F.front + 0.45);
+    const side = sp.x >= 0 ? 1 : -1;
+    const pts = [counterL(st, side), cornerL(st, side)];
+    /* 모서리 → 테이블 둘레(반지름 2.75)를 돌아 → 의자 옆 (의자·테이블을 가로지르지 않게) */
+    const c = cornerL(st, side), a0 = Math.atan2(c.z, c.x), a1 = Math.atan2(sp.z, sp.x);
+    const da = Math.atan2(Math.sin(a1 - a0), Math.cos(a1 - a0)), steps = Math.ceil(Math.abs(da) / 0.4);
+    for (let k = 1; k <= steps; k++) {
+      const a = a0 + da * k / steps, p = { x: Math.cos(a) * RING_R, z: Math.sin(a) * RING_R };
+      if (p.z < F.front + 0.4 || (k === steps && Math.hypot(p.x - sp.x, p.z - sp.z) < 0.5)) continue;
+      pts.push(p);
+    }
+    pts.push(sp);
+    return pts.map(p => L2W(st, p.x, p.z));
+  }
+  /* 지금 자리에서 길의 끝(toEnd: 의자 옆) 또는 처음(카운터)까지: 가장 가까운 길 점부터 */
+  function planFrom(route, toEnd) {
+    const n = M.n; let k = 0, bd = 1e9;
+    route.forEach((p, i) => { const d = Math.hypot(p.x - n.x, p.z - n.z); if (d < bd) { bd = d; k = i; } });
+    M.path = toEnd ? route.slice(k) : route.slice(0, k + 1).reverse(); M.pi = 0;
+  }
+  function stallIndex() { const api = maidApi(); return api && api.stalls && S.seat ? api.stalls.indexOf(S.seat.stall) : -1; }
+  function onScreen(x, z) {
+    _mp.set(x, 1.2, z).project(camera);
+    return _mp.z < 1 && Math.abs(_mp.x) < 1.1 && Math.abs(_mp.y) < 1.1;
+  }
+  const maidWalk = (n, ts = MAID_SPEED / 1.3) => { const api = maidApi(); if (api && api.isActing(n)) api.actorPlay(n, 'Walk', 0.25, ts); };
+  const maidIdle = n => { const api = maidApi(); if (api && api.isActing(n)) api.actorPlay(n, 'Idle', 0.3); };
+  /* 플레이어가 앉은 가판대로 아가씨를 데려온다 (멀거나 안 보이면 카운터에 '나타난다') */
+  function maidToStall() {
+    const api = maidApi(), n = ensureMaid(); if (!api || !n || !S.seat) return false;
+    const st = S.seat.stall; if (!st) return false;
+    const c = routeTo(st, S.seat)[0], side = W2L(st, c.x, c.z).x >= 0 ? 1 : -1;   // 의자 옆 자리 쪽 카운터
+    if (M.stall === st && !n.off) return true;
+    const far = n.off || Math.hypot(n.x - c.x, n.z - c.z) > 14 || !onScreen(n.x, n.z);
+    M.stall = st; M.side = side;
+    if (!n.off && !api.isActing(n)) return true;          // 넘어져 있으면 일어난 뒤 알아서 온다
+    if (far) {
+      api.actorOn(n, c.x, c.z, st.rotY || 0);
+      n.propShow = false; n.carry = 0; n.bow = 0;
+      M.job = 'idle'; M.idleT = 3 + Math.random() * 4;
+    } else { n.propShow = false; n.carry = 0; n.bow = 0; M.job = 'back'; M.path = [c]; M.pi = 0; maidWalk(n); }
+    return true;
+  }
+  function maidOrder() {
+    if (!S.seat || stallIndex() < 0 || !maidToStall()) return false;
+    const n = M.n, api = maidApi();
+    const nm = S.drink.def.name.replace(/\(.*\)/, '');
+    M.line = MAID_LINES[(Math.random() * MAID_LINES.length) | 0](nm);
+    if (M.mugProp) { liqMat.color.setHex(S.drink.def.liquid); foamMat.color.setHex(S.drink.def.foam); }   // 아가씨 잔에 주문한 술 색
+    const c = routeTo(M.stall, S.seat)[0];
+    if (api.isActing(n) && Math.hypot(n.x - c.x, n.z - c.z) < 0.6) { M.job = 'pick'; M.t = 0; maidIdle(n); }
+    else { M.job = 'fetch'; planFrom(routeTo(M.stall, S.seat), false); maidWalk(n); }
+    return true;
+  }
+  function maidCancel() {   // 술이 없어졌다(일어남·대신 나옴) → 들고 있던 잔은 감추고 카운터로
+    const n = M.n; if (!n || n.off) return;
+    if (M.job === 'fetch' || M.job === 'pick' || M.job === 'carry' || M.job === 'serve') {
+      n.propShow = false; n.carry = 0; n.bow = 0;
+      maidBack();
+    }
+  }
+  function maidBack() {
+    const n = M.n; if (!n || !M.stall) return;
+    if (S.seat && S.seat.stall === M.stall) planFrom(routeTo(M.stall, S.seat), false);
+    else {   // 지금 어느 쪽에 있는지에 따라 수레 모서리 → 카운터
+      const l = W2L(M.stall, n.x, n.z), side = l.x >= 0 ? 1 : -1;
+      M.side = side;
+      const route = [counterL(M.stall, side), cornerL(M.stall, side)].map(p => L2W(M.stall, p.x, p.z));
+      planFrom(route, false);
+    }
+    M.job = 'back';
+    maidWalk(n, MAID_SPEED * 0.8 / 1.3);
+  }
+  function turnMaid(n, target, dt, rate = 6) {
+    const d = Math.atan2(Math.sin(target - n.rot), Math.cos(target - n.rot)), m = rate * dt;
+    n.rot += Math.abs(d) <= m ? d : Math.sign(d) * m;
+    n.rot = Math.atan2(Math.sin(n.rot), Math.cos(n.rot));
+  }
+  /* 길 따라 한 걸음 → 끝에 닿으면 true */
+  function walkPath(n, dt, speed) {
+    while (M.pi < M.path.length) {
+      const p = M.path[M.pi], dx = p.x - n.x, dz = p.z - n.z, d = Math.hypot(dx, dz);
+      if (d < 0.1 || (d < 0.45 && M.pi < M.path.length - 1)) { M.pi++; continue; }
+      const step = Math.min(d, speed * dt);
+      n.x += dx / d * step; n.z += dz / d * step;
+      turnMaid(n, Math.atan2(dx, dz), dt, 7);
+      return false;
+    }
+    return true;
+  }
+  const maidWaiting = () => !!(S.drink && S.drink.phase === 'wait' && S.drink.maid && S.seat && S.seat.stall === M.stall);
+  function maidUpdate(dt) {
+    const n = M.n, api = maidApi();
+    if (!n || !api || n.off) return;
+    /* 맞았다/잡혔다 → npcs.js 가 넘어뜨리는 동안 손을 뗀다 */
+    if (!api.isActing(n)) { M.knocked = true; return; }
+    if (M.knocked) {       // 일어났다 → 하던 일 이어서
+      M.knocked = false; n.bow = 0;
+      if (maidWaiting()) { M.job = 'carry'; n.propShow = true; n.carry = 1; planFrom(routeTo(M.stall, S.seat), true); maidWalk(n); }
+      else { n.propShow = false; n.carry = 0; maidBack(); }
+    }
+    if ((M.job === 'fetch' || M.job === 'pick' || M.job === 'carry' || (M.job === 'serve' && n.propShow)) && !maidWaiting()) maidCancel();
+    /* 플레이어가 멀리 가면(앉아 있지 않고 45 m 밖, 쉬는 중) 숨긴다 */
+    const pp = person.position, pd = Math.hypot(pp.x - n.x, pp.z - n.z);
+    if (S.phase === 'none' && pd > 45 && (M.job === 'idle' || M.job === 'wander' || M.job === 'look' || M.job === 'back')) {
+      M.farT += dt;
+      if (M.farT > 3 && api.actorOff(n)) { M.job = 'off'; M.stall = null; M.farT = 0; }
+      return;
+    }
+    M.farT = 0;
+    const st = M.stall; if (!st) return;
+    switch (M.job) {
+      case 'fetch':
+        if (walkPath(n, dt, MAID_SPEED)) { M.job = 'pick'; M.t = 0; maidIdle(n); }
+        break;
+      case 'pick':            // 카운터에서 잔을 받아 든다
+        M.t += dt;
+        turnMaid(n, (st.rotY || 0) + Math.PI, dt);    // 카운터(뒤쪽)를 본다
+        if (M.t > 0.3) n.propShow = true;
+        n.carry = Math.min(1, Math.max(0, (M.t - 0.25) / 0.3));
+        if (M.t > 0.6) { M.job = 'carry'; planFrom(routeTo(st, S.seat), true); maidWalk(n); }
+        break;
+      case 'carry':
+        n.carry = 1; n.propShow = true;
+        if (walkPath(n, dt, MAID_SPEED)) { M.job = 'serve'; M.t = 0; maidIdle(n); api.say(n, M.line, 2.8, '#8a2048'); }
+        break;
+      case 'serve': {         // 플레이어를 보고 무릎 살짝 굽혀 인사 → 잔 건네기
+        M.t += dt;
+        turnMaid(n, Math.atan2(pp.x - n.x, pp.z - n.z), dt, 8);
+        const t = M.t;
+        n.bow = t < 0.45 ? t / 0.45 : t < 1.0 ? 1 : Math.max(0, 1 - (t - 1.0) / 0.4);
+        if (t >= 0.8 && n.propShow) { n.propShow = false; n.carry = 0; serve(M.line); }
+        if (t > 1.9) { n.bow = 0; maidBack(); }
+        break;
+      }
+      case 'back':
+        if (walkPath(n, dt, MAID_SPEED * 0.8)) { M.job = 'idle'; M.idleT = 5 + Math.random() * 7; maidIdle(n); }
+        break;
+      case 'idle':
+        turnMaid(n, st.rotY || 0, dt, 3);              // 손님 쪽(앞)을 본다
+        M.idleT -= dt;
+        if (M.idleT <= 0) {                             // 테이블 둘레를 살피러 한 바퀴
+          const side = Math.random() < 0.5 ? 1 : -1, a = Math.PI / 2 - side * (0.5 + Math.random() * 0.9);   // 같은 쪽 앞 테이블 둘레
+          M.side = side;
+          M.path = [cornerL(st, side), { x: Math.cos(a) * RING_R, z: Math.sin(a) * RING_R }].map(p => L2W(st, p.x, p.z));
+          M.pi = 0; M.job = 'wander'; maidWalk(n, 1);
+        }
+        break;
+      case 'wander':
+        if (walkPath(n, dt, 1.3)) { M.job = 'look'; M.t = 0; maidIdle(n); }
+        break;
+      case 'look':            // 테이블을 잠깐 보고 카운터로
+        M.t += dt;
+        turnMaid(n, Math.atan2(st.x - n.x, st.z - n.z), dt, 3);
+        if (M.t > 2.5) maidBack();
+        break;
+    }
   }
 
   /* ── 입력 ── */
@@ -585,6 +840,7 @@ export function createTavern({
     // 취기는 천천히 깬다
     if (S.drunk > 0) { S.drunk = Math.max(0, S.drunk - SOBER_RATE * dt); }
 
+    maidUpdate(dt);
     if (S.phase === 'none') {
       mug.visible = false;
       const show = onFoot && !blocked() && person.visible;
@@ -687,7 +943,7 @@ export function createTavern({
     return active;
   }
 
-  return {
+  const tavernApi = {
     get seated() { return S.phase !== 'none'; },
     get phase() { return S.phase; },
     get drinks() { return S.drinks; },
@@ -704,6 +960,10 @@ export function createTavern({
       removeEventListener('keydown', onKeyDown); removeEventListener('keyup', onKeyUp);
       promptEl.remove(); panel.remove(); toast.remove(); haze.remove();
       scene.remove(mug);
-    }
+      if (globalThis.__tavern === tavernApi) delete globalThis.__tavern;
+    },
+    get maid() { return M; },      // 디버그: 서빙 아가씨 상태 (job, n)
   };
+  if (new URLSearchParams(location.search).has('test')) globalThis.__tavern = tavernApi;   // 테스트 주소에서만
+  return tavernApi;
 }

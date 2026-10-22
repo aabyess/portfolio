@@ -78,6 +78,7 @@ export function createVillage({
   isMusicOn = () => false, isMuted = () => false,
   isVisible = () => document.body.dataset.view !== 'doc',
   onEvent = null, onAggro = null, bounds = null, center = null, debug = true,
+  gate = null,   // castle.js villageGate(0): 있으면 행차는 늘 성문으로 들어가 사라진다
 } = {}) {
   if (!npcs || !npcs.addActor) return { update() {}, dispose() {}, state: {} };
   const B = bounds || npcs.bounds || { minX: -42, maxX: 42, minZ: -84, maxZ: 84 };
@@ -272,13 +273,18 @@ export function createVillage({
   let cast = null;
   function getCast() {
     if (cast) return cast;
-    const king = npcs.addActor('innkeeper');
-    tintCloth(king, 0x9a3fb0);                          // 자주색 곤룡포 느낌
-    const head = bone(king, 'Head'), chest = bone(king, 'Chest');
-    const crown = makeCrown(); crown.position.set(0, 0.22, 0.005); crown.rotation.x = -0.08;
-    if (head) head.add(crown);
-    const cape = makeCape(); cape.position.set(0, 0.2, -0.13);
-    if (chest) chest.add(cape);
+    /* 진짜 임금님 모델(npc-king.glb: 금관·곤룡포·흰 털 망토 포함)이 있으면 그대로 쓴다.
+       파일이 없으면 여관 주인을 자주색으로 물들이고 코드로 만든 금관·망토를 씌운다(예전 방식) */
+    const king = npcs.addActor('npc-king', { fallback: 'innkeeper' });
+    let crown = null, cape = null;
+    if (!/king/.test(king.model || '')) {
+      tintCloth(king, 0x9a3fb0);                        // 자주색 곤룡포 느낌
+      const head = bone(king, 'Head'), chest = bone(king, 'Chest');
+      crown = makeCrown(); crown.position.set(0, 0.22, 0.005); crown.rotation.x = -0.08;
+      if (head) head.add(crown);
+      cape = makeCape(); cape.position.set(0, 0.2, -0.13);
+      if (chest) chest.add(cape);
+    }
     const guards = [];
     for (let k = 0; k < 4; k++) { const g = npcs.addActor('guard'); g.body.add(makeSpear()); guards.push(g); }
     const flag = npcs.addActor('guard');
@@ -306,8 +312,13 @@ export function createVillage({
     let z0 = clampZ(p.z - d * 40), z1 = clampZ(p.z + d * 45);
     if (Math.abs(z1 - z0) < 50) { d = -d; z0 = clampZ(p.z - d * 40); z1 = clampZ(p.z + d * 45); }
     d = Math.sign(z1 - z0) || 1;
+    if (gate) {                                   // 늘 성문 쪽으로 걸어가 안으로 들어간다
+      d = gate.entry.z < 0 ? -1 : 1;
+      z1 = gate.entry.z;                          // 맵 끝 너머(성문 터널 안)까지 — 자르지 않는다
+      z0 = clampZ(d < 0 ? Math.max(p.z + 30, gate.z + 45) : Math.min(p.z - 30, gate.z - 45));
+    }
     Object.assign(P, { active: true, d, z: z0, zEnd: z1, hitCD: 0, wasActing: true, praiseT: 1, heraldT: 0, talkT: 0, talked: false,
-      chaseT: 0, caught: false, hurtSay: false, endT: 0 });
+      chaseT: 0, caught: false, hurtSay: false, endT: 0, gateOpened: false });
     const nG = 2 + Math.floor(Math.random() * 3);
     const slotsG = [[2.6, -1.15], [2.6, 1.15], [-2.2, -1.15], [-2.2, 1.15]];
     if (nG === 3) slotsG[2] = [-2.2, 0];
@@ -325,7 +336,10 @@ export function createVillage({
   function endProcession() {
     let all = true;
     for (const m of P.members) if (!npcs.actorOff(m.n)) all = false;
-    if (all) { P.active = false; P.members = []; }
+    if (all) {
+      P.active = false; P.members = [];
+      if (gate) { gate.close(); if (P.gateOpened) toast('임금님이 상호성으로 들어가셨습니다'); P.gateOpened = false; }
+    }
     return all;
   }
   function procUpdate(dt, t, p) {
@@ -371,7 +385,11 @@ export function createVillage({
       const z = P.z + P.d * m.along;
       lag = Math.max(lag, Math.hypot(pathX(z) + m.side - m.n.x, z - m.n.z));
     }
-    const moving = kingOk && P.chaseT <= 0 && !talking && lag < 2.5;
+    let moving = kingOk && P.chaseT <= 0 && !talking && lag < 2.5;
+    if (gate) {
+      if (!P.gateOpened && Math.abs(P.z - gate.z) < 24) { P.gateOpened = true; gate.open(); say(c.flag, '성문을 열어라!', 2.2, '#7a1a10'); }
+      if (!gate.isOpen() && (P.z + P.d * 4.6 - gate.z) * P.d > -1.5) moving = false;   // 닫힌 문 앞에서 기수가 기다린다
+    }
     if (moving) P.z += P.d * PROC_SPEED * dt;
     const zh = P.z, dpx = pathX(zh + 0.5 * P.d) - pathX(zh - 0.5 * P.d);
     const heading = Math.atan2(dpx, P.d);
@@ -405,7 +423,7 @@ export function createVillage({
       }
     }
     /* 망토 펄럭임 · 깃발 */
-    c.cape.rotation.x = 0.04 + (moving ? 0.06 + Math.sin(t * 5.2) * 0.04 : Math.sin(t * 1.3) * 0.02);
+    if (c.cape) c.cape.rotation.x = 0.04 + (moving ? 0.06 + Math.sin(t * 5.2) * 0.04 : Math.sin(t * 1.3) * 0.02);
     if (c.flag.dist < 45) waveFlag(t);
 
     /* 전령 외침 */

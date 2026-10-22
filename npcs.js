@@ -136,6 +136,12 @@ export const NPC_MODELS = [
   { file: 'models/npc/npc-noble.glb',     gender: 'f' },
   { file: 'models/npc/npc-herbalist.glb', gender: 'f' },
 ];
+/* 배우 전용 모델 (서빙 아가씨·임금님). 거리 손님·술집 주인·경비병 풀에는 절대 안 섞이고 addActor 로만 쓴다.
+   없으면 addActor(re, { fallback }) 의 대체 모델을 쓴다. */
+export const ACTOR_MODELS = [
+  { file: 'models/npc/npc-barmaid.glb', gender: 'f' },
+  { file: 'models/npc/npc-king.glb',    gender: 'm' },
+];
 const DRACO_CDN = 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/';
 
 /* portfolio.js 의자 블록과 같은 값 */
@@ -179,6 +185,10 @@ const MIX_FAR = 35;              // 이보다 먼 손님은 애니메이션을 0
 const SHADOW_FAR = 30;           // 이보다 먼 손님은 그림자를 끈다
 const SCREAMS = ['으악!', '살려줘!', '도망쳐!', '꺄악!'];
 const LAUGHS = ['하하!', '푸하하!', '꼴좋다!', '어이쿠~'];
+/* 맷집: 맞으면 휘청만 하다가 쌓인 데미지가 POISE 를 넘으면 넘어진다. 4초 안 맞으면 초당 HEAL 씩 회복 */
+const POISE = 100, HEAL = 20, HEAL_DELAY = 4;
+const HIT_DMG = { punch: 18, kick: 40, dropkick: 70, sword: 30, axe: 40, hammer: 75, pan: 25, flail: 45, shot: 45, arrow: 40, bolt: 50, javelin: 60, weapon: 35 };
+const KNOCK_NOW = new Set(['car', 'explosion', 'throw', 'fight', 'rocket', 'shell']);   // 이건 바로 넘어진다
 const RIDE_LAUGHS = ['하하하하!', '나이스!', '푸하하하!', '크하하 날아갔다!', '나이스 샷!', '스트라이크!', '배꼽 빠지겠네!', '저거 봐 저거!', '와하하하!', '10점 만점!'];   // 탈것에 치이면 구경꾼이 박장대소
 const PROTESTS = ['이봐!', '괜찮아?', '그만해!', '무슨 짓이야!'];
 const CHATS = ['그래서 말이야', '정말?', '하하', '음…', '그렇지!', '들었어?'];
@@ -239,7 +249,7 @@ export async function createNPCs({
   groundY, pathX, stalls = [], bounds = { minX: -42, maxX: 42, minZ: -84, maxZ: 84 },
   getPlayerPos = null, getNight = null, getRide = null, roadHalf = 2.52, bridge = null,
   debug = true, barkeepers = true,
-  count = 0 /* 0 = 불러온 모델 수만큼 1명씩 */, models = NPC_MODELS, seed = 0,
+  count = 0 /* 0 = 불러온 모델 수만큼 1명씩 */, models = NPC_MODELS, actorModels = ACTOR_MODELS, seed = 0,
 }) {
   const { clone: skeletonClone } = await import('three/addons/utils/SkeletonUtils.js');
 
@@ -252,9 +262,13 @@ export async function createNPCs({
   const loader = new GLTFLoader();
   loader.setDRACOLoader(draco);
 
-  const sources = (await Promise.all(models.map(m => loader.loadAsync(m.file).then(g => { g.gender = m.gender; g.file = m.file; return g; }).catch(() => {
-    console.warn('[npcs] 모델 없음, 건너뜀:', m.file); return null;
-  })))).filter(Boolean);
+  const loadAll = (list, warn) => Promise.all(list.map(m => loader.loadAsync(m.file).then(g => { g.gender = m.gender; g.file = m.file; return g; }).catch(() => {
+    if (warn) console.warn('[npcs] 모델 없음, 건너뜀:', m.file); else console.info('[npcs] 배우 모델 없음 → 대체 모델 사용:', m.file);
+    return null;
+  })));
+  /* sources = 거리 손님·술집 주인·경비병 풀, actorSources = 배우 전용(서빙 아가씨·임금님) — 따로 둔다 */
+  const [srcAll, actAll] = await Promise.all([loadAll(models, true), loadAll(actorModels || [], false)]);
+  const sources = srcAll.filter(Boolean), actorSources = actAll.filter(Boolean);
   if (!count) count = sources.length;
   if (ownDraco) draco.dispose();
   if (!sources.length) return { update() {}, dispose() {}, count: 0 };
@@ -339,7 +353,8 @@ export async function createNPCs({
     const anger = new THREE.Sprite(angerMat);
     anger.scale.setScalar(0.45); anger.position.y = 2.3; anger.visible = false;
     root.add(anger);
-    const bones = { armL: bone('UpperArm.L'), armR: bone('UpperArm.R'), legL: bone('UpperLeg.L'), legR: bone('UpperLeg.R'), foreL: bone('LowerArm.L'), foreR: bone('LowerArm.R'), head: bone('Head') };
+    const bones = { armL: bone('UpperArm.L'), armR: bone('UpperArm.R'), legL: bone('UpperLeg.L'), legR: bone('UpperLeg.R'), foreL: bone('LowerArm.L'), foreR: bone('LowerArm.R'), head: bone('Head'), chest: bone('Chest'), spine: bone('Spine') };
+    const propBone = bone('Prop.R');   // 손에 든 잔 (클립이 scale 로 보이기/숨기기) — 배우는 propShow 로 덮어쓴다
     /* 코드로 덧붙이는 몸짓은 클립에 키가 없는 뼈에선 누적되므로, 믹서 갱신 전에 기본 자세로 되돌린다 */
     const boneRest = [];
     for (const k in bones) if (bones[k]) boneRest.push(bones[k], bones[k].quaternion.clone());
@@ -377,6 +392,7 @@ export async function createNPCs({
       sc, meshes, mats, shadow: true, bubble: null, boneRest, procDirty: false,
       guard: false, off: false, fight: null, foe: null, punchAnim: 0, gatherC: null, gx: 0, gz: 0, fx: 0, fz: 0,
       bar: -1, panicT: 0, panicX: 0, panicZ: 0, watchKind: 0, watchV: null, chatG: null, arrived: false, wiping: false, talkT: 0,
+      propBone, propShow: null /* null = 클립대로, true/false = 잔 보이기/숨기기 (배우) */, carry: 0 /* 0..1 쟁반 들기 자세 */, bow: 0 /* 0..1 인사 */,
     };
   }
   for (let i = 0; i < count; i++) npcs.push(makeNPC(sources[i % sources.length], i, i >= sources.length));
@@ -619,6 +635,10 @@ export async function createNPCs({
       const n = npcs[i];
       if (n.off) continue;
       if (!Number.isFinite(n.x) || !Number.isFinite(n.z) || !Number.isFinite(n.y)) recoverNpc(n);
+      if (n.dmg > 0 && now - n.hitAt > HEAL_DELAY) {   // 맷집 회복
+        n.dmg = Math.max(0, n.dmg - HEAL * dt);
+        if (n.hpBar) { if (n.dmg <= 0) n.hpBar.g.visible = false; else showHp(n); }
+      }
       if (n.stallCooldown > 0) n.stallCooldown -= dt;
       if (n.panicT > 0) n.panicT -= dt;
       if (n.talkT > 0) n.talkT -= dt;
@@ -652,6 +672,8 @@ export async function createNPCs({
           else if (n.state === ST.CHAT && n.arrived) chatPose(n, t);
           else if (n.state === ST.FIGHT && n.arrived) jabPose(n, t);
           else if (n.state === ST.BARD_PLAY && bard.phase === 1) strumPose(n, t);
+          else if (n.state === ST.ACTOR && (n.carry > 0 || n.bow > 0)) actorPose(n);
+          if (n.propBone && n.propShow !== null) n.propBone.scale.setScalar(n.propShow && n.state === ST.ACTOR ? 1 : 0.001);
         }
         if (n.anger.visible) {
           n.anger.scale.setScalar(0.42 + Math.abs(Math.sin(t * 9)) * 0.12);
@@ -876,6 +898,7 @@ export async function createNPCs({
     if (!Number.isFinite(vx) || !Number.isFinite(vy) || !Number.isFinite(vz)) return;   // 깨진 힘은 무시
     releaseSeat(n);
     n.yielding = false; n.cheerIn = -1; n.hitCD = HIT_COOLDOWN;
+    n.dmg = 0; if (n.hpBar) n.hpBar.g.visible = false;   // 넘어지면 맷집이 다시 찬다
     n.vx = vx; n.vz = vz; n.vy = Math.max(1.5, vy);
     const sp = Math.hypot(vx, vz), dx = sp > 1e-3 ? vx / sp : -Math.sin(n.rot), dz = sp > 1e-3 ? vz / sp : -Math.cos(n.rot);
     if (!isLying(n.state)) n.body.rotation.set(0, 0, 0);
@@ -912,6 +935,40 @@ export async function createNPCs({
     bystanders(n);
     if (cause !== 'fight') emit('punch', n);
   }
+  /* ── 맷집 게이지: 머리 위 작은 체력 바 (맞은 뒤 몇 초만 보인다) ── */
+  const barBgMat = new THREE.SpriteMaterial({ color: 0x1a1410, transparent: true, opacity: 0.75, depthTest: false });
+  function hpBar(n) {
+    if (n.hpBar) return n.hpBar;
+    const bg = new THREE.Sprite(barBgMat); bg.scale.set(0.62, 0.075, 1);
+    const fill = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x6cd06c, transparent: true, depthTest: false }));
+    fill.scale.set(0.58, 0.05, 1);
+    const g = new THREE.Group(); g.add(bg, fill); g.position.y = 2.2; g.renderOrder = 10; bg.renderOrder = 10; fill.renderOrder = 11;
+    g.visible = false;
+    n.root.add(g);
+    return (n.hpBar = { g, bg, fill });
+  }
+  function showHp(n) {
+    const b = hpBar(n), f = Math.max(0.02, 1 - n.dmg / POISE);
+    b.fill.scale.x = 0.58 * f;
+    b.fill.center.set(1 / (2 * f), 0.5);                  // 왼쪽 끝을 배경 바 왼쪽 끝에 맞춘다
+    b.fill.material.color.setHSL(0.33 * f, 0.7, 0.5);    // 초록 → 노랑 → 빨강
+    b.g.visible = true; b.g.position.y = isLying(n.state) ? 0.9 : 2.2;
+  }
+  /* 맞기: 데미지를 쌓고, 맷집을 넘거나(또는 앉아 있거나 누워 있으면) 넘어진다. 아니면 휘청 */
+  function takeHit(n, dmg, vx, vy, vz, cause) {
+    if (!n || n.off || n.state === ST.HELD) return false;
+    if (KNOCK_NOW.has(cause) || n.seat || isLying(n.state) || n.state === ST.SIT_DOWN || n.state === ST.FLYING) {
+      knockVel(n, vx, vy, vz, cause);
+      return true;
+    }
+    n.dmg = (n.dmg || 0) + dmg; n.hitAt = now;
+    if (n.dmg >= POISE) { knockVel(n, vx, vy, vz, cause); return true; }
+    const l = Math.hypot(vx, vz) || 1;
+    stagger(n, vx / l, vz / l, cause === 'fight' ? 'fight' : 'punch');
+    if (cause === 'shot' || cause === 'arrow' || cause === 'bolt') emit('weapon', n);   // 총·활에 맞으면 넘어지지 않아도 큰 사건
+    showHp(n);
+    return true;
+  }
   /* 주먹: 클릭한 손님이 1.6 m 안이면 그 손님, 아니면 앞쪽 1.6 m 안의 가장 가까운 손님 */
   function punch(facing, clicked) {
     const p = getPlayerPos ? getPlayerPos() : null;
@@ -934,11 +991,9 @@ export async function createNPCs({
     let dx = target.x - p.x, dz = target.z - p.z;
     const l = Math.hypot(dx, dz);
     if (l > 1e-3) { dx /= l; dz /= l; } else { dx = fx; dz = fz; }
-    const combo = now - target.punchT < PUNCH_COMBO;
     target.punchT = now;
-    /* 두 번째 주먹, 앉아 있거나 누워 있는 손님 → 넘어진다. 처음이면 휘청 */
-    if (combo || target.seat || isLying(target.state) || target.state === ST.SIT_DOWN) knockVel(target, dx * 3.2, 2.2, dz * 3.2, 'punch');
-    else stagger(target, dx, dz);
+    /* 맷집이 남아 있으면 휘청, 다 닳으면(또는 앉아 있거나 누워 있으면) 넘어진다 */
+    takeHit(target, HIT_DMG.punch, dx * 3.2, 2.2, dz * 3.2, 'punch');
     return target;
   }
 
@@ -958,11 +1013,11 @@ export async function createNPCs({
   function pickRay(raycaster, range = Infinity) {
     return pick(raycaster.ray || raycaster, getPlayerPos ? getPlayerPos() : null, range, 1);
   }
-  function knockDown(n, impulse, cause = 'shot') {
+  /* dmg 를 주면 그만큼, 없으면 무기 종류(HIT_DMG)만큼 깎는다. 폭발·차·던지기는 바로 넘어진다 */
+  function knockDown(n, impulse, cause = 'shot', dmg) {
     if (!n || n.off || n.state === ST.HELD || !impulse) return false;
     if (!Number.isFinite(impulse.x) || !Number.isFinite(impulse.y) || !Number.isFinite(impulse.z)) return false;
-    knockVel(n, impulse.x, impulse.y, impulse.z, cause);
-    return true;
+    return takeHit(n, dmg != null ? dmg : (HIT_DMG[cause] || HIT_DMG.weapon), impulse.x, impulse.y, impulse.z, cause);
   }
   function freeSeatNear(pos, r = 2) {
     let best = null, bd = r;
@@ -1102,7 +1157,9 @@ export async function createNPCs({
     const c = b.ctx;
     c.clearRect(0, 0, 256, 72);
     c.font = '800 30px Pretendard, system-ui, sans-serif';
-    const w = Math.min(244, c.measureText(text).width + 34), x0 = 128 - w / 2;
+    const tw = c.measureText(text).width;
+    if (tw > 210) c.font = `800 ${Math.max(16, Math.floor(30 * 210 / tw))}px Pretendard, system-ui, sans-serif`;   // 긴 대사는 글자를 줄인다
+    const w = Math.min(244, Math.min(tw, 210) + 34), x0 = 128 - w / 2;
     c.fillStyle = 'rgba(255,250,240,0.96)'; c.strokeStyle = 'rgba(40,24,16,0.85)'; c.lineWidth = 4;
     c.beginPath();
     c.moveTo(x0 + 16, 4); c.lineTo(x0 + w - 16, 4); c.quadraticCurveTo(x0 + w - 2, 4, x0 + w - 2, 20);
@@ -1135,7 +1192,7 @@ export async function createNPCs({
       b.t -= dt;
       if (b.t <= 0 || n.dist > BUBBLE_DIST + 5) { b.sp.visible = false; n.bubble = null; b.n = null; continue; }
       const lying = isLying(n.state) || n.state === ST.FLYING;
-      const h = lying ? 1.1 : n.state === ST.SEATED || n.state === ST.SIT_DOWN ? 2.15 : 2.6;
+      const h = lying ? 1.1 : n.state === ST.SEATED || n.state === ST.SIT_DOWN ? 2.15 : (n.bubbleH || 2.6);   // bubbleH: 배우가 낮춰 달 때 (서빙 아가씨)
       b.sp.position.set(n.x, n.y + h + (n.anger.visible ? 0.3 : 0), n.z);
       b.mat.opacity = Math.min(1, b.t / 0.3);
     }
@@ -1288,6 +1345,22 @@ export async function createNPCs({
     if (n.talkT > 0) {
       if (b.armR) b.armR.rotation.z -= 0.55 + Math.sin(t * 4 + ph) * 0.3;
       if (b.foreR) b.foreR.rotation.x += 0.6 + Math.sin(t * 5 + ph) * 0.3;
+    }
+  }
+  /* [tavern] 배우 몸짓: carry = 오른손에 잔을 들고 앞으로 받쳐 든다, bow = 살짝 무릎 굽혀 인사 */
+  function actorPose(n) {
+    n.procDirty = true;
+    const b = n.bones, c = n.carry, w = n.bow;
+    if (c > 0) {
+      if (b.armR) { b.armR.rotation.x -= 0.32 * c; b.armR.rotation.z += 0.12 * c; }
+      if (b.foreR) b.foreR.rotation.x -= 1.35 * c;
+    }
+    if (w > 0) {
+      if (b.spine) b.spine.rotation.x += 0.22 * w;
+      if (b.chest) b.chest.rotation.x += 0.18 * w;
+      if (b.head) b.head.rotation.x += 0.25 * w;
+      if (b.legL) b.legL.rotation.x += 0.12 * w;
+      if (b.armL) b.armL.rotation.x -= 0.25 * w;
     }
   }
   /* 술집 주인 몸짓: 오른손으로 카운터를 닦는다 */
@@ -1808,14 +1881,18 @@ export async function createNPCs({
   }
 
   /* ── [village] 배우 (village.js 의 임금님·호위병·깃발잡이·소매치기) ──
-     addActor(re, { noAggro }) → n : 파일 이름이 re 와 맞는 모델을 복제해 숨긴 채 만든다(웬만하면 한 번만 만들고 재사용).
+     addActor(re, { noAggro, fallback }) → n : 파일 이름이 re 와 맞는 모델을 복제해 숨긴 채 만든다(웬만하면 한 번만 만들고 재사용).
+       ACTOR_MODELS(npc-barmaid·npc-king)는 여기서만 쓰인다. 그 파일이 없으면 fallback 정규식 모델. n.model 로 무엇이 됐는지 안다.
+       n.propShow(true/false/null) : 손의 잔 보이기 덮어쓰기, n.carry / n.bow (0..1) : 잔 받쳐 들기·인사 몸짓 (tavern.js 서빙 아가씨)
      actorOn(n, x, z, rot) / actorOff(n) : 보이기·숨기기. ACTOR 상태에선 npcs.js 가 움직이지 않으니 n.x/n.z/n.rot 를 직접 쓴다.
      actorPlay(n, clip, fade, timeScale) : 클립 재생. isActing(n) : 맞거나 잡혀 넘어져 있지 않고 대본대로 움직이는 중인가.
      맞거나 치이면 평소처럼 넘어졌다 일어나 ACTOR 로 돌아온다(화내기·쫓기 없음). noAggro 면 수배 점수(onAggression)를 안 보낸다.
      watch(n, target, dur, cheer) : 걷거나 서 있는 손님을 dur 초 동안 target({x,z}) 쪽을 보며 환호(Cheers) 또는 발 동동하게 한다. */
-  function addActor(re, { noAggro = false } = {}) {
-    const rx = new RegExp(re);
-    const src = sources.find(q => rx.test(q.file)) || sources[0];
+  function addActor(re, { noAggro = false, fallback = null } = {}) {
+    const rx = new RegExp(re), fx = fallback ? new RegExp(fallback) : null;
+    /* 배우 전용 모델(actorSources) 먼저, 없으면 일반 모델, 그래도 없으면 fallback, 마지막엔 첫 모델 */
+    const src = actorSources.find(q => rx.test(q.file)) || sources.find(q => rx.test(q.file))
+      || (fx && sources.find(q => fx.test(q.file))) || sources[0];
     const n = makeNPC(src, npcs.length, false);
     n.actor = true; n.noAggro = noAggro;
     n.off = true; n.root.visible = false; n.state = ST.OFF;
@@ -1862,7 +1939,7 @@ export async function createNPCs({
     if (debug && globalThis.__npcs) delete globalThis.__npcs;
     if (debug && globalThis.__npcsApi === api) delete globalThis.__npcsApi;   // [village]
     /* 클론은 지오메트리·재질을 원본과 공유한다 → 원본에서 한 번만 해제 */
-    for (const src of sources) {
+    for (const src of sources.concat(actorSources)) {
       src.scene.traverse(o => {
         if (!o.isMesh) return;
         o.geometry.dispose();
@@ -1901,8 +1978,8 @@ export async function createNPCs({
         const p = getPlayerPos ? getPlayerPos() : null;
         let dx = p ? n.x - p.x : 0, dz = p ? n.z - p.z : 1;
         const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
-        const combo = now - n.punchT < PUNCH_COMBO; n.punchT = now;
-        if (combo || n.seat) knockVel(n, dx * 3.2, 2.2, dz * 3.2, 'punch'); else stagger(n, dx, dz);
+        n.punchT = now;
+        takeHit(n, HIT_DMG.punch, dx * 3.2, 2.2, dz * 3.2, 'punch');
         return true;
       },
     };
