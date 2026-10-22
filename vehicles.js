@@ -153,6 +153,30 @@ export async function createVehicleSwitcher({
   holder.rotation.order = 'YXZ';
   carGroup.add(holder);
 
+  /* ── 세워 둔 탈것 위 화살표 — 내려서 걸을 때만 보인다 ──
+     나무·안개에 가려도 찾을 수 있게 깊이 검사와 안개를 끄고 맨 나중에 그린다. */
+  const MARK_H = { car: 2.7, horse: 3.1, carriage: 3.5, motorcycle: 2.4, bicycle: 2.3 };
+  const marker = new THREE.Group();
+  {
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffc94d, transparent: true, opacity: 0.95, depthTest: false, depthWrite: false, fog: false, toneMapped: false });
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.7, 4), mat);
+    head.rotation.x = Math.PI;                       // 아래를 가리킨다
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.5, 0.22), mat);
+    tail.position.y = 0.6;
+    marker.add(head, tail);
+    marker.traverse(o => { o.renderOrder = 999; });
+  }
+  marker.visible = false;
+  carGroup.add(marker);
+  let markT = 0;
+  function updateMarker(dt, driving) {
+    marker.visible = !driving;
+    if (driving) return;
+    markT += dt;
+    marker.position.y = (MARK_H[current] ?? 2.7) + Math.sin(markT * 3) * 0.18;
+    marker.rotation.y = markT * 1.6;
+  }
+
   /* ── 헤드라이트 재활용 ── */
   let spots = [];
   const spotOrig = [];
@@ -188,7 +212,7 @@ export async function createVehicleSwitcher({
     const ch = carGroup.children;
     for (let i = 0; i < ch.length; i++) {
       const c = ch[i];
-      if (c === holder || c.isLight) continue;
+      if (c === holder || c === marker || c.isLight) continue;   // 화살표는 updateMarker가 따로 켜고 끈다
       c.visible = showCar;
     }
   }
@@ -520,6 +544,7 @@ export async function createVehicleSwitcher({
   function update(dt, inp) {
     if (destroyed) return;
     const driving = !inp || inp.driving !== false;
+    updateMarker(dt, driving);
     const r = current !== 'car' ? cache[current] : null;
     syncCarVisibility(!r);
 
