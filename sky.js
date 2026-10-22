@@ -9,6 +9,8 @@
    portfolio.js 가 부르는 것
      createSky({ THREE, scene, renderer, hemi, sun, fill, sunOffset })
        → { update(dt), skyU, night, phase, flash, setTime(name), timeName }
+   하늘 돔에는 흐르는 구름(skyU.cloud = 덮인 정도, seasons.js가 계절마다 바꾼다)·달무리·반짝이는 별(구름에 가려진다)이 있다.
+   ?test 일 때 window.__sky (setTime 등).
    sunOffset: 그림자 상자가 플레이어를 따라가는 followSun 이 쓰는 벡터 — 여기서 방향만 바꾼다.
    ════════════════════════════════════════════════════════════ */
 
@@ -17,6 +19,11 @@ export const DAY = 210;
 export const TIMES = { dawn: 0.02, morning: 0.12, day: 0.28, noon: 0.31, evening: 0.52, dusk: 0.6, night: 0.78 };
 const SUNSET = 0.62;          // 해가 지는 시각 (0 = 해 뜸)
 
+/* 하늘 구름과 별 가림에 같이 쓰는 값 잡음 */
+const NOISE = `float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+      float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(h21(i), h21(i + vec2(1, 0)), f.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), f.x), f.y); }
+      float fbm(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++){ s += a * vn(p); p = p * 2.03 + vec2(17.1, 9.2); a *= 0.5; } return s; }`;
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 export function createSky({ THREE, scene, renderer, hemi, sun, fill, sunOffset }) {
@@ -41,36 +48,76 @@ export function createSky({ THREE, scene, renderer, hemi, sun, fill, sunOffset }
   const skyU = {
     top: { value: KEYS[0].top.clone() }, mid: { value: KEYS[0].mid.clone() }, hor: { value: KEYS[0].hor.clone() },
     sunDir: { value: new THREE.Vector3(0, 1, 0) }, sunCol: { value: new THREE.Color() },
-    moonDir: { value: new THREE.Vector3(0, -1, 0) }, moonA: { value: 0 }, flash: { value: 0 }
+    moonDir: { value: new THREE.Vector3(0, -1, 0) }, moonA: { value: 0 }, flash: { value: 0 },
+    /* 구름: time 흐름, cloud 덮인 정도(0~1, seasons.js가 계절마다 바꾼다), night 밤 정도 */
+    time: { value: 0 }, cloud: { value: 0.45 }, night: { value: 0 }
   };
   scene.add(new THREE.Mesh(new THREE.SphereGeometry(320, 32, 20), new THREE.ShaderMaterial({
     uniforms: skyU, side: THREE.BackSide, depthWrite: false, fog: false,
     vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
     fragmentShader: `uniform vec3 top; uniform vec3 mid; uniform vec3 hor; uniform vec3 sunDir; uniform vec3 sunCol;
-      uniform vec3 moonDir; uniform float moonA; uniform float flash; varying vec3 vP;
+      uniform vec3 moonDir; uniform float moonA; uniform float flash; uniform float time; uniform float cloud; uniform float night;
+      varying vec3 vP;
+      ${NOISE}
       void main(){
         vec3 d = normalize(vP);
         float h = clamp(d.y, 0.0, 1.0);
         vec3 c = mix(hor, mid, smoothstep(0.0, 0.18, h)); c = mix(c, top, smoothstep(0.18, 0.6, h));
         float sd = max(dot(d, sunDir), 0.0);
-        c += sunCol * (smoothstep(0.9988, 0.9993, sd) * 5.0 + pow(sd, 14.0) * 0.32);   // 해 원반 + 햇무리
+        float sunUp = clamp(sunDir.y * 6.0 + 0.3, 0.0, 1.0);
+        c += sunCol * (smoothstep(0.9988, 0.9993, sd) * 5.0 + pow(sd, 14.0) * 0.32 + pow(sd, 3.0) * 0.08 * (1.0 - h));   // 해 원반 + 햇무리 + 넓은 노을 번짐
         float md = max(dot(d, moonDir), 0.0);
-        c += vec3(0.86, 0.9, 1.0) * moonA * (smoothstep(0.99955, 0.9998, md) * 1.6 + pow(md, 80.0) * 0.07);
+        vec3 moonC = vec3(0.86, 0.9, 1.0);
+        /* 달: 원반(살짝 얼룩) + 가까운 달무리 + 넓은 푸른 빛 */
+        float disk = smoothstep(0.99955, 0.9998, md);
+        float spots = 0.85 + 0.15 * vn(d.xz * 900.0);
+        c += moonC * moonA * (disk * 1.7 * spots + pow(md, 260.0) * 0.35 + pow(md, 40.0) * 0.08 + pow(md, 6.0) * 0.025);
+        /* 구름 — 하늘 돔을 평면으로 펴서 흐르는 fbm. 해 쪽 가장자리는 해 색으로 물든다 */
+        if (d.y > 0.0) {
+          vec2 uv = d.xz / (d.y + 0.18) * 1.6 + vec2(time * 0.012, time * 0.004);
+          float n = fbm(uv) * 0.75 + fbm(uv * 2.7 - vec2(time * 0.02, 0.0)) * 0.25;
+          float cov = smoothstep(0.62 - cloud * 0.32, 0.92 - cloud * 0.2, n) * smoothstep(0.0, 0.16, d.y);
+          vec3 lit = mix(vec3(1.0, 0.97, 0.94), sunCol * 1.1 + vec3(0.25), clamp(1.0 - sunDir.y * 2.5, 0.0, 1.0));
+          vec3 cc = mix(mix(hor, mid, 0.5) * 0.7 + vec3(0.04), lit, sunUp * 0.85);
+          cc += sunCol * pow(sd, 6.0) * 0.6;                                      // 해 가까운 구름 가장자리가 빛난다
+          cc = mix(cc, vec3(0.05, 0.06, 0.1) + moonC * moonA * 0.06 + pow(md, 8.0) * moonA * 0.18, night);   // 밤 구름 — 어둡고 달 쪽만 은빛
+          c = mix(c, cc, cov * 0.88);
+        }
         c += flash * vec3(0.65, 0.7, 0.85) * (0.4 + 0.6 * h);
         gl_FragColor = vec4(c, 1.0);
       }`
   })));
 
-  /* 별 — 밤에만 */
+  /* 별 — 밤에만. 크기·색이 조금씩 다르고 반짝인다 (구름보다 뒤: 하늘 돔 다음에 그린다) */
+  const starU = { op: { value: 0 }, time: skyU.time, cloud: skyU.cloud };
   const stars = (() => {
-    const N = 900, a = new Float32Array(N * 3);
+    const N = 1400, a = new Float32Array(N * 3), r = new Float32Array(N * 2);
     for (let i = 0; i < N; i++) {
-      const th = Math.random() * Math.PI * 2, ph = Math.acos(0.15 + Math.random() * 0.85);
+      const th = Math.random() * Math.PI * 2, ph = Math.acos(0.12 + Math.random() * 0.88);
       a.set([Math.sin(ph) * Math.cos(th) * 300, Math.cos(ph) * 300, Math.sin(ph) * Math.sin(th) * 300], i * 3);
+      r[i * 2] = Math.random(); r[i * 2 + 1] = Math.pow(Math.random(), 3.0);   // 무늬 씨앗, 밝기(밝은 별은 드물게)
     }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(a, 3));
-    const m = new THREE.PointsMaterial({ color: 0xffffff, size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false });
-    scene.add(new THREE.Points(g, m));
+    g.setAttribute('aR', new THREE.BufferAttribute(r, 2));
+    const m = new THREE.ShaderMaterial({ uniforms: starU, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending,
+      vertexShader: `uniform float time; uniform float cloud; attribute vec2 aR; varying float vA; varying vec3 vC;
+        ${NOISE}
+        void main(){
+          vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mv;
+          float tw = 0.65 + 0.35 * sin(time * (1.5 + aR.x * 3.0) + aR.x * 60.0);
+          vec3 d = normalize(position);
+          vec2 uv = d.xz / (d.y + 0.18) * 1.6 + vec2(time * 0.012, time * 0.004);
+          float n = fbm(uv) * 0.75 + fbm(uv * 2.7 - vec2(time * 0.02, 0.0)) * 0.25;
+          float cov = smoothstep(0.62 - cloud * 0.32, 0.92 - cloud * 0.2, n);   // 구름(하늘 셰이더와 같은 식)에 가린 별은 숨긴다
+          vA = (0.35 + 0.65 * aR.y) * tw * smoothstep(0.05, 0.25, d.y) * (1.0 - cov * 0.95);
+          vC = mix(vec3(0.75, 0.82, 1.0), vec3(1.0, 0.86, 0.7), fract(aR.x * 7.13));
+          gl_PointSize = 1.4 + aR.y * 2.6;
+        }`,
+      fragmentShader: `uniform float op; varying float vA; varying vec3 vC;
+        void main(){ float a = smoothstep(0.5, 0.0, length(gl_PointCoord - 0.5)) * vA * op; if (a < 0.01) discard; gl_FragColor = vec4(vC * a * 1.6, a); }`
+    });
+    const p = new THREE.Points(g, m); p.frustumCulled = false; p.renderOrder = -1;
+    scene.add(p);
     return m;
   })();
 
@@ -103,7 +150,8 @@ export function createSky({ THREE, scene, renderer, hemi, sun, fill, sunOffset }
     hemi.intensity = A.hemiI + (B.hemiI - A.hemiI) * k;
     fill.intensity = A.fillI + (B.fillI - A.fillI) * k;
     renderer.toneMappingExposure = A.exp + (B.exp - A.exp) * k;
-    stars.opacity = A.stars + (B.stars - A.stars) * k;
+    starU.op.value = A.stars + (B.stars - A.stars) * k;
+    skyU.time.value += dt;
 
     /* 해와 달 */
     const day = phase < SUNSET + 0.02 || phase > 0.985;
@@ -127,6 +175,7 @@ export function createSky({ THREE, scene, renderer, hemi, sun, fill, sunOffset }
     }
     if (sunOffset.y < 6) sunOffset.y = 6;   // 그림자가 끝없이 길어지지 않게
     state.night = smooth(0.58, 0.7, phase) * (1 - smooth(0.93, 1.0, phase));
+    skyU.night.value = state.night;
     state.flash = skyU.flash.value;
   }
 
@@ -135,7 +184,7 @@ export function createSky({ THREE, scene, renderer, hemi, sun, fill, sunOffset }
     if (!(name in TIMES)) return `모르는 시각: ${name} (${Object.keys(TIMES).join('/')})`;
     phase = TIMES[name]; return name;
   }
-  return {
+  const api = {
     update, skyU, stars, setTime,
     get night() { return state.night; },
     get phase() { return phase; },
@@ -145,4 +194,7 @@ export function createSky({ THREE, scene, renderer, hemi, sun, fill, sunOffset }
       return phase < 0.06 || phase > 0.97 ? 'dawn' : phase < 0.5 ? 'day' : phase < 0.63 ? 'dusk' : 'night';
     }
   };
+  /* 확인용 — 콘솔에서 __sky.setTime('dusk'), __sky.phase */
+  if (new URLSearchParams(location.search).has('test')) window.__sky = api;
+  return api;
 }

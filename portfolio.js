@@ -2387,29 +2387,23 @@ async function initDrive() {
     }
   }
 
-  /* ── 빛 번짐 — 등롱·전구·반딧불처럼 밝은 것만 은은하게 번진다 ── */
-  const { EffectComposer } = await import('three/addons/postprocessing/EffectComposer.js');
-  const { RenderPass } = await import('three/addons/postprocessing/RenderPass.js');
-  const { UnrealBloomPass } = await import('three/addons/postprocessing/UnrealBloomPass.js');
-  const { OutputPass } = await import('three/addons/postprocessing/OutputPass.js');
-  const composer = new EffectComposer(renderer);
-  composer.addPass(new RenderPass(scene, camera));
-  composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.45, 0.5, 1.0));
-  composer.addPass(new OutputPass());
+  /* ── 그래픽 (graphics.js) — 빛 번짐·색 보정·땅안개·물·햇살 줄기, 화질 자동 조절 (음악 버튼 옆 "화질") ── */
+  const { createGraphics } = await import('./graphics.js');
+  const gfx = await createGraphics({ THREE, renderer, scene, camera, sun, hemi, sky,
+    getNight: () => night, getSeason: () => seasons.season });
 
   function loop() {
     requestAnimationFrame(loop);
     const dt = Math.min(clock.getDelta(), 0.05);   // 탭 복귀 시 delta 폭주 방지
     if (!driveActive) return;                      // 문서 뷰일 땐 그리지 않는다
     step(dt);
-    composer.render();
+    gfx.render(dt);
   }
 
   addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(innerWidth, innerHeight);
-    composer.setSize(innerWidth, innerHeight);
+    gfx.setSize(innerWidth, innerHeight);
   });
 
   /* ── 로딩 ── */

@@ -43,19 +43,19 @@ export function createSeasons({ THREE, scene, renderer, hemi, sun, skyU, badge }
     autumn: { leaf: null, terrain: null, path: null, outer: C(0x6e3412),
       dry: V(0.86, 0.55, 0.22), lush: V(0.62, 0.52, 0.18),
       hemi: C(0xffb48a), hemiK: 1, ground: C(0x1a1030), sun: C(0xff9050), sunK: 1, exp: 1,
-      fog: C(0xffffff), sky: C(0xffffff), far: 100 },
+      fog: C(0xffffff), sky: C(0xffffff), far: 100, cloud: 0.45 },
     winter: { leaf: [0x6a5e54, 0x5e534b, 0x7a6e62, 0x6f6660, 0x5a5250].map(C), terrain: C(0x9a8a78), path: C(0xa89a8c), outer: C(0x8f8a86),
       dry: V(0.62, 0.56, 0.44), lush: V(0.55, 0.52, 0.42),
       hemi: C(0xd2dcff), hemiK: 1.08, ground: C(0x50586a), sun: C(0xffd2b8), sunK: 0.85, exp: 1.0,
-      fog: C(0xc8d6ff), sky: C(0xc4d2ff), far: 78 },
+      fog: C(0xc8d6ff), sky: C(0xc4d2ff), far: 78, cloud: 0.8 },
     spring: { leaf: [0x9fd86a, 0xbfe57e, 0x86c95c, 0xf6a9c8, 0xffc6da].map(C), terrain: C(0x86b54e), path: C(0xc49a6c), outer: C(0x5d8a35),
       dry: V(0.58, 0.86, 0.34), lush: V(0.42, 0.76, 0.26),
       hemi: C(0xffe8c8), hemiK: 1.1, ground: C(0x233018), sun: C(0xffb878), sunK: 1.05, exp: 1.03,
-      fog: C(0xf2ffe8), sky: C(0xf0f6ff), far: 100 },
+      fog: C(0xf2ffe8), sky: C(0xf0f6ff), far: 100, cloud: 0.4 },
     summer: { leaf: [0x2f7a32, 0x3f8f3a, 0x256b2c, 0x4a9a3e, 0x357f35].map(C), terrain: C(0x5a9a3c), path: C(0xb88e60), outer: C(0x3e6e28),
       dry: V(0.30, 0.64, 0.18), lush: V(0.21, 0.52, 0.14),
       hemi: C(0xfff2b8), hemiK: 1.22, ground: C(0x1c2a12), sun: C(0xffc468), sunK: 1.2, exp: 1.06,
-      fog: C(0xfff6e0), sky: C(0xfff4e4), far: 110 }
+      fog: C(0xfff6e0), sky: C(0xfff4e4), far: 110, cloud: 0.28 }
   };
   const ORDER = SEASON_NAMES.map(n => P[n]);
 
@@ -236,6 +236,7 @@ export function createSeasons({ THREE, scene, renderer, hemi, sun, skyU, badge }
     lerpC(tc, A.sky, B.sky, b);
     skyU.hor.value.multiply(tc);
     skyU.mid.value.multiply(tc2.copy(base).lerp(tc, 0.5));
+    if (skyU.cloud) skyU.cloud.value = A.cloud + (B.cloud - A.cloud) * b;   // 구름 덮인 정도 (겨울은 잔뜩 흐림)
 
     /* 눈송이 */
     flakeT += dt * (reduced ? 0.5 : 1);
