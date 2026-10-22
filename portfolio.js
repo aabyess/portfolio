@@ -704,6 +704,11 @@ async function initDrive() {
   const { DRACOLoader } = await import('three/addons/loaders/DRACOLoader.js');
   const draco = new DRACOLoader();
   draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/');
+  /* ── 마을 소품: 오두막 마을 두 곳·밭과 풍차·우물·분수·가로등·굴뚝 연기 (village-props.js) ── */
+  const { createVillageProps } = await import('./village-props.js');
+  const vprops = createVillageProps({ THREE, scene, GLTFLoader, dracoLoader: draco, groundY, heightAt, pathX,
+    roadHalf: WORLD.path.half, getNight: () => night, seasons, camera,
+    avoid: [{ x: pathX(57.4) - 4.6, z: 57.4, r: 2.5 }] });   // 의뢰 게시판 자리
   const worldLoader = new GLTFLoader(worldManager);
   worldLoader.setDRACOLoader(draco);
   /* 장난감 블록·상호왕국 표지판 자리 (나무를 치우려고 월드 로딩 전에 정한다) */
@@ -742,6 +747,7 @@ async function initDrive() {
     clearTrees(gltf.scene, [[BLOCK_X, (NAME_Z + ROW_Z) / 2]], 6);       // 장난감 블록 자리
     clearTrees(gltf.scene, [[KINGDOM_SIGN.x, KINGDOM_SIGN.z]], 2.6);   // 상호왕국 표지판
     clearTrees(gltf.scene, CASTLE_CLEAR.spots, CASTLE_CLEAR.r);         // 북쪽 성문
+    for (const g of vprops.clearGroups) clearTrees(gltf.scene, g.spots, g.r);   // 오두막·밭·풍차
   });
 
   /* ── 풀 — 브루노 시몽 숲처럼 짧고 뾰족한 풀을 촘촘히 ──
@@ -818,7 +824,11 @@ async function initDrive() {
     for (let j = 0; j < GZ; j++) for (let i = 0; i < GX; i++) {
       if (GRID.mask[j * GX + i] < 0.6) continue;
       const cnt = 3 + (Math.random() < 0.5 ? 1 : 0);
-      for (let k = 0; k < cnt; k++) spots.push([-HX + (i + Math.random() - .5) * GRID.step, HZ - (j + Math.random() - .5) * GRID.step]);
+      for (let k = 0; k < cnt; k++) {
+        const gx = -HX + (i + Math.random() - .5) * GRID.step, gz = HZ - (j + Math.random() - .5) * GRID.step;
+        if (vprops.noGrass(gx, gz)) continue;   // 집·밭 안에는 풀을 심지 않는다
+        spots.push([gx, gz]);
+      }
     }
     const grass = new THREE.InstancedMesh(tuft, gm, spots.length);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
@@ -1042,6 +1052,7 @@ async function initDrive() {
      물리에 끌려가지 않는 '키네마틱' 몸체로 넣어 블록만 밀어낸다. R로 다시 쌓는다. */
   const CANNON = await import('cannon-es');
   const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -24, 0) });
+  vprops.addBodies(CANNON, world);   // 오두막·풍차·우물 등 고정 몸체
   world.allowSleep = true;
   world.defaultContactMaterial.friction = 0.42;
   world.defaultContactMaterial.restitution = 0.12;
@@ -1743,6 +1754,7 @@ async function initDrive() {
     if (clampToBounds(car.position)) speed *= 0.3;
     if (fishing && fishing.pushOut(car.position, 1.4)) speed *= 0.5;   // 연못에 빠지지 않게
     if (castle && castle.pushOut(car.position, 1.4)) speed *= 0.5;     // 성벽
+    if (vprops.pushOut(car.position, 1.4)) speed *= 0.5;               // 오두막·우물
     car.position.y += (groundY(car.position.x, car.position.z) - car.position.y) * Math.min(1, dt * 12);
     car.rotation.order = 'YXZ';
     car.rotation.y = heading;
@@ -1803,6 +1815,7 @@ async function initDrive() {
     if (clampToBounds(person.position)) pSpeed = 0;
     if (fishing && fishing.pushOut(person.position, 0.35)) pSpeed *= 0.5;
     if (castle && castle.pushOut(person.position, 0.35)) pSpeed *= 0.5;
+    if (vprops.pushOut(person.position, 0.35)) pSpeed *= 0.5;
     if (quests && quests.pushOut(person.position, 0.35)) pSpeed *= 0.5;
     person.rotation.y = pHeading;
 
@@ -2371,6 +2384,7 @@ async function initDrive() {
     if (events) events.update(dt, t);
     if (village) village.update(dt, t);
     if (castle) castle.update(dt, t);
+    vprops.update(dt, t);
     if (animals) animals.update(dt, t);
     if (quests) quests.update(dt, t);
     if (kids) kids.update(dt, t);
