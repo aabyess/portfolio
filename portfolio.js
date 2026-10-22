@@ -1585,7 +1585,8 @@ async function initDrive() {
   });
 
   /* ── 주행 ── */
-  const MAX_FWD = 10, MAX_REV = 5, ACCEL = 9, BRAKE = 30, DRAG = 6, TURN = 1.9;
+  let MAX_FWD = 10, MAX_REV = 5, ACCEL = 9, TURN = 1.9;   // 탈것을 바꾸면 vehicles.js의 params로 바뀐다
+  const BRAKE = 30, DRAG = 6;
   let speed = 0, heading = Math.PI, steer = 0;
   const START_Z = WORLD.start.z;
   car.position.set(pathX(START_Z), 0, START_Z);
@@ -1709,7 +1710,7 @@ async function initDrive() {
   }
 
   /* ── 승하차 ── */
-  const ENTER_CAR_R = 5.5;
+  let ENTER_CAR_R = 5.5;   // 마차처럼 긴 탈것은 더 멀리서 탄다 (vehicles.js params)
   const player = { mode: 'driving' };
 
   function nearCar() {
@@ -1943,6 +1944,25 @@ async function initDrive() {
     onfoot:  { back: 7.2,  up: 3.9, ahead: 3, lookY: 1.3, ease: 0.0006 }
   };
 
+  /* ── 탈것 바꾸기 — 자동차 · 말 · 마차 · 오토바이 · 자전거 (vehicles.js) ──
+     차 루트 안에서 겉모습만 갈아 끼우고, 속도·회전·카메라·충돌 상자 값만 여기로 넘겨받는다.
+     위쪽 바의 버튼이나 V 키로 고른다. 모델은 처음 고를 때 내려받는다. */
+  const { createVehicleSwitcher, mountVehicleButton, applyBodyShape } = await import('./vehicles.js');
+  const rides = await createVehicleSwitcher({
+    THREE, GLTFLoader, dracoLoader: draco,
+    carGroup: car, person, scene,
+    personClips: () => charClips,
+    onChange(id, p) {
+      MAX_FWD = p.maxFwd; MAX_REV = p.maxRev; ACCEL = p.accel; TURN = p.turn;
+      ENTER_CAR_R = p.enterR;
+      Object.assign(CAM.driving, p.cam);
+      applyBodyShape(carBody, p);
+      speed = Math.min(speed, p.maxFwd);
+    }
+  });
+  mountVehicleButton({ container: document.getElementById('g-top'), switcher: rides });
+  const rideIn = { speed: 0, steer: 0, moving: false, boosting: false, driving: true };   // 매 프레임 재사용
+
   function updateCamera(dt) {
     const onFoot = player.mode === 'onfoot';
     const c = onFoot ? CAM.onfoot : CAM.driving;
@@ -1967,6 +1987,9 @@ async function initDrive() {
     t += dt;
     if (player.mode === 'driving') drive(dt);
     else walk(dt);
+    rideIn.speed = speed; rideIn.steer = steer; rideIn.boosting = !!keys.boost;
+    rideIn.moving = !!(keys.fwd || keys.back); rideIn.driving = player.mode === 'driving';
+    rides.update(dt, rideIn);   // 말 걸음·바퀴·핸들·탄 사람 자세
     physicsStep(dt);
     {
       /* 차 바퀴 자리와 차체, 걷는 사람 발 아래를 눕힌다 */
