@@ -1399,7 +1399,7 @@ async function initDrive() {
       attachGrab(n, {
         THREE, camera, domElement: renderer.domElement,
         getPlayerPos: () => activePos(), groundY,
-        isBlocked: () => !driveActive || panel.classList.contains('open') || !!(weapons && weapons.armed) || !!(tavern && tavern.seated) || !!(dialogue && dialogue.active) || !!(fishing && fishing.active),   // 무기를 들면 클릭은 공격
+        isBlocked: () => !driveActive || panel.classList.contains('open') || !!(weapons && weapons.armed) || !!(tavern && tavern.seated) || !!(dialogue && dialogue.active) || !!(fishing && fishing.active) || attackBusy(),   // 무기를 들면 클릭은 공격
         isOnFoot: () => player.mode === 'onfoot',
         getPlayerFacing: () => person.rotation.y,
         playPunch: () => playerPunch(),
@@ -1746,28 +1746,104 @@ async function initDrive() {
     charAction = next;
   }
 
-  /* ── 주먹 — 오른손 잽 ──
-     glb 캐릭터는 Punch_Right 클립에서 상체 트랙만 떼어 지금 걸음 위에 한 번 겹친다(다리는 계속 걷는다).
+  /* ── 맨손 콤보 — 클릭할 때마다 왼손 잽 → 오른손 스트레이트 → 오른발 차기 → 드롭킥 ──
+     앞 기술이 끝나고 0.6초 안에 다시 누르면 다음 기술로 이어진다. 달리면서(Shift) 누르면 바로 드롭킥.
+     주먹은 상체 트랙만 떼어 걸음 위에 겹치고(다리는 계속 걷는다), 발차기·드롭킥은 그 자리에서 온몸으로 한다.
+     첫 타격(휘청·넘어짐)은 npcs.js attachGrab 의 punch() 가 클릭 순간에 하고, 발차기·드롭킥은 발이 닿는 순간 더 세게 날린다.
      기본 박스 캐릭터는 오른팔을 직접 앞으로 뻗는다(walk 안에서 punchT로). */
-  let punchClip = null, punchAction = null, punchTimer = 0, punchT = 0;
+  let punchT = 0;
   const UPPER = /^(Abdomen|Torso|Chest|Neck|Head|Shoulder|UpperArm|LowerArm|Wrist|Index|Middle|Ring|Pinky|Thumb)/;
+  const MOVES = [
+    { name: '왼손 잽',      clip: 'punch_left',  speed: 1.9, upper: true },
+    { name: '오른손 스트레이트', clip: 'punch_right', speed: 1.8, upper: true },
+    { name: '발차기',       clip: 'kick_right',  speed: 1.45, hitAt: 0.42, reach: 2.0, power: 6.5, up: 3 },
+    { name: '드롭킥',       clip: 'kick_right',  drop: true, dur: 1.15, hitAt: 0.3, reach: 2.4, power: 10, up: 4 },
+  ];
+  const moveActs = {};
+  const atk = { move: null, t: 0, dur: 0, hit: false, step: 0, win: 0, act: null, timer: 0 };
+  const _imp = new THREE.Vector3();
+  function moveAction(m) {
+    const key = m.clip + (m.upper ? ':up' : ':full');
+    if (moveActs[key]) return moveActs[key];
+    const src = charClips[m.clip];
+    if (!src) return null;
+    const clip = src.clone();
+    if (m.upper) clip.tracks = clip.tracks.filter(t => UPPER.test(t.name.split('.')[0]));
+    const a = charMixer.clipAction(clip);
+    a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true;
+    return (moveActs[key] = a);
+  }
+  /* 발차기·드롭킥 중엔 걷기를 멈춘다. 기술 앞부분에선 다음 클릭을 받지 않는다(연타로 기술이 씹히지 않게) */
+  const legMove = () => !!(atk.move && !atk.move.upper);
+  const attackBusy = () => !!(atk.move && atk.t < atk.dur * (atk.move.drop ? 0.85 : 0.55));
   function playerPunch() {
     if (player.mode !== 'onfoot') return;
-    const src = charClips.punch_right;
-    if (!src || !charMixer) { punchT = 0.3; return; }
-    if (!punchClip) {
-      punchClip = src.clone();
-      punchClip.tracks = punchClip.tracks.filter(t => UPPER.test(t.name.split('.')[0]));
-      punchAction = charMixer.clipAction(punchClip);
-      punchAction.setLoop(THREE.LoopOnce, 1);
+    if (!charMixer) { punchT = 0.3; return; }
+    let i = atk.win > 0 ? atk.step : 0;
+    if (pSpeed > WALK_SPEED + 0.8) i = 3;          // 달리다가 → 드롭킥
+    const m = MOVES[i], a = moveAction(m);
+    if (!a) return;
+    atk.step = (i + 1) % MOVES.length;
+    if (atk.act && atk.act !== a) atk.act.fadeOut(0.08);
+    clearTimeout(atk.timer);
+    a.stop().reset();
+    a.timeScale = m.drop ? 1.6 : m.speed;
+    a.weight = m.upper ? 3 : 8;                    // 주먹은 걸음 상체보다 강하게(3:1), 발차기는 거의 온몸
+    a.fadeIn(0.06).play();
+    atk.act = a; atk.move = m; atk.t = 0; atk.hit = false;
+    atk.dur = m.drop ? m.dur : a.getClip().duration / m.speed;
+    atk.win = atk.dur + 0.6;
+    if (m.drop) atk.dropH = pHeading;
+    if (!m.drop) atk.timer = setTimeout(() => a.fadeOut(0.12), Math.max(0, atk.dur - 0.12) * 1000);
+    if (!m.upper) pSpeed = m.drop ? pSpeed : 0;
+  }
+  /* 발이 닿는 순간: 앞쪽 reach m 안 사람들을 세게 날린다 */
+  function legHit(m) {
+    if (!npcs) return;
+    const fx = Math.sin(pHeading), fz = Math.cos(pHeading), px = person.position.x, pz = person.position.z;
+    for (const o of npcs.list()) {
+      const n = o.npc;
+      if (o.off || o.state === 'HELD') continue;
+      const dx = n.x - px, dz = n.z - pz, d = Math.hypot(dx, dz);
+      if (!(d < m.reach) || d < 1e-3 || (dx * fx + dz * fz) / d < 0.3) continue;
+      _imp.set((dx / d * 0.4 + fx * 0.6) * m.power, m.up, (dz / d * 0.4 + fz * 0.6) * m.power);
+      npcs.knockDown(n, _imp, 'punch');
     }
-    const dur = punchClip.duration / 1.7;
-    punchAction.stop().reset();
-    punchAction.timeScale = 1.7;                // 원래 클립은 느려서 잽처럼 빠르게
-    punchAction.weight = 3;                     // 걸음 상체보다 강하게 (3:1)
-    punchAction.fadeIn(0.06).play();
-    clearTimeout(punchTimer);
-    punchTimer = setTimeout(() => punchAction.fadeOut(0.12), Math.max(0, dur - 0.12) * 1000);
+  }
+  function attackStep(dt) {
+    if (atk.win > 0) atk.win -= dt;
+    const m = atk.move;
+    if (!m) return;
+    atk.t += dt;
+    const u = Math.min(1, atk.t / atk.dur);
+    if (!m.upper && !atk.hit && u >= m.hitAt) { atk.hit = true; legHit(m); }
+    if (m.drop) {
+      /* 드롭킥: 뛰어올라 몸을 뒤로 눕히며 두 발로 차고, 등으로 떨어졌다가 일어난다 */
+      const a = atk.act;
+      if (a && a.time > a.getClip().duration * 0.45) a.paused = true;   // 다리를 뻗은 순간에서 멈춘다
+      const air = THREE.MathUtils.clamp((u - 0.06) / 0.46, 0, 1);
+      const lean = u < 0.22 ? u / 0.22 : u < 0.62 ? 1 : Math.max(0, 1 - (u - 0.62) / 0.33);
+      if (air > 0 && air < 1) {
+        person.position.x += Math.sin(atk.dropH) * 6.5 * dt;
+        person.position.z += Math.cos(atk.dropH) * 6.5 * dt;
+        clampToBounds(person.position);
+        if (fishing) fishing.pushOut(person.position, 0.35);
+      }
+      person.rotation.order = 'YXZ';
+      person.rotation.y = pHeading = atk.dropH;
+      person.rotation.x = -1.3 * (lean * lean * (3 - 2 * lean));
+      person.position.y = groundY(person.position.x, person.position.z) + Math.sin(Math.PI * air) * 0.8 + lean * 0.12;
+      pSpeed = 0;
+    }
+    if (!m.upper) {
+      charMixer.update(dt);   // walk() 를 건너뛰는 동안 애니메이션은 여기서 돌린다
+      if (!m.drop) person.position.y = groundY(person.position.x, person.position.z);
+    }
+    if (atk.t >= atk.dur) {
+      if (m.drop) { person.rotation.x = 0; if (atk.act) { atk.act.paused = false; atk.act.fadeOut(0.15); } }
+      else if (!m.upper && atk.act) atk.act.fadeOut(0.15);
+      atk.move = null;
+    }
   }
 
   /* ── 승하차 ── */
@@ -1814,7 +1890,7 @@ async function initDrive() {
       <div class="keys"><span class="key">F</span></div><span>${driving ? '내리기' : '타기'}</span>
       ${driving
         ? '<div class="keys"><span class="key">V</span></div><span>탈것 바꾸기</span><span>· 탱크는 클릭 포격</span>'
-        : '<div class="keys"><span class="key">`</span></div><span>주먹</span><div class="keys"><span class="key">1~0 - =</span></div><span>무기</span><div class="keys"><span class="key">E</span></div><span>앉기</span><div class="keys"><span class="key">F</span></div><span>대화</span><span>· 클릭 공격(맨손: 주먹·꾹 눌러 잡기)</span>'}`;
+        : '<div class="keys"><span class="key">`</span></div><span>주먹</span><div class="keys"><span class="key">1~0 - =</span></div><span>무기</span><div class="keys"><span class="key">E</span></div><span>앉기</span><div class="keys"><span class="key">F</span></div><span>대화</span><span>· 클릭 공격(맨손: 연타 콤보 잽→스트레이트→발차기→드롭킥, 달리며 클릭 = 드롭킥, 꾹 눌러 잡기)</span>'}`;
   }
   updateHint();
 
@@ -2130,8 +2206,9 @@ async function initDrive() {
     if (player.mode === 'driving') drive(dt);
     else if (!tavern.seated && !fishing.active) {
       if (dialogue.active) keys.fwd = keys.back = keys.left = keys.right = keys.boost = false;
-      walk(dt);
-    }   // 의자에 앉아 있으면 걷기를 멈춘다
+      if (!legMove()) walk(dt);   // 발차기·드롭킥 중엔 제자리 (애니메이션은 attackStep 이 돌린다)
+    }
+    attackStep(dt);   // 의자에 앉아 있으면 걷기를 멈춘다
     tavernIn.onFoot = player.mode === 'onfoot'; tavernIn.keys = keys;
     tavern.update(dt, tavernIn);
     fishIn.onFoot = player.mode === 'onfoot'; fishIn.keys = keys;
