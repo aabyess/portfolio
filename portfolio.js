@@ -711,7 +711,7 @@ async function initDrive() {
   const KINGDOM_SIGN = { x: pathX(WORLD.start.z - 6) - 3.6, z: WORLD.start.z - 6 };
   const { PONDS } = await import('./fishing.js');   // 연못 자리의 나무는 치운다
   const { CASTLE_CLEAR } = await import('./castle.js');   // 성문·성벽 자리의 나무도
-  let castle = null, animals = null;   // 아래에서 만든다 (걷기·운전 충돌, 행차가 먼저 참조)
+  let castle = null, animals = null, quests = null;   // 아래에서 만든다 (걷기·운전 충돌, 행차가 먼저 참조)
   /* 개울 위 돌다리 (bridge.js) — 월드의 옛 나무다리(EX_Bridge)는 숨긴다. 높이 곡선은 bridgeY 그대로 */
   const { createBridge } = await import('./bridge.js');
   const bridge = createBridge({ THREE, scene, GLTFLoader, dracoLoader: draco, pathX, bridgeData: WORLD.bridge });
@@ -1451,7 +1451,7 @@ async function initDrive() {
       attachGrab(n, {
         THREE, camera, domElement: renderer.domElement,
         getPlayerPos: () => activePos(), groundY,
-        isBlocked: () => !driveActive || panel.classList.contains('open') || !!(weapons && weapons.armed) || !!(tavern && tavern.seated) || !!(dialogue && dialogue.active) || !!(fishing && fishing.active) || attackBusy(),   // 무기를 들면 클릭은 공격
+        isBlocked: () => !driveActive || panel.classList.contains('open') || !!(weapons && weapons.armed) || !!(tavern && tavern.seated) || !!(dialogue && dialogue.active) || !!(fishing && fishing.active) || !!(quests && quests.open) || attackBusy(),   // 무기를 들면 클릭은 공격
         isOnFoot: () => player.mode === 'onfoot',
         getPlayerFacing: () => person.rotation.y,
         playPunch: () => { playerPunch(); if (animals) animals.punchFrom(person.position, person.rotation.y); },
@@ -1674,7 +1674,12 @@ async function initDrive() {
     if (e.code === 'KeyH' && !e.repeat) { e.preventDefault(); honk(); return; }
     const k = KEYMAP[e.code];
     if (k) { keys[k] = true; e.preventDefault(); hideHint(); }
-    if (e.code === 'KeyF') { e.preventDefault(); if (player.mode === 'onfoot' && fishing && fishing.onF()) return; toggleVehicle(); hideHint(); }
+    if (e.code === 'KeyF') {   // F: 대화(dialogue.js 가 먼저 가로챈다) > 의뢰 게시판 > 낚시 > 탈것
+      e.preventDefault();
+      if (player.mode === 'onfoot' && quests && quests.onF()) { hideHint(); return; }
+      if (player.mode === 'onfoot' && fishing && fishing.onF()) return;
+      toggleVehicle(); hideHint();
+    }
     if (e.code === 'Escape') closePanel();
   });
   addEventListener('keyup', e => { const k = KEYMAP[e.code]; if (k) keys[k] = false; });
@@ -1786,6 +1791,7 @@ async function initDrive() {
     if (clampToBounds(person.position)) pSpeed = 0;
     if (fishing && fishing.pushOut(person.position, 0.35)) pSpeed *= 0.5;
     if (castle && castle.pushOut(person.position, 0.35)) pSpeed *= 0.5;
+    if (quests && quests.pushOut(person.position, 0.35)) pSpeed *= 0.5;
     person.rotation.y = pHeading;
 
     /* 달리는 동안만 카메라가 진행 방향으로 따라 돈다 */
@@ -2074,6 +2080,7 @@ async function initDrive() {
 
   function openPanel(p) {
     current = p.id;
+    if (quests) quests.notify('project', p.id);
     panel.style.setProperty('--c', p.color);
     pnNo.textContent = p.no;
     pnBd.innerHTML = `
@@ -2204,7 +2211,7 @@ async function initDrive() {
       personClips: () => charClips,
       getNpcs: () => npcs,
       stalls: stallsFromStations(stations, { THREE, toyBlocks }),
-      isBlocked: () => !driveActive || panelOpen() || !!(dialogue && dialogue.active) || !!(fishing && fishing.active),
+      isBlocked: () => !driveActive || panelOpen() || !!(dialogue && dialogue.active) || !!(fishing && fishing.active) || !!(quests && quests.open),
       onSit() { pSpeed = 0; if (weapons) weapons.holster(); },
       onStand(h) { pHeading = camYaw = h; pSpeed = 0; },
     });
@@ -2237,7 +2244,7 @@ async function initDrive() {
       getNpcs: () => npcs,
       toyBlocks, groundY,
       colliders: () => stations.map(s => s.group),
-      isBlocked: () => !driveActive || panelOpen() || !!(dialogue && dialogue.active),
+      isBlocked: () => !driveActive || panelOpen() || !!(dialogue && dialogue.active) || !!(quests && quests.open),
       onExplode: (p, r, f) => { if (animals) animals.hitAt(p, r, f); },   // 폭탄·바주카·박격포에 동물도 데굴데굴
       onNoise: (k, p) => { if (animals) animals.alarm(p); },              // 총소리에 동물이 도망
       canUse: () => player.mode === 'onfoot' && !tavern.seated && !(fishing && fishing.active),
@@ -2258,6 +2265,22 @@ async function initDrive() {
       onEnd() { camYaw = pHeading; },
       getSeason: () => seasons.season,   // 계절·밤 전용 대사
       getNight: () => night,
+    });
+  }
+
+  /* ── 의뢰 게시판과 퀘스트 11종 (quests.js) — 출발점 왼쪽 길가. 보상 은화는 선술집 지갑으로 ── */
+  {
+    const { createQuests } = await import('./quests.js');
+    quests = createQuests({
+      THREE, scene, camera, pathX, groundY,
+      getPlayerPos: () => activePos(),
+      isOnFoot: () => player.mode === 'onfoot',
+      isBlocked: () => !driveActive || panelOpen() || !!(dialogue && dialogue.active) || !!(fishing && fishing.active) || tavern.seated,
+      getAnimals: () => animals, getVillage: () => village, getFishing: () => fishing,
+      getTavern: () => tavern, getNpcs: () => npcs, getDialogue: () => dialogue,
+      getRide: () => (player.mode === 'driving' ? rides.current : null),
+      castleGate: castle,
+      onOpen() { for (const k in keys) keys[k] = false; pSpeed = 0; speed = 0; if (weapons) weapons.holster(); },
     });
   }
 
@@ -2337,6 +2360,7 @@ async function initDrive() {
     if (village) village.update(dt, t);
     if (castle) castle.update(dt, t);
     if (animals) animals.update(dt, t);
+    if (quests) quests.update(dt, t);
     bridge.setLampGlow(night);
     if (dialogue) dialogue.update(dt);   // npcs.update 다음 (말 상대를 세워 둔다)
     {

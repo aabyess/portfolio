@@ -949,6 +949,7 @@ export function createTavern({
     get drinks() { return S.drinks; },
     get drunk() { return S.drunk; },
     get coins() { return S.coins; },
+    addCoins(n) { S.coins += n; renderPanel(); },   // 퀘스트 보상 (quests.js)
     get holding() { return !!(S.drink && S.drink.phase === 'hold'); },
     get candidate() { return S.candidate; },
     update, cameraStep, order, sip, standUp, poser,
