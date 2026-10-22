@@ -511,7 +511,8 @@ export function createTankFX({ THREE, scene, groundY = null, getNpcs = null, toy
   function addShake(a) { shake.amp = Math.min(1.6, shake.amp + a); }
 
   function localExplode(pos, radius = 6, force = 1) {
-    const x = pos.x, z = pos.z, y0 = gy(x, z), y = Math.max(pos.y, y0);
+    if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.z)) return;
+    const x = pos.x, z = pos.z, y0 = gy(x, z), y = Number.isFinite(pos.y) ? Math.max(pos.y, y0) : y0;
     const shade = shadeLevel();
     /* 섬광 구 */
     for (const f of flashes) if (f.t >= 1) { f.t = 0; f.m.position.set(x, y + 0.6, z); f.m.visible = true; break; }
@@ -578,7 +579,7 @@ export function createTankFX({ THREE, scene, groundY = null, getNpcs = null, toy
         const o = list[i];
         const dx = o.pos.x - x, dz = o.pos.z - z, dy = o.pos.y - y0;
         const d = Math.sqrt(dx * dx + dz * dz + dy * dy * 0.5);
-        if (d > radius) continue;
+        if (!(d <= radius)) continue;
         const k = 1 - d / radius, h = Math.hypot(dx, dz) || 1;
         _imp.set(dx / h * (3 + 8 * k) * force, (3.5 + 6 * k) * force, dz / h * (3 + 8 * k) * force);
         api.knockDown(o.npc, _imp, 'explosion');

@@ -616,6 +616,7 @@ export async function createNPCs({
     for (let i = 0; i < npcs.length; i++) {
       const n = npcs[i];
       if (n.off) continue;
+      if (!Number.isFinite(n.x) || !Number.isFinite(n.z) || !Number.isFinite(n.y)) recoverNpc(n);
       if (n.stallCooldown > 0) n.stallCooldown -= dt;
       if (n.panicT > 0) n.panicT -= dt;
       if (n.talkT > 0) n.talkT -= dt;
@@ -870,6 +871,7 @@ export async function createNPCs({
   /* 넘어뜨리기 (월드 m/s 속도). 밀리는 게 아니라 뒤로 넘어간다 */
   function knockVel(n, vx, vy, vz, cause = 'car') {
     if (n.state === ST.HELD) return;
+    if (!Number.isFinite(vx) || !Number.isFinite(vy) || !Number.isFinite(vz)) return;   // 깨진 힘은 무시
     releaseSeat(n);
     n.yielding = false; n.cheerIn = -1; n.hitCD = HIT_COOLDOWN;
     n.vx = vx; n.vz = vz; n.vy = Math.max(1.5, vy);
@@ -955,7 +957,8 @@ export async function createNPCs({
     return pick(raycaster.ray || raycaster, getPlayerPos ? getPlayerPos() : null, range, 1);
   }
   function knockDown(n, impulse, cause = 'shot') {
-    if (!n || n.off || n.state === ST.HELD) return false;
+    if (!n || n.off || n.state === ST.HELD || !impulse) return false;
+    if (!Number.isFinite(impulse.x) || !Number.isFinite(impulse.y) || !Number.isFinite(impulse.z)) return false;
     knockVel(n, impulse.x, impulse.y, impulse.z, cause);
     return true;
   }
@@ -1059,6 +1062,25 @@ export async function createNPCs({
     } else toIdle(n);
   }
   function endAnger(n) { toIdle(n); }
+  /* 위치가 깨진(NaN) 사람은 길가로 되돌려 다시 걷게 한다 */
+  function recoverNpc(n) {
+    releaseSeat(n);
+    n.vx = n.vy = n.vz = 0; n.react = 0; n.panicT = 0; n.yielding = false;
+    n.body.rotation.set(0, 0, 0);
+    setAnger(n, false);
+    if (n.bar != null && stalls[n.bar] && stalls[n.bar].bar) {
+      const b = stalls[n.bar].bar;
+      n.x = b.x; n.z = b.z; n.rot = b.rotY; n.y = groundY(n.x, n.z);
+      n.state = ST.BAR; n.timer = rr(1, 4); play(n, 'Idle', 0.2);
+    } else {
+      n.z = rr(zMin, zMax);
+      n.x = clampX(pathX(n.z) + n.side * sideOff(n.z, n));
+      n.y = groundY(n.x, n.z);
+      n.rot = n.dir > 0 ? 0 : Math.PI;
+      startWanderLeg(n); play(n, 'Walk', 0.2);
+    }
+    n.fx = n.x; n.fz = n.z; n.cy = n.y;
+  }
 
   /* ════ 거리의 삶: 말풍선 · 소동 · 구경꾼 · 수다 · 술집 주인 ════ */
 
@@ -1140,10 +1162,11 @@ export async function createNPCs({
     if (scream && rnd() < 0.6) say(n, pickOne(SCREAMS), 1.4, '#c0281e');
   }
   function alarm(pos, radius = 0, kind = 'shot') {
+    if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.z)) return 0;
     const r = radius || ALARM_R[kind] || ALARM_R.shot;
     let n0 = 0;
     for (const n of npcs) {
-      if (n.guard || n.off || Math.hypot(n.x - pos.x, n.z - pos.z) > r) continue;   // 경비병은 도망가지 않는다
+      if (n.guard || n.off || !(Math.hypot(n.x - pos.x, n.z - pos.z) <= r)) continue;   // 경비병은 도망가지 않는다
       n.panicX = pos.x; n.panicZ = pos.z;
       n.panicT = Math.max(n.panicT, rr(6, 10));
       n0++;

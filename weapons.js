@@ -708,11 +708,12 @@ export function createWeapons({
 
   /* ════ 폭발 ════ */
   function explode(pos, radius = 5, force = 12) {
-    const x = pos.x, y = pos.y, z = pos.z;
+    if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.z)) return;   // NaN 위치면 모든 사람이 맞는다
+    const x = pos.x, y = Number.isFinite(pos.y) ? pos.y : groundY(pos.x, pos.z), z = pos.z;
     for (const n of npcList()) {
       if (n.off) continue;
       const dx = n.x - x, dz = n.z - z, d = Math.hypot(dx, dz);
-      if (d > radius) continue;
+      if (!(d <= radius)) continue;
       const k = 1 - d / radius, l = d || 1;
       knock(n, { x: dx / l * force * (0.35 + 0.65 * k), y: 3 + 6 * k, z: dz / l * force * (0.35 + 0.65 * k) }, 'explosion');
     }
@@ -1222,10 +1223,11 @@ export function createWeapons({
     for (; si < stars.length; si++) stars[si].visible = false;
   }
   function areaHit(center, radius, force, cause) {
+    if (!center || !Number.isFinite(center.x) || !Number.isFinite(center.z)) return;
     for (const n of npcList()) {
       if (n.off) continue;
       const dx = n.x - center.x, dz = n.z - center.z, d = Math.hypot(dx, dz);
-      if (d > radius) continue;
+      if (!(d <= radius)) continue;
       const l = d || 1, k = 1 - d / radius * 0.5;
       knock(n, { x: dx / l * force * k, y: 3.5, z: dz / l * force * k }, cause);
     }
