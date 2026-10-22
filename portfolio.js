@@ -215,7 +215,7 @@ const PROJECTS = [
       { src: 'images/gurandi-title_menu.jpg', cap: '타이틀 · 혼자 하기 / 같이 하기' }
     ],
     repo: 'https://github.com/aabyess/GuRandi-AI-Dev',
-    pos: [-10.5, 54]   // AI 구역을 맨 앞으로: 출발점 바로 다음, 첫 가판대보다 앞 (길 왼쪽 — 오른쪽은 연락처 표지판 자리)
+    pos: [4.2, 42]   // AI 구역을 맨 앞으로: 첫 가판대(놀러온나, 길 왼쪽)의 길 건너편. 연락처 표지판 줄(z 48~67)보다 아래
   }
 ];
 
@@ -1963,6 +1963,15 @@ async function initDrive() {
   mountVehicleButton({ container: document.getElementById('g-top'), switcher: rides });
   const rideIn = { speed: 0, steer: 0, moving: false, boosting: false, driving: true };   // 매 프레임 재사용
 
+  /* ── 눈 위 발자국 · 바퀴 자국 (tracks.js) ──
+     눈이 쌓였을 때만 찍히고 20초쯤 지나면 새 눈에 덮인다. 다리 위와 물 위에는 남기지 않는다 */
+  const { createTracks } = await import('./tracks.js');
+  const tracks = createTracks({
+    THREE, scene, uSnow: seasons.uniforms.uSnow, groundY, heightAt,
+    canMark: (x, z) => bridgeY(x, z) === null && heightAt(x, z) > WORLD.stream.water - 0.05
+  });
+  const trackIn = { mode: 'driving', ride: 'car', heading: 0, speed: 0, car: car.position, person: person.position };   // 매 프레임 재사용
+
   function updateCamera(dt) {
     const onFoot = player.mode === 'onfoot';
     const c = onFoot ? CAM.onfoot : CAM.driving;
@@ -2013,6 +2022,8 @@ async function initDrive() {
     updateCamera(dt);
     proximity();
     if (npcs) npcs.update(dt, t);
+    trackIn.mode = player.mode; trackIn.ride = rides.current; trackIn.heading = heading; trackIn.speed = speed;
+    tracks.update(dt, trackIn, npcs && npcs.npcs);   // 눈 위 자국 — 사람·탈것·마을 사람
 
     const me = activePos();
     for (const s of stations) {
