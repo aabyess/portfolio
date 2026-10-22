@@ -337,6 +337,7 @@ body.is-touch #g-found{bottom:150px;padding:10px 12px}
 
 /* ── 배경음악 ── */
 .g-music-btn{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font:inherit}
+body.intro-on .g-music-btn{visibility:hidden}
 .g-music-btn[aria-pressed="false"]{opacity:.62}
 .g-music-btn[aria-pressed="false"] svg{opacity:.5}
 #g-music{position:fixed;right:0;bottom:0;width:200px;height:200px;z-index:-1;opacity:0;pointer-events:none;overflow:hidden}
@@ -425,9 +426,9 @@ body.is-touch #g-prompt .space{display:none}
     <div class="hd">
       <div class="hd-name">최상호 <span>Full-stack Developer</span></div>
       <nav class="hd-nav">
+        <a href="#d-aiz">AI 활용</a>
         <a href="#d-skills">기술</a>
         <a href="#d-work">프로젝트</a>
-        <a href="#d-aiz">AI 활용</a>
         <a href="#d-play">사이드</a>
         <a href="#d-contact">연락</a>
         <button class="swap" data-go="drive" type="button">
@@ -463,6 +464,17 @@ body.is-touch #g-prompt .space{display:none}
       </div>
     </section>
 
+    <section id="d-aiz">
+      <div class="wrap">
+        <div class="sh">
+          <div class="sh-k">AI</div>
+          <h2>AI 활용</h2>
+          <p class="sh-d">AI에게 구현을 맡길 때는 <b>일을 나누고, 결과를 스스로 확인하게 하고, 근거 없는 "완료"를 돌려보내는 것</b>까지 제 일이라고 생각합니다.</p>
+        </div>
+        <div id="d-ai"></div>
+      </div>
+    </section>
+
     <section id="d-skills">
       <div class="wrap">
         <div class="sh">
@@ -481,17 +493,6 @@ body.is-touch #g-prompt .space{display:none}
           <h2>프로젝트</h2>
         </div>
         <div class="pl" id="d-projects"></div>
-      </div>
-    </section>
-
-    <section id="d-aiz">
-      <div class="wrap">
-        <div class="sh">
-          <div class="sh-k">AI</div>
-          <h2>AI 활용</h2>
-          <p class="sh-d">AI에게 구현을 맡길 때는 <b>일을 나누고, 결과를 스스로 확인하게 하고, 근거 없는 "완료"를 돌려보내는 것</b>까지 제 일이라고 생각합니다.</p>
-        </div>
-        <div id="d-ai"></div>
       </div>
     </section>
 
@@ -565,6 +566,8 @@ body.is-touch #g-prompt .space{display:none}
     const docFirst = /^#(doc|top|d-)/.test(location.hash);
     if (seen || docFirst || new URLSearchParams(location.search).has('test')) { el.remove(); return; }
     try { sessionStorage.setItem('portfolio.intro', '1'); } catch (e) {}
+    document.body.classList.add('intro-on');      /* 인트로가 끝날 때까지 음악 버튼을 숨긴다 */
+    const gesture = () => dispatchEvent(new Event('portfolio:intro-gesture'));   /* 자동 재생이 막혔으면 이 조작으로 음악을 켠다 */
     const cards = [...el.querySelectorAll('.card')];
     const HOLD = [3200, 2600, 2300];
     const timers = [];
@@ -574,15 +577,17 @@ body.is-touch #g-prompt .space{display:none}
       done = true;
       timers.forEach(clearTimeout);
       el.classList.add('out');
+      document.body.classList.remove('intro-on');
       removeEventListener('keydown', onKey, true);
       setTimeout(() => el.remove(), 950);
     };
     function onKey(e) {
       e.stopImmediatePropagation();               /* 인트로 중엔 차가 움직이지 않게 */
+      gesture();
       if (['Space', 'Enter', 'Escape'].includes(e.code)) { e.preventDefault(); finish(); }
     }
     addEventListener('keydown', onKey, true);
-    el.addEventListener('click', finish);
+    el.addEventListener('click', () => { gesture(); finish(); });
     let t = 250;
     cards.forEach((c, i) => {
       timers.push(setTimeout(() => c.classList.add('on'), t));

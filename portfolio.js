@@ -215,7 +215,7 @@ const PROJECTS = [
       { src: 'images/gurandi-title_menu.jpg', cap: '타이틀 · 혼자 하기 / 같이 하기' }
     ],
     repo: 'https://github.com/aabyess/GuRandi-AI-Dev',
-    pos: [-4.6, -10.5]
+    pos: [-4.6, -21]   // 월드를 길 방향으로 2배 늘리면서 같이 옮김 (예전 -10.5)
   }
 ];
 
@@ -297,7 +297,8 @@ const listBlock = (title, items, cls = '', fold = 0) => items && items.length
 
 /* ════════════════════════════════════════════════════════════
    배경음악 — 유튜브 공식 플레이어(IFrame API)로 재생한다.
-   브라우저는 사용자가 한 번 조작하기 전엔 소리를 막으므로 첫 클릭/키 입력에 시작한다.
+   인트로부터 바로 재생을 시도하고, 브라우저가 소리 자동 재생을 막으면
+   첫 클릭/키 입력(인트로 중 포함)에 다시 튼다.
    끄면 멈추고 카드도 숨긴다. 문서 뷰로 가면 멈추고 게임으로 돌아오면 다시 튼다.
    ════════════════════════════════════════════════════════════ */
 function createMusic() {
@@ -306,7 +307,7 @@ function createMusic() {
   if (!btn || !card) return null;
   let want = true;
   try { want = localStorage.getItem(KEY) !== 'off'; } catch { /* 저장소가 막혀도 기본은 켜짐 */ }
-  let player = null, ready = false, started = false;
+  let player = null, ready = false, started = true;   // 조작을 기다리지 않고 바로 재생을 시도한다
 
   const api = () => {
     if (document.getElementById('yt-iframe-api')) return;
@@ -331,10 +332,10 @@ function createMusic() {
     if (!ready) return;
     if (on) player.playVideo(); else player.pauseVideo();
   }
+  /* 자동 재생이 막혔다면 사용자의 첫 조작 순간에 다시 튼다 */
   function start() {
-    if (started || !want || document.body.dataset.view !== 'drive') return;
-    started = true;
-    sync();
+    if (!want || !ready || document.body.dataset.view !== 'drive') return;
+    if (player.getPlayerState() !== YT.PlayerState.PLAYING) player.playVideo();
   }
   btn.addEventListener('click', e => {
     e.stopPropagation();
@@ -345,6 +346,7 @@ function createMusic() {
   });
   addEventListener('pointerdown', start);
   addEventListener('keydown', start);
+  addEventListener('portfolio:intro-gesture', start);   // 인트로는 키 입력을 가로채므로 따로 알려 준다
   api();
   return { sync };
 }
@@ -533,7 +535,7 @@ async function initDrive() {
      게시판이 도로 좌우에 번갈아 선다. 경계는 원이 아니라 사각형이다. */
   const CAR_LEN = 4.2, PAD_R = 7.5;
   const ROAD_HALF = 9;                                   // 포장도로 반폭
-  const BOUND = { x: 39, zMin: -39, zMax: 39 };          // 가을 숲 월드(84×84) 안
+  const BOUND = { x: 39, zMin: -81, zMax: 81 };          // 가을 숲 월드(84×168) 안
 
   const NEON_PINK = 0xff3d9a, NEON_CYAN = 0x2de2ff, SUN_WARM = 0xff8c42;
 
@@ -557,14 +559,16 @@ async function initDrive() {
      웹에서 버거운 풀·낙엽·바람은 여기서 가볍게 다시 만든다. */
   const WORLD = await (await fetch('models/autumn-world.json')).json();
   const GRID = WORLD.grid;
+  /* 월드는 길 방향(z)으로 더 길다. 예전 정사각형 JSON(n, half)도 그대로 읽는다 */
+  const GX = GRID.nx ?? GRID.n, GZ = GRID.nz ?? GRID.n;
+  const HX = GRID.halfX ?? GRID.half, HZ = GRID.halfZ ?? GRID.half;
   const pathX = z => WORLD.path.amp * Math.sin(-WORLD.path.k * z);
   /* Blender 격자(위가 +Y)를 웹 좌표(-Z가 앞)로 읽는다 */
   function heightAt(x, z) {
-    const n = GRID.n;
-    const fx = Math.min(n - 1.001, Math.max(0, (x + GRID.half) / GRID.step));
-    const fy = Math.min(n - 1.001, Math.max(0, (-z + GRID.half) / GRID.step));
+    const fx = Math.min(GX - 1.001, Math.max(0, (x + HX) / GRID.step));
+    const fy = Math.min(GZ - 1.001, Math.max(0, (-z + HZ) / GRID.step));
     const ix = Math.floor(fx), iy = Math.floor(fy), tx = fx - ix, ty = fy - iy;
-    const h = (i, j) => GRID.h[j * n + i];
+    const h = (i, j) => GRID.h[j * GX + i];
     return (h(ix, iy) * (1 - tx) + h(ix + 1, iy) * tx) * (1 - ty) + (h(ix, iy + 1) * (1 - tx) + h(ix + 1, iy + 1) * tx) * ty;
   }
   function bridgeY(x, z) {
@@ -614,12 +618,15 @@ async function initDrive() {
   const hemi = new THREE.HemisphereLight(0xffb48a, 0x1a1030, DUSK.hemi);
   scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xff9050, DUSK.sun);   // 지평선에 걸린 마지막 햇빛
-  sun.position.set(-40, 16, 34);
+  /* 월드가 길어서 그림자 상자를 플레이어 주변에만 두고 따라다니게 한다 (아래 followSun) */
+  const SUN_OFFSET = new THREE.Vector3(-40, 16, 34);
+  sun.position.copy(SUN_OFFSET);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -55, right: 55, top: 55, bottom: -55, near: 1, far: 160 });
   sun.shadow.bias = -0.0008; sun.shadow.normalBias = 0.04;
-  scene.add(sun);
+  scene.add(sun, sun.target);
+  const followSun = (x, z) => { sun.target.position.set(x, 0, z); sun.position.set(x + SUN_OFFSET.x, SUN_OFFSET.y, z + SUN_OFFSET.z); };
   const fill = new THREE.DirectionalLight(0x7088ff, DUSK.fill);   // 푸른 달빛
   fill.position.set(40, 20, -30);
   scene.add(fill);
@@ -733,12 +740,12 @@ async function initDrive() {
   /* ── 풀 — 브루노 시몽 숲처럼 짧고 뾰족한 풀을 촘촘히 ──
      차나 사람이 지나간 자리는 눕고, 몇 초에 걸쳐 다시 일어난다.
      밟힌 정도는 월드를 덮는 128×128 텍스처(trail)에 적고 셰이더가 읽는다. */
-  const TRAIL_N = 128;
-  const trailData = new Uint8Array(TRAIL_N * TRAIL_N * 4);
-  const trailTex = new THREE.DataTexture(trailData, TRAIL_N, TRAIL_N, THREE.RGBAFormat);
+  const TRAIL_N = 128, TRAIL_NZ = Math.round(TRAIL_N * HZ / HX);   // 칸이 정사각형이 되게 z쪽을 늘린다
+  const trailData = new Uint8Array(TRAIL_N * TRAIL_NZ * 4);
+  const trailTex = new THREE.DataTexture(trailData, TRAIL_N, TRAIL_NZ, THREE.RGBAFormat);
   trailTex.magFilter = trailTex.minFilter = THREE.LinearFilter;
   trailTex.needsUpdate = true;
-  const trailCells = (x, z) => [Math.round((x + GRID.half) / (GRID.half * 2) * (TRAIL_N - 1)), Math.round((z + GRID.half) / (GRID.half * 2) * (TRAIL_N - 1))];
+  const trailCells = (x, z) => [Math.round((x + HX) / (HX * 2) * (TRAIL_N - 1)), Math.round((z + HZ) / (HZ * 2) * (TRAIL_NZ - 1))];
   let trailAcc = 0;
   /* 매 프레임: 전체를 조금씩 회복시키고(다시 자람), 지나가는 자리를 눕힌다 */
   function updateTrail(dt, stamps) {
@@ -746,9 +753,9 @@ async function initDrive() {
     const dec = Math.floor(trailAcc); trailAcc -= dec;
     if (dec) for (let i = 0; i < trailData.length; i += 4) { const v = trailData[i]; if (v) trailData[i] = v > dec ? v - dec : 0; }
     for (const [x, z, r] of stamps) {
-      const [cx, cz] = trailCells(x, z), rc = Math.ceil(r / (GRID.half * 2) * TRAIL_N);
+      const [cx, cz] = trailCells(x, z), rc = Math.ceil(r / (HX * 2) * TRAIL_N);
       for (let j = cz - rc; j <= cz + rc; j++) for (let i = cx - rc; i <= cx + rc; i++) {
-        if (i < 0 || j < 0 || i >= TRAIL_N || j >= TRAIL_N) continue;
+        if (i < 0 || j < 0 || i >= TRAIL_N || j >= TRAIL_NZ) continue;
         const d = Math.hypot(i - cx, j - cz) / rc;
         if (d > 1) continue;
         const k = (j * TRAIL_N + i) * 4, v = Math.round(255 * Math.min(1, (1 - d) * 1.6));
@@ -778,8 +785,8 @@ async function initDrive() {
     gm.onBeforeCompile = sh => {
       sh.uniforms.uTime = timeU;
       sh.uniforms.uTrail = { value: trailTex };
-      sh.uniforms.uHalf = { value: GRID.half };
-      sh.vertexShader = 'uniform float uTime; uniform sampler2D uTrail; uniform float uHalf;\nvarying float vH; varying float vPatch; varying float vPress;\n' +
+      sh.uniforms.uHalf = { value: new THREE.Vector2(HX, HZ) };
+      sh.vertexShader = 'uniform float uTime; uniform sampler2D uTrail; uniform vec2 uHalf;\nvarying float vH; varying float vPatch; varying float vPress;\n' +
         sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
         vec4 gw = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
         vH = clamp(position.y / ${H.toFixed(2)}, 0.0, 1.0);
@@ -798,11 +805,10 @@ async function initDrive() {
         diffuseColor.rgb *= mix(0.38, 1.12, vH) * (1.0 - vPress * 0.1);`);
     };
     const spots = [];
-    const n = GRID.n;
-    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-      if (GRID.mask[j * n + i] < 0.6) continue;
+    for (let j = 0; j < GZ; j++) for (let i = 0; i < GX; i++) {
+      if (GRID.mask[j * GX + i] < 0.6) continue;
       const cnt = 3 + (Math.random() < 0.5 ? 1 : 0);
-      for (let k = 0; k < cnt; k++) spots.push([-GRID.half + (i + Math.random() - .5) * GRID.step, GRID.half - (j + Math.random() - .5) * GRID.step]);
+      for (let k = 0; k < cnt; k++) spots.push([-HX + (i + Math.random() - .5) * GRID.step, HZ - (j + Math.random() - .5) * GRID.step]);
     }
     const grass = new THREE.InstancedMesh(tuft, gm, spots.length);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
@@ -1936,6 +1942,7 @@ async function initDrive() {
     for (const c of contacts) { c.icon.position.y = 1.75 + Math.sin(t * 1.4 + c.phase) * 0.12; c.icon.rotation.y = Math.sin(t * 0.6 + c.phase) * 0.35; }
     dust(dt);
     fallingLeaves(dt, t, activePos().x, activePos().z);
+    followSun(activePos().x, activePos().z);
     updateCamera(dt);
     proximity();
 
