@@ -717,7 +717,8 @@ async function initDrive() {
   const { PONDS } = await import('./fishing.js');   // 연못 자리의 나무는 치운다
   const { CASTLE_CLEAR } = await import('./castle.js');   // 성문·성벽 자리의 나무도
   const { FESTIVAL_CLEAR, createFestival } = await import('./festival.js');   // 창시합장·활터·마을 광장
-  let castle = null, animals = null, quests = null, kids = null;   // 아래에서 만든다 (걷기·운전 충돌, 행차가 먼저 참조)
+  const { SHOP_CLEAR, createShop } = await import('./shop.js');                // 물약 가게·상인 자리
+  let castle = null, animals = null, quests = null, kids = null, shop = null;   // 아래에서 만든다 (걷기·운전 충돌, 행차가 먼저 참조)
   /* 개울 위 돌다리 (bridge.js) — 월드의 옛 나무다리(EX_Bridge)는 숨긴다. 높이 곡선은 bridgeY 그대로 */
   const { createBridge } = await import('./bridge.js');
   const bridge = createBridge({ THREE, scene, GLTFLoader, dracoLoader: draco, pathX, bridgeData: WORLD.bridge });
@@ -750,6 +751,7 @@ async function initDrive() {
     clearTrees(gltf.scene, CASTLE_CLEAR.spots, CASTLE_CLEAR.r);         // 북쪽 성문
     for (const g of vprops.clearGroups) clearTrees(gltf.scene, g.spots, g.r);   // 오두막·밭·풍차
     clearTrees(gltf.scene, FESTIVAL_CLEAR.spots, FESTIVAL_CLEAR.r);              // 축제 자리
+    clearTrees(gltf.scene, SHOP_CLEAR.spots, SHOP_CLEAR.r);                      // 물약 가게·상인
   });
 
   /* ── 풀 — 브루노 시몽 숲처럼 짧고 뾰족한 풀을 촘촘히 ──
@@ -1464,7 +1466,7 @@ async function initDrive() {
       attachGrab(n, {
         THREE, camera, domElement: renderer.domElement,
         getPlayerPos: () => activePos(), groundY,
-        isBlocked: () => !driveActive || panel.classList.contains('open') || !!(weapons && weapons.armed) || !!(tavern && tavern.seated) || !!(dialogue && dialogue.active) || !!(fishing && fishing.active) || !!(quests && quests.open) || attackBusy(),   // 무기를 들면 클릭은 공격
+        isBlocked: () => !driveActive || panel.classList.contains('open') || !!(weapons && weapons.armed) || !!(tavern && tavern.seated) || !!(dialogue && dialogue.active) || !!(fishing && fishing.active) || !!(quests && quests.open) || !!(shop && shop.open) || attackBusy(),   // 무기를 들면 클릭은 공격
         isOnFoot: () => player.mode === 'onfoot',
         getPlayerFacing: () => person.rotation.y,
         playPunch: () => { playerPunch(); if (animals) animals.punchFrom(person.position, person.rotation.y); if (kids) kids.punch(); },
@@ -1715,6 +1717,7 @@ async function initDrive() {
     if (e.code === 'KeyF') {   // F: 대화(dialogue.js 가 먼저 가로챈다) > 의뢰 게시판 > 낚시 > 탈것
       e.preventDefault();
       if (player.mode === 'onfoot' && quests && quests.onF()) { hideHint(); return; }
+      if (player.mode === 'onfoot' && shop && shop.onF()) { hideHint(); return; }
       if (player.mode === 'onfoot' && fishing && fishing.onF()) return;
       toggleVehicle(); hideHint();
     }
@@ -1770,6 +1773,7 @@ async function initDrive() {
     if (fishing && fishing.pushOut(car.position, 1.4)) speed *= 0.5;   // 연못에 빠지지 않게
     if (castle && castle.pushOut(car.position, 1.4)) speed *= 0.5;     // 성벽
     if (vprops.pushOut(car.position, 1.4)) speed *= 0.5;               // 오두막·우물
+    if (shop && shop.pushOut(car.position, 1.4)) speed *= 0.5;
     car.position.y += (groundY(car.position.x, car.position.z) - car.position.y) * Math.min(1, dt * 12);
     car.rotation.order = 'YXZ';
     car.rotation.y = heading;
@@ -1818,7 +1822,7 @@ async function initDrive() {
       const len = Math.hypot(dx, dz) || 1;
       dx /= len; dz /= len;
       pHeading = angLerp(pHeading, Math.atan2(dx, dz), dt * TURN_SNAP);
-      const top = keys.boost ? RUN_SPEED : WALK_SPEED;
+      const top = (keys.boost ? RUN_SPEED : WALK_SPEED) * (shop ? shop.effects.speedMul() : 1);   // 바람 물약
       pSpeed = pSpeed > top ? Math.max(top, pSpeed - RUN_DRAG * dt) : Math.min(top, pSpeed + RUN_ACCEL * dt);
     } else {
       pSpeed = Math.max(0, pSpeed - RUN_DRAG * dt);
@@ -1832,6 +1836,7 @@ async function initDrive() {
     if (castle && castle.pushOut(person.position, 0.35)) pSpeed *= 0.5;
     if (vprops.pushOut(person.position, 0.35)) pSpeed *= 0.5;
     if (quests && quests.pushOut(person.position, 0.35)) pSpeed *= 0.5;
+    if (shop && shop.pushOut(person.position, 0.35)) pSpeed *= 0.5;
     person.rotation.y = pHeading;
 
     /* 달리는 동안만 카메라가 진행 방향으로 따라 돈다 */
@@ -1840,8 +1845,9 @@ async function initDrive() {
     const moving = pSpeed / RUN_SPEED;
     if (charMixer) {
       /* 걸음·달리기 클립 속도를 실제 이동 속도에 맞춰 발이 미끄러지지 않게 한다 */
-      playClip(pSpeed < 0.3 ? 'idle' : pSpeed < WALK_SPEED + 1 ? 'walk' : 'run');
-      if (charAction) charAction.timeScale = pSpeed < 0.3 ? 1 : pSpeed < WALK_SPEED + 1 ? Math.max(0.5, pSpeed / WALK_SPEED) : pSpeed / RUN_SPEED * 1.1;
+      const ps = pSpeed / (shop ? shop.effects.speedMul() : 1);   // 물약으로 빨라져도 걸음 클립은 원래 속도 기준
+      playClip(ps < 0.3 ? 'idle' : ps < WALK_SPEED + 1 ? 'walk' : 'run');
+      if (charAction) charAction.timeScale = ps < 0.3 ? 1 : ps < WALK_SPEED + 1 ? Math.max(0.5, ps / WALK_SPEED) : ps / RUN_SPEED * 1.1;
       charMixer.update(dt);
       person.position.y = groundY(person.position.x, person.position.z);
     } else {
@@ -2251,7 +2257,7 @@ async function initDrive() {
       personClips: () => charClips,
       getNpcs: () => npcs,
       stalls: stallsFromStations(stations, { THREE, toyBlocks }),
-      isBlocked: () => !driveActive || panelOpen() || !!(dialogue && dialogue.active) || !!(fishing && fishing.active) || !!(quests && quests.open),
+      isBlocked: () => !driveActive || panelOpen() || !!(dialogue && dialogue.active) || !!(fishing && fishing.active) || !!(quests && quests.open) || !!(shop && shop.open),
       onSit() { pSpeed = 0; if (weapons) weapons.holster(); },
       onStand(h) { pHeading = camYaw = h; pSpeed = 0; },
     });
@@ -2284,7 +2290,7 @@ async function initDrive() {
       getNpcs: () => npcs,
       toyBlocks, groundY,
       colliders: () => festival ? [...stations.map(s => s.group), ...festival.colliders()] : stations.map(s => s.group),   // 활터 과녁에 화살이 꽂힌다
-      isBlocked: () => !driveActive || panelOpen() || !!(dialogue && dialogue.active) || !!(quests && quests.open),
+      isBlocked: () => !driveActive || panelOpen() || !!(dialogue && dialogue.active) || !!(quests && quests.open) || !!(shop && shop.open),
       onExplode: (p, r, f) => { if (animals) animals.hitAt(p, r, f); },   // 폭탄·바주카·박격포에 동물도 데굴데굴
       onNoise: (k, p) => { if (animals) animals.alarm(p); },              // 총소리에 동물이 도망
       canUse: () => player.mode === 'onfoot' && !tavern.seated && !(fishing && fishing.active),
@@ -2323,6 +2329,17 @@ async function initDrive() {
       onOpen() { for (const k in keys) keys[k] = false; pSpeed = 0; speed = 0; if (weapons) weapons.holster(); },
     });
   }
+
+  /* ── 약초 마녀의 물약 가게(동쪽 숲 21,-24)와 떠돌이 상인 마차 — 물약·모자·망토 염색·애완 오리 (shop.js) ── */
+  shop = createShop({
+    THREE, scene, camera, person, GLTFLoader, dracoLoader: draco, groundY, pathX,
+    getPlayerPos: () => activePos(),
+    isOnFoot: () => player.mode === 'onfoot',
+    isBlocked: () => !driveActive || panelOpen() || !!(dialogue && dialogue.active) || !!(fishing && fishing.active) || tavern.seated || !!(quests && quests.open),
+    getTavern: () => tavern, getQuests: () => quests, getNpcs: () => npcs, getEvents: () => events,
+    blocks: (x, z, r) => vprops.blocks(x, z, r),
+    onOpen() { for (const k in keys) keys[k] = false; pSpeed = 0; speed = 0; if (weapons) weapons.holster(); },
+  });
 
   /* 오른쪽 마우스를 누르고 있는 동안 어깨 너머로 살짝 줌 (떼면 돌아온다) */
   let zoomHeld = false, zoomK = 0;
@@ -2394,6 +2411,7 @@ async function initDrive() {
     tavern.cameraStep(camera, dt, d => dialogue.cameraStep(camera, d, d2 => fishing.cameraStep(camera, d2, updateCamera)));   // 앉으면 어깨 너머 카메라, 취하면 살짝 흔들림
     weaponsIn.onFoot = player.mode === 'onfoot';
     weapons.update(dt, weaponsIn);                 // 무기 자세·투사체·효과·카메라 흔들림 (카메라 갱신 다음)
+    if (shop) shop.update(dt, t);                  // 물약 효과(크기·투명·카메라) — 카메라 갱신 다음
     proximity();
     if (npcs) npcs.update(dt, t);
     if (events) events.update(dt, t);
@@ -2407,7 +2425,7 @@ async function initDrive() {
     bridge.setLampGlow(night);
     if (dialogue) dialogue.update(dt);   // npcs.update 다음 (말 상대를 세워 둔다)
     {
-      const busy = !!((dialogue && dialogue.active) || (fishing && fishing.active));   // 대화·낚시 중엔 단축 바·안내를 숨긴다
+      const busy = !!((dialogue && dialogue.active) || (fishing && fishing.active) || (shop && shop.open));   // 대화·낚시 중엔 단축 바·안내를 숨긴다
       if (document.body.classList.contains('talking') !== busy) document.body.classList.toggle('talking', busy);
     }
     trackIn.mode = player.mode; trackIn.ride = rides.current; trackIn.heading = heading; trackIn.speed = speed;
