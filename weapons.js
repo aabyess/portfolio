@@ -64,7 +64,7 @@
 import { createPoser } from './tavern.js';
 
 const D2R = Math.PI / 180;
-export const HUD_HINT = '1~0·-·= 무기 · 휠 바꾸기 · 클릭 공격 · G 집어넣기';
+export const HUD_HINT = '` 주먹 · 1~0·-·= 무기 · 휠 바꾸기 · 클릭 공격 · G 집어넣기';
 
 export const WEAPONS = [
   { id: 'sword',    key: '1', name: '칼' },
@@ -81,6 +81,7 @@ export const WEAPONS = [
   { id: 'mortar',   key: '=', name: '박격포' },
 ];
 const KEY_CODE = { Minus: '-', NumpadSubtract: '-', Equal: '=', NumpadAdd: '=' };
+const FIST = { id: 'none', key: '`', name: '주먹' };   // 단축 바 맨 앞 칸: 무기를 내려놓고 맨손(주먹·잡기)으로
 const BY_ID = Object.fromEntries(WEAPONS.map(w => [w.id, w]));
 const RANGED = { pistol: 1, bow: 1, crossbow: 1, bazooka: 1 };   // 늘 조준 방향을 본다
 /* 바주카: 모델 원점 = 오른손 권총 손잡이, 통 축은 원점 위 tubeY, +Z 앞 */
@@ -907,10 +908,11 @@ export function createWeapons({
     renderHud();
   }
   function holster() { if (S.cur !== 'none') select('none'); }
-  function cycle(dir) {
-    const i = WEAPONS.findIndex(w => w.id === S.cur);
-    const j = i < 0 ? (dir > 0 ? 0 : WEAPONS.length - 1) : (i + dir + WEAPONS.length) % WEAPONS.length;
-    select(WEAPONS[j].id);
+  function cycle(dir) {   // 휠: 주먹 → 칼 → … → 박격포 → 주먹
+    const ids = ['none', ...WEAPONS.map(w => w.id)];
+    const i = Math.max(0, ids.indexOf(S.cur));
+    const id = ids[(i + dir + ids.length) % ids.length];
+    if (id === 'none') holster(); else select(id);
   }
 
   /* ── 입력 ── */
@@ -955,6 +957,7 @@ export function createWeapons({
     const m = /^(?:Digit|Numpad)(\d)$/.exec(e.code), k = m ? m[1] : KEY_CODE[e.code];
     if (k) { const w = WEAPONS.find(x => x.key === k); if (w) { e.preventDefault(); select(w.id); } return; }
 
+    if (e.code === 'Backquote') { e.preventDefault(); holster(); return; }
     if (e.code === 'KeyG') { e.preventDefault(); if (S.cur === 'none') select(S.last); else holster(); }
   };
   if (domElement) {
@@ -1709,6 +1712,7 @@ export function createWeapons({
 
   /* ════ HUD ════ */
   const ICON = {
+    none: '<path d="M7 11V7.5a1.5 1.5 0 0 1 3 0V10"/><path d="M10 9.5V6.5a1.5 1.5 0 0 1 3 0V10"/><path d="M13 9.5V7a1.5 1.5 0 0 1 3 0v3"/><path d="M16 9.5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-1.5A5.5 5.5 0 0 1 6 14.5V12a1.5 1.5 0 0 1 3 0"/>',
     sword: '<path d="M14.5 3.5 20.5 3.5 20.5 9.5 9 21 6.5 18.5"/><path d="M4 14l6 6M3.5 20.5l2-2"/>',
     axe: '<path d="M14 6 5 21"/><path d="M12.5 3.5c3 0 6.5 2 8 6l-5 2-4-4z"/>',
     hammer: '<path d="M13 9 4 21"/><path d="M10.5 5.5l5-3 6 6-3 5z"/>',
@@ -1746,7 +1750,7 @@ body.intro-on .wp-bar,body[data-view="doc"] .wp-bar,body.intro-on .wp-cross,body
   if (!document.getElementById('wp-css')) { const st = document.createElement('style'); st.id = 'wp-css'; st.textContent = CSS; document.head.appendChild(st); }
   const uiRoot = document.getElementById('drive-root') || document.body;
   const bar = document.createElement('div'); bar.className = 'wp-bar'; bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', '무기');
-  bar.innerHTML = WEAPONS.map(w => `<button type="button" data-id="${w.id}" aria-pressed="false" title="${w.name} (${w.key})"><span class="k">${w.key}</span>
+  bar.innerHTML = [FIST, ...WEAPONS].map(w => `<button type="button" data-id="${w.id}" aria-pressed="false" title="${w.name} (${w.key})"><span class="k">${w.key}</span>
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[w.id]}</svg>
     <span class="n">${w.name}</span><i class="pr"></i></button>`).join('');
   const cross = document.createElement('div'); cross.className = 'wp-cross';
@@ -1758,7 +1762,7 @@ body.intro-on .wp-bar,body[data-view="doc"] .wp-bar,body.intro-on .wp-cross,body
   uiRoot.append(bar, cross);
   const ringEl = cross.querySelector('.rg');
   const btns = [...bar.querySelectorAll('button')];
-  bar.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; select(b.dataset.id); if (e.detail > 0) b.blur(); });
+  bar.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.id === 'none') holster(); else select(b.dataset.id); if (e.detail > 0) b.blur(); });
   function renderHud() { for (const b of btns) b.setAttribute('aria-pressed', String(b.dataset.id === S.cur)); }
   renderHud();
   function hudFrame(on) {
