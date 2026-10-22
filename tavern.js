@@ -48,6 +48,9 @@
    ════════════════════════════════════════════════════════════ */
 
 const D2R = Math.PI / 180;
+import { notify } from './notify.js';   // 공용 알림 기둥 (다른 모듈 알림과 겹치지 않게)
+
+
 export const PLAYER_OWNER = { isPlayer: true, name: 'player' };
 
 /* ════════ 자세 잡기 도구 (person.glb 리그) ════════
@@ -299,19 +302,15 @@ export function createTavern({
     <div class="st" aria-live="polite"></div>
     <div class="act"><button type="button" class="drink">마시기 <kbd>E 길게</kbd></button><button type="button" class="ghost up">일어나기 <kbd>E</kbd></button></div>
     <div class="dr" aria-label="취기"><span>취기</span><span class="dots">${'<b></b>'.repeat(5)}</span></div>`;
-  const toast = document.createElement('div'); toast.className = 'tv-toast'; toast.setAttribute('role', 'status');
   const haze = document.createElement('div'); haze.className = 'tv-haze';
-  root.append(promptEl, panel, toast, haze);
+  root.append(promptEl, panel, haze);
   const stEl = panel.querySelector('.st'), coinEl = panel.querySelector('.cn');
   const drinkBtn = panel.querySelector('.drink'), upBtn = panel.querySelector('.up');
   const items = [...panel.querySelectorAll('.it')];
   const dots = [...panel.querySelectorAll('.dots b')];
 
-  let toastTimer = 0;
-  function say(text, who = '주모', ms = 1800) {
-    toast.innerHTML = `<span class="who">${who}</span><span>${text}</span>`;
-    toast.classList.add('on');
-    clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('on'), ms);
+  function say(text, who = '주모', ms = 1800) {   // 알림은 notify.js 공용 기둥으로 (다른 모듈 알림과 겹치지 않게)
+    notify(`<span class="who">${who}</span><span>${text}</span>`, { ms, kind: 'tavern' });
   }
 
   /* ── 소리 (짧은 합성음: 잔 내려놓기 '쿵', 꿀꺽) ── */
@@ -967,7 +966,7 @@ export function createTavern({
     dispose() {
       if (S.seat) finishStand();
       removeEventListener('keydown', onKeyDown); removeEventListener('keyup', onKeyUp);
-      promptEl.remove(); panel.remove(); toast.remove(); haze.remove();
+      promptEl.remove(); panel.remove(); haze.remove();
       scene.remove(mug);
       if (globalThis.__tavern === tavernApi) delete globalThis.__tavern;
     },

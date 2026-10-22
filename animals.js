@@ -102,6 +102,7 @@ export function createAnimals({
   bounds = { minX: -42, maxX: 42, minZ: -84, maxZ: 84 }, roadHalf = 2.52, waterY = -0.45,
   stalls = null, getPlayerPos = () => ({ x: 0, z: 0 }), isOnFoot = () => true, getNpcs = () => null,
   isBlocked = () => false, onEvent = null, getRide = null, isPond = null, count = null,
+  obstacles = null /* (pos{x,z}, r) => 밀어냈으면 true — 가로등·우물 같은 소품 충돌 (setObstacles 로도) */,
   debug = typeof location !== 'undefined' && /[?&]test\b/.test(location.search),
 } = {}) {
   const B = bounds;
@@ -557,6 +558,7 @@ export function createAnimals({
     a.model.position.y = -h;
   }
 
+  const obPos = { x: 0, z: 0 };
   function separate(dt, P) {
     for (let i = 0; i < animals.length; i++) {
       const a = animals[i];
@@ -564,6 +566,11 @@ export function createAnimals({
       // 플레이어를 밀고 지나가지 않게
       const px = a.x - P.x, pz = a.z - P.z, pd = Math.hypot(px, pz), pr = a.sp.r + 0.35;
       if (pd < pr && pd > 1e-4) { a.x += px / pd * (pr - pd); a.z += pz / pd * (pr - pd); }
+      if (obstacles && pd < 60) {   // 소품 충돌 (플레이어 근처만)
+        obPos.x = a.x; obPos.z = a.z;
+        let hit = false; try { hit = obstacles(obPos, a.sp.r); } catch (e) { hit = false; }
+        if (hit && Number.isFinite(obPos.x) && Number.isFinite(obPos.z)) { a.x = obPos.x; a.z = obPos.z; }
+      }
       for (let j = i + 1; j < animals.length; j++) {
         const b = animals[j];
         if (b.mode === 'tumble') continue;
@@ -616,7 +623,8 @@ export function createAnimals({
     if (debug && globalThis.__animals === api) delete globalThis.__animals;
   }
 
-  const api = { update, list, dispose, hitAt, punchFrom, alarm, pick, ready, animals, SPECIES };
+  const api = { update, list, dispose, hitAt, punchFrom, alarm, pick, ready, animals, SPECIES,
+    setObstacles: fn => { obstacles = typeof fn === 'function' ? fn : null; } };
   if (debug) {
     globalThis.__animals = Object.assign(api, {
       near: () => { const P = getPlayerPos(); return list().map(a => ({ ...a, d: +Math.hypot(a.x - P.x, a.z - P.z).toFixed(1) })).sort((p, q) => p.d - q.d); },

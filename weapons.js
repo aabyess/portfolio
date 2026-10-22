@@ -63,6 +63,8 @@
    ════════════════════════════════════════════════════════════ */
 import { createPoser } from './tavern.js';
 
+/* userData 에 물체·재질을 넣을 때는 열거 안 되게 (Object3D.clone() 이 userData 를 JSON 으로 복사하다 깨지지 않게, perf.js 와 같은 방식) */
+const udRef = (ud, k, v) => { Object.defineProperty(ud, k, { value: v, writable: true, configurable: true, enumerable: false }); return v; };
 const D2R = Math.PI / 180;
 export const HUD_HINT = '` 주먹 · 1~0·-·= 무기 · 휠 바꾸기 · 클릭 공격 · G 집어넣기';
 
@@ -237,7 +239,7 @@ export function createWeapons({
       g.add(limb, cyl(0.017, 0.017, 0.12, M.leather));
       const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(9), 3));
       const str = new THREE.Line(sg, new THREE.LineBasicMaterial({ color: 0xeee6d0 })); str.frustumCulled = false;
-      g.add(str); g.userData.string = str; g.userData.tips = [new V(0, 0.66, -0.17), new V(0, -0.66, -0.17)];
+      g.add(str); udRef(g.userData, 'string', str); g.userData.tips = [new V(0, 0.66, -0.17), new V(0, -0.66, -0.17)];
       return g;
     },
     crossbow() {
@@ -249,8 +251,8 @@ export function createWeapons({
       g.add(box(0.012, 0.05, 0.02, M.iron, 0, -0.045, 0.0));
       const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(9), 3));
       const str = new THREE.Line(sg, new THREE.LineBasicMaterial({ color: 0xeee6d0 })); str.frustumCulled = false;
-      g.add(str); g.userData.string = str; g.userData.tips = [new V(-0.33, 0.02, 0.3), new V(0.33, 0.02, 0.3)];
-      const bolt = makeArrow(0.36, true); bolt.position.set(0, 0.045, 0.02); g.add(bolt); g.userData.bolt = bolt;
+      g.add(str); udRef(g.userData, 'string', str); g.userData.tips = [new V(-0.33, 0.02, 0.3), new V(0.33, 0.02, 0.3)];
+      const bolt = makeArrow(0.36, true); bolt.position.set(0, 0.045, 0.02); g.add(bolt); udRef(g.userData, 'bolt', bolt);
       g.userData.muzzle = new V(0, 0.045, 0.42);
       return g;
     },
@@ -298,7 +300,7 @@ export function createWeapons({
       const nose = alongZ(new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.16, 14), M.redP)); nose.position.z = 0.08; rocket.add(nose);
       rocket.add(alongZ(cyl(0.055, 0.055, 0.04, M.oliveD, 0, 0, -0.01, 14)));
       rocket.position.set(0, T, 0.08 + BAZ.len / 2 + 0.02); g.add(rocket);
-      g.userData.rocket = rocket;
+      udRef(g.userData, 'rocket', rocket);
       g.userData.muzzle = new V(0, T, 0.08 + BAZ.len / 2 + 0.03);
       g.userData.rear = new V(0, T, 0.08 - BAZ.len / 2 - 0.12);
       g.userData.front = new V(0, 0.0, 0.3);
@@ -379,7 +381,7 @@ export function createWeapons({
       for (const k of ['muzzle', 'anchor', 'fuse', 'len', 'tips', 'rear', 'front', 'hold']) if (old.userData[k] !== undefined) g.userData[k] = old.userData[k];
       if (id === 'crossbow') {   // 장전된 볼트 = 쏘면 복제돼 날아간다 (+Z 앞, 원점 = 꼬리)
         const bolt = takePart(m, 'bolt');
-        if (bolt) { bolt.userData.len = 0.41; g.add(bolt); g.userData.bolt = bolt; }
+        if (bolt) { bolt.userData.len = 0.41; g.add(bolt); udRef(g.userData, 'bolt', bolt); }
       }
       if (id === 'flail') {      // 사슬 끝 공 + 사슬 고리 (선 대신 고리를 늘어놓는다)
         const b = takePart(m, 'ball'), l = takePart(m, 'link');
@@ -388,7 +390,7 @@ export function createWeapons({
       }
       if (id === 'bazooka') {    // 통 앞에 보이는 탄두 + 날아가는 로켓 모양
         const rk = takePart(m, 'rocket');
-        if (rk) { g.add(rk); g.userData.rocket = rk; swapShape(ROCKET, rk); }
+        if (rk) { g.add(rk); udRef(g.userData, 'rocket', rk); swapShape(ROCKET, rk); }
       }
       if (id === 'mortar') {     // 오른손에 든 포탄 + 날아가는 포탄 모양
         const sh = takePart(m, 'shell');
@@ -407,8 +409,8 @@ export function createWeapons({
         }
       }
       // 활·석궁 시위와 석궁 볼트는 대체 모델 것을 계속 쓴다 (glb 에 없으면)
-      if (old.userData.string) { g.add(old.userData.string); g.userData.string = old.userData.string; }
-      if (old.userData.bolt && !g.userData.bolt) { g.add(old.userData.bolt); g.userData.bolt = old.userData.bolt; }
+      if (old.userData.string) { g.add(old.userData.string); udRef(g.userData, 'string', old.userData.string); }
+      if (old.userData.bolt && !g.userData.bolt) { g.add(old.userData.bolt); udRef(g.userData, 'bolt', old.userData.bolt); }
       holder.remove(old); models[id] = prepModel(g);
     }, undefined, () => { /* 없으면 대체 모델 */ });
   }
@@ -1227,7 +1229,7 @@ export function createWeapons({
       t.position.set(Math.sin(k * Math.PI / 2) * 1.25, 0, Math.cos(k * Math.PI / 2) * 1.25); g.add(t);
     }
     g.traverse(o => { o.renderOrder = 6; });
-    g.visible = false; g.userData.mat = mat; g.userData.mat2 = mat2; scene.add(g); return g;
+    g.visible = false; udRef(g.userData, 'mat', mat); udRef(g.userData, 'mat2', mat2); scene.add(g); return g;
   })();
   function fireShell() {
     const m = models.mortar;

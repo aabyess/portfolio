@@ -71,6 +71,9 @@
    ════════════════════════════════════════════════════════════ */
 
 import { createPoser } from './tavern.js';
+/* userData 에 물체·재질을 넣을 때는 열거 안 되게 (Object3D.clone() 이 userData 를 JSON 으로 복사하다 깨지지 않게, perf.js 와 같은 방식) */
+const udRef = (ud, k, v) => { Object.defineProperty(ud, k, { value: v, writable: true, configurable: true, enumerable: false }); return v; };
+import { notify } from './notify.js';
 
 const D2R = Math.PI / 180;
 
@@ -381,7 +384,7 @@ export function createFishing({
     const bank = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true, side: THREE.DoubleSide }));
     bank.receiveShadow = true; bank.name = 'pond-bank';
     group.add(bank);
-    group.userData.bankMat = bank.material;
+    udRef(group.userData, 'bankMat', bank.material);
   }
 
   const rand = (() => { let s = 1234567; return () => ((s = (s * 16807) % 2147483647) / 2147483647); })();
@@ -447,7 +450,7 @@ export function createFishing({
       }
     }
     const reeds = instanced(reedGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, flatShading: true }), list, 'pond-reeds');
-    group.userData.reeds = reeds;
+    udRef(group.userData, 'reeds', reeds);
   }
 
   // ── 연잎 · 연꽃 ──
@@ -625,18 +628,14 @@ export function createFishing({
   reel.innerHTML = `<div class="tr"><div class="zn"></div><div class="fi">${FISH_ICON}</div></div><div class="pg"><i></i></div><div class="lb">Space · 클릭을 누르고 있으면 올라가요</div>`;
   const card = document.createElement('div'); card.className = 'fs-card'; card.setAttribute('role', 'status'); card.setAttribute('aria-live', 'polite');
   card.innerHTML = '<canvas width="440" height="220"></canvas><div class="tt"></div><div class="sz"></div><div><span class="rr"></span><span class="nw"></span></div><div class="fl"></div><div class="ct"></div>';
-  const toast = document.createElement('div'); toast.className = 'fs-toast';
-  root.append(promptEl, hud, bang, reel, card, toast);
+  root.append(promptEl, hud, bang, reel, card);
   const hudSt = hud.querySelector('.st'), hudAc = hud.querySelector('.ac'), hudDex = hud.querySelector('.dex');
   const castBtn = hud.querySelector('.cast'), quitBtn = hud.querySelector('.quit');
   const zoneEl = reel.querySelector('.zn'), fishEl = reel.querySelector('.fi'), progEl = reel.querySelector('.pg i');
   const cardCv = card.querySelector('canvas');
 
-  let toastT = 0;
-  function say(msg, ms = 1600) {
-    toast.textContent = msg; toast.classList.add('on');
-    clearTimeout(toastT); toastT = setTimeout(() => toast.classList.remove('on'), ms);
-  }
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  function say(msg, ms = 1600) { notify(esc(msg), { ms, kind: 'parchment' }); }   // notify.js 공용 알림 기둥
 
   /* ════════ 도감 (localStorage) ════════ */
   let book = {};
@@ -1144,7 +1143,7 @@ export function createFishing({
       removeEventListener('keydown', onKeyDown, true); removeEventListener('keyup', onKeyUp, true);
       pdTarget.removeEventListener('pointerdown', onPointerDown);
       removeEventListener('pointerup', onPointerUp); removeEventListener('pointercancel', onPointerUp); removeEventListener('blur', onPointerUp);
-      promptEl.remove(); hud.remove(); bang.remove(); reel.remove(); card.remove(); toast.remove();
+      promptEl.remove(); hud.remove(); bang.remove(); reel.remove(); card.remove();
       for (const o of [group, rod, bobber, line, hole, ...ripples]) scene.remove(o);
       if (caughtMesh) scene.remove(caughtMesh);
     },

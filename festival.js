@@ -85,6 +85,7 @@ export function createFestival({
   isMusicOn = () => false, isMuted = () => false,
   isVisible = () => document.body.dataset.view !== 'doc',
   onEvent = null, getPlayerWeapon = null, bounds = null,
+  isBusy = () => false /* true 면 새 축제를 시작하지 않는다 (pageant.js 행사와 겹치지 않게) */,
   debug = typeof location !== 'undefined' && /[?&]test\b/.test(location.search),
 } = {}) {
   const NOOP = { update() {}, dispose() {}, state: () => ({}), trigger: () => false, colliders: () => [], scoreArrow: () => -1 };
@@ -1730,7 +1731,8 @@ export function createFestival({
       mainClock -= dt;
       if (mainClock <= 0) {
         mainClock = 25;
-        if (isVisible()) { const k = pickEvent(); if (k) startEvent(k); }
+        let busy = false; try { busy = !!isBusy(); } catch { busy = false; }
+        if (isVisible() && !busy) { const k = pickEvent(); if (k) startEvent(k); }
       }
     }
     /* 용: 밤에만, 큰 축제가 없을 때 */

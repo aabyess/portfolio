@@ -1439,6 +1439,8 @@ async function initDrive() {
     const { createCastle } = await import('./castle.js');
     castle = createCastle({ THREE, scene, GLTFLoader, dracoLoader: draco, groundY, pathX, CANNON, world, getNight: () => night });
   }
+  /* 마을 소품·성벽·가게 건물 — 걷는 손님·아이·동물이 뚫고 지나가지 않게 밀어낸다 */
+  const propObstacles = (p, r) => { let h = vprops.pushOut(p, r); if (castle && castle.pushOut(p, r)) h = true; if (shop && shop.pushOut(p, r)) h = true; return h; };
   let npcs = null, events = null, village = null, festival = null, pageant = null;
   let ridesRef = null;   // 탈것 바꾸기(rides)는 아래에서 만든다 — getRide 는 매 프레임 update 안에서만 불린다
   /* 차로 치면 넘어지고 화낸다 — 지금 탈것의 위치·방향·속도·크기. 같은 객체를 재사용한다 */
@@ -1458,6 +1460,7 @@ async function initDrive() {
       getPlayerPos: () => activePos(),
       getNight: () => night,
       count: 25,   // 모델을 돌려 써서 25명이 돌아다닌다
+      obstacles: propObstacles,
       getRide: () => {
         rideInfo.x = car.position.x; rideInfo.z = car.position.z;
         rideInfo.heading = heading;              // 앞 방향 = (sin heading, cos heading)
@@ -1526,6 +1529,7 @@ async function initDrive() {
         isVisible: () => driveActive,
         onEvent: text => toast(text, 2600),
         getPlayerWeapon: () => (weapons ? weapons.current : 'none'),
+        isBusy: () => !!(pageant && pageant.state().current),   // 연회·결혼식 등과 겹치지 않게
         bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
       });
       /* 왕실 연회·결혼식 행렬·하늘 등불·투석기 시연·줄다리기 (pageant.js) — 축제·행차와 겹치지 않는다 */
@@ -1552,6 +1556,7 @@ async function initDrive() {
   {
     const { createAnimals } = await import('./animals.js');
     animals = createAnimals({
+      obstacles: propObstacles,
       THREE, scene, GLTFLoader, dracoLoader: draco, groundY, pathX,
       bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
       roadHalf: WORLD.path.half, waterY: WORLD.stream.water,
@@ -1567,7 +1572,7 @@ async function initDrive() {
   /* ── 아이들 7명: 술래잡기·오리 줄 따라오기·동물 쫓기·겨울 눈싸움, 밤엔 집으로 (kids.js). 맞지 않고 피한다 ── */
   {
     const { createKids } = await import('./kids.js');
-    createKids({ THREE, scene, GLTFLoader, dracoLoader: draco, groundY, pathX,
+    createKids({ THREE, scene, GLTFLoader, dracoLoader: draco, groundY, pathX, obstacles: propObstacles,
       bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
       stalls: stations.map(s => ({ x: s.group.position.x, z: s.group.position.z })),
       getPlayerPos: () => activePos(), isOnFoot: () => player.mode === 'onfoot',
@@ -1601,20 +1606,12 @@ async function initDrive() {
     };
   })();
 
-  /* ── 화면 가운데 잠깐 뜨는 알림 ── */
-  const toast = (() => {
-    const el = document.createElement('div');
-    el.id = 'g-toast';
-    Object.assign(el.style, { position: 'fixed', left: '50%', top: '18%', transform: 'translate(-50%,-50%) scale(.9)', zIndex: 44,
-      padding: '12px 22px', borderRadius: '14px', background: 'rgba(20,12,28,.82)', color: '#fff', font: '800 22px/1.2 Pretendard, system-ui, sans-serif',
-      letterSpacing: '-.01em', boxShadow: '0 10px 30px rgba(0,0,0,.35)', opacity: '0', transition: 'opacity .25s, transform .25s', pointerEvents: 'none', textAlign: 'center' });
-    document.getElementById('drive-root').appendChild(el);
-    let timer = 0;
-    return (html, ms = 1600) => {
-      el.innerHTML = html; el.style.opacity = '1'; el.style.transform = 'translate(-50%,-50%) scale(1)';
-      clearTimeout(timer); timer = setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translate(-50%,-50%) scale(.9)'; }, ms);
-    };
-  })();
+  /* ── 알림 — 모든 모듈이 같은 알림 기둥(notify.js)을 쓴다 (겹치지 않게 위에서부터 쌓인다).
+     기다리지 않고 불러오고, 불러오기 전에 온 알림은 모아 뒀다가 보여 준다 ── */
+  let notifyFn = null;
+  const pendingToasts = [];
+  import('./notify.js').then(m => { notifyFn = m.notify; for (const [h, ms] of pendingToasts.splice(0)) notifyFn(h, { ms, kind: 'main' }); });
+  const toast = (html, ms = 1600) => { if (notifyFn) notifyFn(html, { ms, kind: 'main' }); else pendingToasts.push([html, ms]); };
   /* ── 차 디테일: 헤드라이트, 흙먼지, 경적 ── */
   for (const sx of [-0.62, 0.62]) {
     const hl = new THREE.SpotLight(0xffe2b0, 12, 26, Math.PI / 7, 0.6, 1.6);

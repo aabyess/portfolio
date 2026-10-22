@@ -89,6 +89,11 @@ const MERCHANT_SPOTS = [
 ].map(s => ({ ...s, x: +(px0(s.z) + s.side * 6.2).toFixed(2) }));
 
 /* 나무 비우기 자리 (portfolio.js clearTrees) */
+/* userData 에 물체·재질을 넣을 때는 열거 안 되게 (Object3D.clone() 이 userData 를 JSON 으로 복사하다 깨지지 않게, perf.js 와 같은 방식) */
+const udRef = (ud, k, v) => { Object.defineProperty(ud, k, { value: v, writable: true, configurable: true, enumerable: false }); return v; };
+import { notify } from './notify.js';   // 공용 알림 기둥 (다른 모듈 알림과 겹치지 않게)
+
+
 export const SHOP_CLEAR = {
   r: 4.2,
   spots: [
@@ -258,9 +263,7 @@ export function createShop({
   const dim = el('div', 'sh-dim'); dim.hidden = true;
   const panel = el('div', 'sh-panel'); panel.hidden = true; panel.setAttribute('role', 'dialog');
   const fxBar = el('div', 'sh-fx'); fxBar.hidden = true; fxBar.setAttribute('aria-live', 'polite');
-  const toastEl = el('div', 'sh-toast');
-  let toastT = 0;
-  function toast(html, sec = 2.8) { toastEl.innerHTML = html; toastEl.classList.add('on'); toastT = sec; }
+  function toast(html, sec = 2.8) { notify(html, { ms: sec * 1000, kind: 'parchment' }); }   // notify.js 공용 알림 기둥
 
   /* ── 소리 ── */
   let actx = null;
@@ -480,7 +483,7 @@ export function createShop({
     const wL = mesh(G.sph, M.duck, body, 0.14, 0.17, -0.02, 0.03, 0.08, 0.14);
     const wR = mesh(G.sph, M.duck, body, -0.14, 0.17, -0.02, 0.03, 0.08, 0.14);
     mesh(G.box, M.beak, g, 0.05, 0.02, 0.03, 0.05, 0.03, 0.08); mesh(G.box, M.beak, g, -0.05, 0.02, 0.03, 0.05, 0.03, 0.08);
-    g.userData = { body, head, wL, wR };
+    for (const [k, v] of Object.entries({ body, head, wL, wR })) udRef(g.userData, k, v);   // clone() 안전 (열거 안 됨)
     return g;
   }
 
@@ -565,9 +568,9 @@ export function createShop({
       const pm = std(0xffffff, { map: tex });
       const board = new THREE.Group(); board.position.set(0, -0.2, 0); sign.add(board);
       mesh(G.box, [M.wood, M.wood, M.wood, M.wood, pm, pm], board, 0, -0.25, 0, 0.8, 0.5, 0.06);
-      board.userData.swing = true; sign.userData.board = board;
+      board.userData.swing = true; udRef(sign.userData, 'board', board);
     }
-    hutG.userData.sign = sign;
+    udRef(hutG.userData, 'sign', sign);
 
     /* 가마솥 */
     const cg = new THREE.Group(); cg.position.set(CAUL_L.x, lift(CAUL_L.x, CAUL_L.z), CAUL_L.z); hutG.add(cg);
@@ -1266,7 +1269,6 @@ export function createShop({
     fxTick++;
     if (Object.keys(fx).length || merch.here || !fxBar.hidden) renderFx(false);
     if (shopOpen && fxTick % 30 === 0) renderPanel();
-    if (toastT > 0) { toastT -= dt; if (toastT <= 0) toastEl.classList.remove('on'); }
   }
 
   function dispose() {
@@ -1279,7 +1281,7 @@ export function createShop({
     if (clothMat && clothOrig) { clothMat.map = clothOrig; clothMat.needsUpdate = true; }
     for (const o of [hutG, merchG, duck, soft.pts, glow.pts, meBubble.sp, witchBubble.sp, merchBubble.sp]) scene.remove(o);
     for (const o of owned) safe(() => o.dispose());
-    for (const e of [promptEl, dim, panel, fxBar, toastEl]) e.remove();
+    for (const e of [promptEl, dim, panel, fxBar]) e.remove();
     if (actx) safe(() => actx.close());
     if (globalThis.__shop === api) delete globalThis.__shop;
   }

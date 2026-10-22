@@ -89,7 +89,9 @@ export async function createKids({
   getPlayerPos = null, isOnFoot = () => true, getNight = () => 0, getSeason = () => 'autumn',
   getNpcs = null, getAnimals = null, say: sayCb = null, onEvent = null, stalls = [], playAreas = null,
   count = 7, debug = null,
+  obstacles = null /* (pos{x,z}, r) => 밀어냈으면 true — 가로등·우물 같은 소품 충돌 (setObstacles 로도) */,
 }) {
+  const obPos = { x: 0, z: 0 };
   const { clone: skeletonClone } = await import('three/addons/utils/SkeletonUtils.js');
   let draco = dracoLoader, ownDraco = false;
   if (!draco) {
@@ -626,6 +628,11 @@ export async function createKids({
       if (onFoot && k.dist < 0.75 && k.dist > 1e-3) { const p = 0.75 - k.dist; mx += (k.x - _P.x) / k.dist * p; mz += (k.z - _P.z) / k.dist * p; }
       if (k.dodgeT > 0) { const u = Math.min(dt, k.dodgeT) / 0.35; mx += k.dodgeX * u; mz += k.dodgeZ * u; k.dodgeT -= dt; clip = 'Run'; v = Math.max(v, 3); }
       k.x += mx; k.z += mz;
+      if (obstacles && k.dist < 60 && k.mode !== 'home' && k.mode !== 'return') {   // 소품 충돌 (집에 들어갈 땐 끈다)
+        obPos.x = k.x; obPos.z = k.z;
+        let hit = false; try { hit = obstacles(obPos, 0.25); } catch (e) { hit = false; }
+        if (hit && Number.isFinite(obPos.x) && Number.isFinite(obPos.z)) { k.x = obPos.x; k.z = obPos.z; }
+      }
       if (k.mode !== 'home') { k.x = clamp(k.x, bounds.minX + 0.5, bounds.maxX - 0.5); k.z = clamp(k.z, bounds.minZ + 0.5, bounds.maxZ - 0.5); }
       if (!Number.isFinite(k.x) || !Number.isFinite(k.z)) { k.x = a.x; k.z = a.z; }
       k.y = groundY(k.x, k.z);
@@ -720,6 +727,7 @@ export async function createKids({
 
   const api = {
     update, list, dispose, cheer, punch, kids, areas,
+    setObstacles: fn => { obstacles = typeof fn === 'function' ? fn : null; },
     /* 디버그 */
     tag: () => groups.forEach(g => { g.mode = 'tag'; g.modeT = 40; pickTagTarget(g); }),
     snow: (on = true) => groups.forEach(g => { g.mode = on ? 'snow' : 'tag'; g.modeT = 40; }),

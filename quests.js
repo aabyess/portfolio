@@ -98,6 +98,9 @@ const DEFS = {
 };
 const ALL_IDS = Object.keys(DEFS);
 
+import { notify } from './notify.js';   // 공용 알림 기둥 (다른 모듈 알림과 겹치지 않게)
+
+
 const CSS = `
 .qs-prompt{position:fixed;left:0;top:0;z-index:42;transform:translate(-50%,-100%);display:inline-flex;align-items:center;gap:8px;
   padding:7px 12px 7px 8px;border-radius:999px;border:1px solid rgba(107,68,35,.55);background:rgba(250,240,214,.95);
@@ -198,10 +201,9 @@ export function createQuests({
   track.setAttribute('role', 'status'); track.setAttribute('aria-live', 'polite');
   const tIc = track.querySelector('.ic'), tTt = track.querySelector('.tt'), tAr = track.querySelector('.ar'), tArB = tAr.querySelector('b'),
     tDs = tAr.querySelector('.ds'), tOb = track.querySelector('.ob'), tBr = track.querySelector('.br'), tBrI = tBr.querySelector('i');
-  const toastEl = el('div', 'qs-toast');
   const big = el('div', 'qs-big'); big.hidden = true;
   let toastT = 0, bigT = 0;
-  function toast(html, sec = 2.6) { toastEl.innerHTML = html; toastEl.classList.add('on'); toastT = sec; }
+  function toast(html, sec = 2.6) { notify(html, { ms: sec * 1000, kind: 'parchment' }); }   // notify.js 공용 알림 기둥
   function bigText(s, sec = 0.8) { big.textContent = s; big.hidden = false; bigT = sec; big.style.animation = 'none'; void big.offsetWidth; big.style.animation = 'qs-pop .25s ease-out'; }
 
   /* ── 소리 (짧은 딩동) ── */
@@ -967,7 +969,6 @@ export function createQuests({
       track.style.top = y + 'px';
     }
 
-    if (toastT > 0) { toastT -= dt; if (toastT <= 0) toastEl.classList.remove('on'); }
     if (bigT > 0) { bigT -= dt; if (bigT <= 0) big.hidden = true; }
   }
 
@@ -985,7 +986,7 @@ export function createQuests({
     if (active) safe(() => Q[active.id].end && Q[active.id].end(active.d, false));
     for (const o of [boardG, marker, lamb && lamb.g, crown, mug]) if (o) scene.remove(o);
     for (const o of owned) safe(() => o.dispose());
-    for (const e of [promptEl, dim, panel, track, toastEl, big]) e.remove();
+    for (const e of [promptEl, dim, panel, track, big]) e.remove();
     if (actx) safe(() => actx.close());
     if (globalThis.__quests === api) delete globalThis.__quests;
   }

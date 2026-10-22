@@ -268,6 +268,7 @@ export async function createNPCs({
   groundY, pathX, stalls = [], bounds = { minX: -42, maxX: 42, minZ: -84, maxZ: 84 },
   getPlayerPos = null, getNight = null, getRide = null, roadHalf = 2.52, bridge = null,
   debug = true, barkeepers = true,
+  obstacles = null /* (pos{x,z}, r) => 밀어냈으면 true. 가로등·우물·집 같은 소품을 걷는 손님이 뚫지 않게 (setObstacles 로도) */,
   count = 0 /* 0 = 불러온 모델 수만큼 1명씩 */, models = NPC_MODELS, actorModels = ACTOR_MODELS, seed = 0,
 }) {
   const { clone: skeletonClone } = await import('three/addons/utils/SkeletonUtils.js');
@@ -672,6 +673,8 @@ export async function createNPCs({
   }
 
   const walking = st => st === ST.WANDER || st === ST.TO_SEAT || st === ST.LEAVE;
+  const OBST_NEAR = 60, NPC_OBST_R = 0.32, obPos = { x: 0, z: 0 };
+  const setObstacles = fn => { obstacles = typeof fn === 'function' ? fn : null; };
 
   /* ── 매 프레임 ── */
   function update(dt, t) {
@@ -935,6 +938,16 @@ export async function createNPCs({
         n.body.rotation.z = Math.sin(now * 2.4 + n.idx) * 0.12 * d; n.body.rotation.x = Math.sin(now * 1.6 + n.idx * 2) * 0.05 * d;
         n.swayed = true;
       } else if (n.swayed) { n.swayed = false; n.body.rotation.x = n.body.rotation.z = 0; }
+
+      /* 소품 충돌 (가로등·우물·집·성벽…): 플레이어 근처(OBST_NEAR m)에서 걷는 손님만, 한 프레임에 한 번 */
+      if (obstacles && n.dist < OBST_NEAR && (walking(n.state) || n.state === ST.PAUSE)) {
+        obPos.x = n.x; obPos.z = n.z;
+        let hit = false;
+        try { hit = obstacles(obPos, NPC_OBST_R); } catch (e) { hit = false; }
+        if (hit && Number.isFinite(obPos.x) && Number.isFinite(obPos.z)) { n.x = obPos.x; n.z = obPos.z; }
+        n.obT = hit ? (n.obT || 0) + dt : 0;
+        if (n.obT > 3 && n.state === ST.WANDER && !n.lead) { n.obT = 0; n.dir = -n.dir; }   // 3초 넘게 막히면 돌아선다
+      }
 
       /* 높이: 앉는 중/앉아 있을 땐 보간값, 아니면 지형 */
       if (n.state !== ST.SIT_DOWN && n.state !== ST.SEATED && n.state !== ST.STAND_UP) {
@@ -2914,6 +2927,7 @@ export async function createNPCs({
   }
 
   return Object.assign(api, { update, dispose, count: npcs.length, npcs, walkingRatio, stalls, bounds,
+    setObstacles,                                              // (pos, r) => bool — 소품 충돌 (portfolio.js 에서 vprops/castle/shop pushOut 연결)
     spawnGuard, setGuardChase, guardInfo, startFight, endFight, startBard, endBard,
     get fight() { return fight; }, get bard() { return bard; },
     pick: pickRay, knockDown, list, freeSeatNear, reserveSeat: reserveSeatAPI, releaseSeat: releaseSeatAPI,
