@@ -58,6 +58,8 @@
    - F 로 내리면(driving=false) 다리·발 뼈와 기울기를 원래대로 돌려놓는다.
    ════════════════════════════════════════════════════════════ */
 
+import { buildTankPlaceholder, createTankFX, createTankAudio, TANK_BALLISTICS } from './tankfx.js';
+
 const D2R = Math.PI / 180;
 
 /* 탈것별 주행값. portfolio.js 의 원래 차 값이 'car'.
@@ -88,6 +90,13 @@ const PARAMS = {
     maxFwd: 6, maxRev: 1.5, accel: 5, turn: 2.4, enterR: 3.5,
     cam: { back: 6.6, up: 3.3, ahead: 4, lookY: 1.2 },
     half: [0.3, 0.55, 0.9], bodyY: 0.55, bodyZ: 0
+  },
+  /* 탱크: 느리고 묵직. pivot = 제자리 선회(정지 상태에서도 좌우로 돈다, portfolio.js drive() 참고).
+     mass = 장난감 블록을 미는 힘 배율 (vehicles.js 가 직접 블록 속도를 더한다) */
+  tank: {
+    maxFwd: 6, maxRev: 3, accel: 3, turn: 1.0, enterR: 6.5, pivot: true, mass: 3,
+    cam: { back: 15, up: 7.6, ahead: 6, lookY: 1.9 },
+    half: [1.45, 1.2, 3.0], bodyY: 1.2, bodyZ: 0
   }
 };
 
@@ -97,7 +106,8 @@ const ICONS = {
   horse: '<path d="M8 21v-4.5L5.5 14 4 15.5 2.5 13l3.5-5 4-1.5L12 3l1.5 2.5L17 6l3.5 4.5L19 12l-2.5-1.5L15 13v8"/><path d="M14 6.2l-1 2.3"/>',
   carriage: '<path d="M2.5 15h12V9.5a3.5 3.5 0 0 0-3.5-3.5H6A3.5 3.5 0 0 0 2.5 9.5z"/><path d="M14.5 12.5H18l3.5 3.5"/><circle cx="5.5" cy="18" r="2.5"/><circle cx="12" cy="18" r="2.5"/>',
   motorcycle: '<circle cx="5" cy="16.5" r="3"/><circle cx="19" cy="16.5" r="3"/><path d="M5 16.5l4-5h5l2.3 2.5H19"/><path d="M19 16.5l-3.3-8H13"/><path d="M8 11.5 7 9H4.5"/>',
-  bicycle: '<circle cx="5.5" cy="16.5" r="3.5"/><circle cx="18.5" cy="16.5" r="3.5"/><path d="M5.5 16.5 9 9.5h6l3.5 7"/><path d="M9 9.5l3 7H5.5"/><path d="M15 9.5 14 7h-2"/><path d="M8 7.5h2.5"/>'
+  bicycle: '<circle cx="5.5" cy="16.5" r="3.5"/><circle cx="18.5" cy="16.5" r="3.5"/><path d="M5.5 16.5 9 9.5h6l3.5 7"/><path d="M9 9.5l3 7H5.5"/><path d="M15 9.5 14 7h-2"/><path d="M8 7.5h2.5"/>',
+  tank: '<rect x="2.5" y="14" width="19" height="5.5" rx="2.75"/><circle cx="6.5" cy="16.75" r=".9"/><circle cx="12" cy="16.75" r=".9"/><circle cx="17.5" cy="16.75" r=".9"/><path d="M5 14l1.5-3h10l1.5 3"/><path d="M8.5 11V8.5h6V11"/><path d="M14.5 9.5h7"/>'
 };
 
 export const VEHICLES = [
@@ -105,7 +115,8 @@ export const VEHICLES = [
   { id: 'horse',      name: '말',       sub: '날렵한 방향 전환', url: 'horse.glb' },
   { id: 'carriage',   name: '마차',     sub: '느리고 넓게',  url: 'carriage.glb' },
   { id: 'motorcycle', name: '오토바이', sub: '가장 빠름',    url: 'motorcycle.glb' },
-  { id: 'bicycle',    name: '자전거',   sub: '느긋한 산책',  url: 'bicycle.glb' }
+  { id: 'bicycle',    name: '자전거',   sub: '느긋한 산책',  url: 'bicycle.glb' },
+  { id: 'tank',       name: '탱크',     sub: '느리지만 무적, 포탑 사격', url: 'tank.glb' }
 ];
 const BY_ID = Object.fromEntries(VEHICLES.map(v => [v.id, v]));
 
@@ -115,7 +126,21 @@ const POSE = {
   horse:      { thigh: -42, spread: 28, knee: 58, arm: -22, fore: -48, inward: 10, lift: 0.07, hipZ: 0 },
   carriage:   { thigh: -84, spread: 9,  knee: 86, arm: -24, fore: -50, inward: 8,  lift: 0.09, hipZ: 0.05 },
   motorcycle: { thigh: -70, spread: 15, knee: 88, arm: -42, fore: -14, inward: 12, lift: 0.06, hipZ: 0 },
-  bicycle:    { thigh: -58, spread: 6,  knee: 62, arm: -40, fore: -14, inward: 10, lift: 0.06, hipZ: 0, pedal: true }
+  bicycle:    { thigh: -58, spread: 6,  knee: 62, arm: -40, fore: -14, inward: 10, lift: 0.06, hipZ: 0, pedal: true },
+  /* 전차장: 해치에 서서 허리부터 위만 보인다. 다리는 뼈를 접어(scale≈0) 포탑 밖으로 삐져나오지 않게 숨긴다 */
+  tank:       { thigh: 0,   spread: 3,  knee: 4,  arm: -12, fore: -62, inward: -8, lift: 0,    hipZ: 0, hideLegs: true }
+};
+
+/* 탱크 조작값 */
+const TANK = {
+  reload: 2.5,          // 재장전 (초)
+  yawRate: 1.5,         // 포탑 최대 선회 속도 (rad/s)
+  yawAccel: 7,          // 포탑 선회 가속 (rad/s²)
+  pitchRate: 0.7,       // 포신 고각 속도 (rad/s)
+  pitchMin: -0.1, pitchMax: 0.34,
+  aimTol: 0.07,         // 이만큼 맞춰지면 바로 쏜다 (아니면 맞춰질 때까지 최대 0.9초 기다렸다 쏜다)
+  recoil: 0.5,          // 포신 후퇴 (m)
+  trackDir: 1           // glb 궤도 텍스처가 거꾸로 흐르면 -1
 };
 
 /* cannon 상자 크기를 탈것에 맞춘다. portfolio.js 는 상자 중심을 car.y + 0.85 에 두므로
@@ -133,7 +158,15 @@ export function applyBodyShape(body, p) {
 
 export async function createVehicleSwitcher({
   THREE, GLTFLoader, dracoLoader, carGroup, person, personMixer, personClips, scene,
-  onChange, baseUrl = 'models/vehicles/'
+  onChange, baseUrl = 'models/vehicles/',
+  /* ── 탱크용 (없으면 포탑 조준·사격만 빠지고 나머지는 동작) ── */
+  camera = null,          // 마우스 조준 광선
+  domElement = null,      // renderer.domElement — 여기에만 포인터 리스너를 단다
+  groundY = null,         // (x, z) => 땅 높이. 조준점·포탄 착탄·그을음 자국
+  getNpcs = null,         // () => npcs (createNPCs 결과, 비동기라 함수로)
+  toyBlocks = null,       // portfolio.js 의 toyBlocks 배열 (블록·의자 { body })
+  isBlocked = null,       // () => true 면 사격 안 함 (기본: 인트로·문서 뷰·프로젝트 창)
+  explode = null          // (pos, radius, force) => void — weapons.js 의 폭발로 바꿔 끼울 때
 }) {
   void personMixer; void scene;   // 인터페이스 호환용 (지금은 쓰지 않음)
 
@@ -155,7 +188,7 @@ export async function createVehicleSwitcher({
 
   /* ── 세워 둔 탈것 위 화살표 — 내려서 걸을 때만 보인다 ──
      나무·안개에 가려도 찾을 수 있게 깊이 검사와 안개를 끄고 맨 나중에 그린다. */
-  const MARK_H = { car: 2.7, horse: 3.1, carriage: 3.5, motorcycle: 2.4, bicycle: 2.3 };
+  const MARK_H = { car: 2.7, horse: 3.1, carriage: 3.5, motorcycle: 2.4, bicycle: 2.3, tank: 4.0 };
   const marker = new THREE.Group();
   {
     const mat = new THREE.MeshBasicMaterial({ color: 0xffc94d, transparent: true, opacity: 0.95, depthTest: false, depthWrite: false, fog: false, toneMapped: false });
@@ -306,9 +339,328 @@ export async function createVehicleSwitcher({
       r.light = { pos: new THREE.Vector3(0.34, 1.25, 0.3), spread: 0.02, tgtY: 0, tgtZ: 4, angle: Math.PI / 2.5, penumbra: 1, distance: 12, color: 0xffa64d, scale: 0.22 };
     }
 
+    if (id === 'tank') prepareTank(r, model);
+
     model.visible = false;
     holder.add(model);
     return r;
+  }
+
+  /* ════════════ 탱크 ════════════ */
+  /* 궤도 재질의 텍스처를 복제해(좌우 따로 흐르게) 스크롤 축과 1 m 당 오프셋을 구한다 */
+  function setupTrack(model, re) {
+    const mesh = meshByMaterial(model, re);
+    if (!mesh) return null;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const uv = mesh.geometry.getAttribute('uv');
+    let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+    if (uv) for (let i = 0; i < uv.count; i++) {
+      const u = uv.getX(i), v = uv.getY(i);
+      if (u < u0) u0 = u; if (u > u1) u1 = u; if (v < v0) v0 = v; if (v > v1) v1 = v;
+    }
+    const axis = (u1 - u0) >= (v1 - v0) ? 'x' : 'y';
+    const span = axis === 'x' ? u1 - u0 : v1 - v0;
+    const size = _box.setFromObject(mesh).getSize(_v);
+    const loop = Math.max(1, 2 * Math.max(0, size.z - size.y) + Math.PI * size.y);   // 궤도 한 바퀴 길이 (근사)
+    const texs = [];
+    for (const m of mats) {
+      if (!re.test(m.name || '')) continue;
+      for (const k of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap']) {
+        if (!m[k]) continue;
+        const t = m[k].clone();
+        if (axis === 'x') t.wrapS = THREE.RepeatWrapping; else t.wrapT = THREE.RepeatWrapping;
+        t.needsUpdate = true;
+        m[k] = t; texs.push(t);
+      }
+    }
+    const rep = texs.length ? texs[0].repeat[axis] : 1;
+    return { texs, axis, perM: span * rep / loop * TANK.trackDir };
+  }
+
+  function prepareTank(r, model) {
+    const get = n => model.getObjectByName(n);
+    r.tank = true;
+    r.turret = get('turret'); r.barrel = get('barrel'); r.muzzle = get('muzzle'); r.antenna = get('antenna');
+    r.turretBase = r.turret ? r.turret.rotation.y : 0;
+    r.barrelBase = r.barrel ? r.barrel.rotation.x : 0;
+    r.barrelRest = r.barrel ? r.barrel.position.clone() : new THREE.Vector3();
+    r.yaw = 0; r.yawV = 0; r.pitch = 0; r.recoil = 0;
+    r.rock = 0; r.rockV = 0; r.ant = 0; r.antV = 0; r.accSm = 0; r.lastSp = 0; r.prevH = null;
+    r.trackL = setupTrack(model, /track_l/i);
+    r.trackR = setupTrack(model, /track_r/i);
+    r.wheelsL = []; r.wheelsR = [];
+    for (const [arr, side] of [[r.wheelsL, 'l'], [r.wheelsR, 'r']]) {
+      for (let i = 0; i < 12; i++) { const n = get(`wheel_${side}${i}`); if (!n) break; arr.push({ node: n, r: wheelRadius(n, 0.34) }); }
+      for (const nm of ['sprocket_', 'idler_']) { const n = get(nm + side); if (n) arr.push({ node: n, r: wheelRadius(n, 0.33) }); }
+    }
+    /* 전조등 두 개 = 차 헤드라이트 재활용 */
+    const lamp = meshByMaterial(model, /lamp_glass/i);
+    const p = lamp ? centerOf(lamp, new THREE.Vector3()) : new THREE.Vector3(1.05, 1.32, 2.5);
+    r.light = { pos: new THREE.Vector3(0, p.y, p.z), spread: Math.max(0.3, Math.abs(p.x)), tgtY: 0, tgtZ: 14, angle: Math.PI / 6.5, penumbra: 0.6, distance: 26, color: 0xffe6b8, scale: 0.55 };
+    ensureFx();
+  }
+
+  /* 효과·소리 — 처음 탱크를 고를 때 한 번 만든다. 폭발은 다른 모듈도 api.explode 로 쓸 수 있다 */
+  let fx = null;
+  const tankAudio = createTankAudio();
+  function ensureFx() {
+    if (!fx) fx = createTankFX({ THREE, scene: scene || carGroup.parent, groundY, getNpcs, toyBlocks, explode, audio: tankAudio });
+    return fx;
+  }
+
+  /* ── 조준: 마우스 → 땅 위 한 점 ── */
+  const aim = { has: false, ndc: new THREE.Vector2(), x: 0, y: 0, point: new THREE.Vector3(), valid: false, pending: 0, reload: 0, readyCued: true };
+  const raycaster = new THREE.Raycaster();
+  const _mz = new THREE.Vector3(), _bw = new THREE.Vector3(), _dir = new THREE.Vector3(), _vel = new THREE.Vector3(), _qt = new THREE.Quaternion();
+  const gyAt = (x, z) => (groundY ? groundY(x, z) : carGroup.position.y);
+  function groundHit(ray, out) {
+    const o = ray.origin, d = ray.direction;
+    let tPrev = 0, t = 0.5;
+    if (o.y + d.y * 0 <= gyAt(o.x, o.z)) return false;
+    while (t < 180) {
+      const y = o.y + d.y * t, g = gyAt(o.x + d.x * t, o.z + d.z * t);
+      if (y <= g) {   // 지나쳤다 → 이분 탐색
+        let a = tPrev, b = t;
+        for (let k = 0; k < 10; k++) {
+          const m = (a + b) * 0.5;
+          if (o.y + d.y * m <= gyAt(o.x + d.x * m, o.z + d.z * m)) b = m; else a = m;
+        }
+        out.set(o.x + d.x * b, o.y + d.y * b, o.z + d.z * b);
+        return true;
+      }
+      tPrev = t;
+      t += 0.4 + t * 0.04;
+    }
+    return false;
+  }
+  function blocked() {
+    if (isBlocked && isBlocked()) return true;
+    const b = document.body;
+    return b.classList.contains('intro-on') || b.dataset.view === 'doc' || !!document.querySelector('#g-panel.open');
+  }
+  const canShoot = () => current === 'tank' && wasDriving && !!cache.tank && !destroyed && !blocked();
+
+  function setNdc(e) {
+    const rc = domElement.getBoundingClientRect();
+    aim.ndc.set((e.clientX - rc.left) / rc.width * 2 - 1, -((e.clientY - rc.top) / rc.height) * 2 + 1);
+    aim.x = e.clientX; aim.y = e.clientY; aim.has = true;
+    reticle.move();
+  }
+  function onPtrMove(e) { if (e.pointerType === 'mouse' || e.buttons) setNdc(e); }
+  function onPtrDown(e) {
+    if (current === 'tank') tankAudio.unlock();
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (!canShoot()) return;
+    setNdc(e);
+    if (aim.reload > 0) { reticle.deny(); return; }
+    aim.pending = 0.9;   // 포탑이 겨누는 대로 쏜다 (이미 맞춰져 있으면 이번 프레임에)
+  }
+  const onKeyUnlock = () => { if (current === 'tank') tankAudio.unlock(); };
+  if (domElement) {
+    domElement.addEventListener('pointermove', onPtrMove);
+    domElement.addEventListener('pointerdown', onPtrDown);
+  }
+  addEventListener('keydown', onKeyUnlock);
+
+  /* 조준 십자선 + 장전 고리 (커서 자리에 붙는다) */
+  const reticle = (() => {
+    let el = null, ring = null, label = null, shown = false, lastStep = -1, hintT = 0;
+    const C = 2 * Math.PI * 15;
+    function make() {
+      if (el) return;
+      if (!document.getElementById('g-tank-css')) {
+        const st = document.createElement('style'); st.id = 'g-tank-css';
+        st.textContent = `
+.g-tank-ret{position:fixed;left:0;top:0;width:0;height:0;pointer-events:none;z-index:30;display:none}
+.g-tank-ret svg{position:absolute;left:-22px;top:-22px;overflow:visible;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))}
+.g-tank-ret .bg{stroke:rgba(255,255,255,.28)}
+.g-tank-ret .pr{stroke:#ffc94d;transition:stroke .15s}
+.g-tank-ret.ready .pr{stroke:#fff}
+.g-tank-ret.deny svg{animation:g-tank-deny .25s}
+@keyframes g-tank-deny{25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+.g-tank-ret .lb{position:absolute;left:0;top:26px;transform:translateX(-50%);white-space:nowrap;font:600 11px/1.2 system-ui,sans-serif;
+  color:#fff;background:rgba(20,24,28,.55);padding:3px 7px;border-radius:6px;opacity:0;transition:opacity .2s}
+.g-tank-ret .lb.on{opacity:1}
+body.tank-aim canvas{cursor:none!important}`;
+        document.head.appendChild(st);
+      }
+      el = document.createElement('div');
+      el.className = 'g-tank-ret ready';
+      el.setAttribute('aria-hidden', 'true');
+      el.innerHTML = `<svg width="44" height="44" viewBox="-22 -22 44 44" fill="none" stroke-width="2.4" stroke-linecap="round">
+        <circle class="bg" r="15"/><circle class="pr" r="15" transform="rotate(-90)" stroke-dasharray="${C.toFixed(2)}" stroke-dashoffset="0"/>
+        <path stroke="#fff" stroke-width="1.8" d="M-9 0h-5M9 0h5M0-9v-5M0 9v5"/><circle r="1.6" fill="#fff" stroke="none"/></svg>
+        <span class="lb"></span>`;
+      ring = el.querySelector('.pr'); label = el.querySelector('.lb');
+      document.body.appendChild(el);
+    }
+    return {
+      move() { if (el && aim.has) el.style.transform = `translate(${aim.x}px,${aim.y}px)`; },
+      show(on) {
+        if (on === shown) return;
+        shown = on;
+        if (on) { make(); hintT = 5; label.textContent = '클릭: 포 발사'; label.classList.add('on'); this.move(); }
+        if (el) el.style.display = on && aim.has ? 'block' : 'none';
+        document.body.classList.toggle('tank-aim', on);
+      },
+      tick(dt) {
+        if (!shown || !el) return;
+        if (aim.has && el.style.display === 'none') { el.style.display = 'block'; this.move(); }
+        if (hintT > 0) { hintT -= dt; if (hintT <= 0) label.classList.remove('on'); }
+        const k = aim.reload > 0 ? 1 - aim.reload / TANK.reload : 1;
+        const step = Math.round(k * 48);
+        if (step !== lastStep) {
+          lastStep = step;
+          ring.setAttribute('stroke-dashoffset', (C * (1 - step / 48)).toFixed(2));
+          el.classList.toggle('ready', step >= 48);
+        }
+      },
+      deny() {
+        if (!el) return;
+        el.classList.remove('deny'); void el.offsetWidth; el.classList.add('deny');
+        label.textContent = '장전 중…'; label.classList.add('on'); hintT = 0.9;
+      },
+      dispose() { if (el) el.remove(); document.body.classList.remove('tank-aim'); }
+    };
+  })();
+
+  function fireNow(r) {
+    if (!r.muzzle && !r.barrel) return;
+    const f = ensureFx();
+    r.barrel.updateWorldMatrix(true, true);
+    r.barrel.getWorldPosition(_bw);
+    if (r.muzzle) {
+      r.muzzle.getWorldPosition(_mz);
+      _dir.copy(_mz).sub(_bw).normalize();
+    } else {
+      r.barrel.getWorldQuaternion(_qt);
+      _dir.set(0, 0, 1).applyQuaternion(_qt);
+      _mz.copy(_bw).addScaledVector(_dir, 3.5);
+    }
+    const h = carGroup.rotation.y, sp = r.lastSp;
+    _vel.set(Math.sin(h) * sp, 0, Math.cos(h) * sp);
+    f.fire(_mz, _dir, _vel);
+    r.recoil = TANK.recoil;
+    r.rockV -= 0.9;            // 포 쏜 쪽이 들린다 (아래 animateTank 에서 포탑 방향으로 나눔)
+    r.antV += 6;
+    aim.reload = TANK.reload; aim.readyCued = false;
+  }
+
+  function aimTank(r, dt, driving) {
+    if (!r.turret) return;
+    let wantYaw = r.yaw, wantPitch = r.pitch;
+    if (driving && camera && aim.has) {
+      raycaster.setFromCamera(aim.ndc, camera);
+      aim.valid = groundHit(raycaster.ray, aim.point);
+      if (!aim.valid) {   // 하늘을 가리키면 그 방향 먼 곳
+        const d = raycaster.ray.direction, hl = Math.hypot(d.x, d.z) || 1;
+        aim.point.set(carGroup.position.x + d.x / hl * 90, carGroup.position.y + 1, carGroup.position.z + d.z / hl * 90);
+      }
+      /* 포탑 yaw: 차체 기준 각도 */
+      const par = r.turret.parent;
+      par.updateWorldMatrix(true, false);
+      _v.copy(aim.point); par.worldToLocal(_v);
+      wantYaw = Math.atan2(_v.x - r.turret.position.x, _v.z - r.turret.position.z);
+      /* 포신 고각: 탄도 공식 (포구 높이 기준) → 차체 경사만큼 빼서 포탑 기준으로 */
+      if (r.muzzle) r.muzzle.getWorldPosition(_mz); else r.turret.getWorldPosition(_mz);
+      const dx = aim.point.x - _mz.x, dz = aim.point.z - _mz.z, dh = aim.point.y - _mz.y;
+      const d = Math.max(1, Math.hypot(dx, dz)), V = TANK_BALLISTICS.speed, G = TANK_BALLISTICS.g, V2 = V * V;
+      const disc = V2 * V2 - G * (G * d * d + 2 * dh * V2);
+      const theta = disc < 0 ? Math.PI / 4 : Math.atan((V2 - Math.sqrt(disc)) / (G * d));
+      r.turret.getWorldQuaternion(_qt);
+      _v2.set(0, 0, 1).applyQuaternion(_qt);
+      wantPitch = Math.max(TANK.pitchMin, Math.min(TANK.pitchMax, theta - Math.asin(Math.max(-1, Math.min(1, _v2.y)))));
+    }
+    /* 선회: 가속 제한 + 최고 속도 제한 */
+    const diff = Math.atan2(Math.sin(wantYaw - r.yaw), Math.cos(wantYaw - r.yaw));
+    const wantV = Math.max(-TANK.yawRate, Math.min(TANK.yawRate, diff * 6));
+    const dv = TANK.yawAccel * dt;
+    r.yawV += Math.max(-dv, Math.min(dv, wantV - r.yawV));
+    r.yaw += r.yawV * dt;
+    r.yaw = Math.atan2(Math.sin(r.yaw), Math.cos(r.yaw));
+    const pd = wantPitch - r.pitch, pm = TANK.pitchRate * dt;
+    r.pitch += Math.max(-pm, Math.min(pm, pd));
+    r.turret.rotation.y = r.turretBase + r.yaw;
+    if (r.barrel) {
+      r.barrel.rotation.x = r.barrelBase - r.pitch;
+      /* 후퇴: 포신 축을 따라 뒤로 (빨리 밀렸다가 0.5초에 걸쳐 복귀) */
+      if (r.recoil > 0) r.recoil = Math.max(0, r.recoil - dt * (0.25 + r.recoil * 2.2));
+      r.barrel.position.set(r.barrelRest.x, r.barrelRest.y - Math.sin(r.pitch) * r.recoil, r.barrelRest.z - Math.cos(r.pitch) * r.recoil);
+    }
+    /* 사격 대기 → 맞춰지면(또는 0.9초 지나면) 발사 */
+    if (aim.reload > 0) {
+      aim.reload -= dt;
+      if (aim.reload <= 0) { aim.reload = 0; if (!aim.readyCued) { aim.readyCued = true; tankAudio.reloaded(); } }
+    }
+    if (aim.pending > 0) {
+      aim.pending -= dt;
+      if (!canShoot()) aim.pending = 0;
+      else if (aim.reload <= 0 && ((Math.abs(diff) < TANK.aimTol && Math.abs(pd) < 0.05) || aim.pending <= 0)) { aim.pending = 0; fireNow(r); }
+    }
+  }
+
+  function animateTank(r, dt, inp, driving) {
+    const sp = driving ? (inp.speed || 0) : 0;
+    /* 실제 회전 속도(제자리 선회 포함)는 heading 변화로 잰다 */
+    const h = carGroup.rotation.y;
+    let w = 0;
+    if (r.prevH !== null && dt > 0) w = Math.atan2(Math.sin(h - r.prevH), Math.cos(h - r.prevH)) / dt;
+    r.prevH = h;
+    const half = 1.2;   // 궤도 중심 간 반폭
+    const vL = sp - w * half, vR = sp + w * half;
+    if (r.trackL) for (const t of r.trackL.texs) t.offset[r.trackL.axis] += vL * dt * r.trackL.perM;
+    if (r.trackR) for (const t of r.trackR.texs) t.offset[r.trackR.axis] += vR * dt * r.trackR.perM;
+    for (const wh of r.wheelsL) wh.node.rotation.x += vL * dt / wh.r;
+    for (const wh of r.wheelsR) wh.node.rotation.x += vR * dt / wh.r;
+
+    aimTank(r, dt, driving);
+
+    /* 차체 흔들림: 가속하면 코가 들리고, 쏘면 포 쪽이 들썩 (감쇠 스프링) */
+    r.accSm += (((sp - r.lastSp) / Math.max(dt, 1e-4)) - r.accSm) * Math.min(1, dt * 5);
+    r.lastSp = sp;
+    const target = -r.accSm * 0.012;
+    r.rockV += ((target - r.rock) * 60 - r.rockV * 7) * dt;
+    r.rock += r.rockV * dt;
+    const rough = Math.abs(sp) > 0.2 ? Math.sin(performance.now() * 0.021) * 0.0025 * Math.min(1, Math.abs(sp) / 3) : 0;   // 궤도 덜컹
+    holder.rotation.x = r.rock * Math.cos(r.yaw) + rough;
+    holder.rotation.z = -r.rock * Math.sin(r.yaw);
+    if (r.antenna) {
+      r.antV += ((r.accSm * 0.03 - r.ant) * 40 - r.antV * 2.5) * dt;
+      r.ant += r.antV * dt;
+      r.antenna.rotation.x = Math.max(-0.5, Math.min(0.5, r.ant));
+    }
+
+    /* 장난감 블록·의자를 세게 민다 (키네마틱 상자 충돌만으로는 살짝 밀리는 정도라) */
+    if (toyBlocks && driving && (Math.abs(sp) > 0.4 || Math.abs(w) > 0.25)) {
+      const p = PARAMS.tank, cx = carGroup.position.x, cz = carGroup.position.z, cy = carGroup.position.y;
+      const fs = Math.sin(h), fc = Math.cos(h);
+      for (let i = 0; i < toyBlocks.length; i++) {
+        const b = toyBlocks[i].body;
+        if (!b || !(b.mass > 0)) continue;
+        const dx = b.position.x - cx, dz = b.position.z - cz;
+        if (b.position.y > cy + 2.6) continue;
+        const fwd = dx * fs + dz * fc, side = dx * fc - dz * fs;
+        if (Math.abs(fwd) > p.half[2] + 0.45 || Math.abs(side) > p.half[0] + 0.45) continue;
+        /* 그 자리의 차체 속도 = 직진 + 회전 */
+        let pvx = fs * sp + w * dz, pvz = fc * sp - w * dx;
+        const pl = Math.hypot(pvx, pvz);
+        if (pl < 0.3) continue;
+        pvx /= pl; pvz /= pl;
+        const want = pl * 1.6 + 1.2;
+        const along = b.velocity.x * pvx + b.velocity.z * pvz;
+        if (along >= want) continue;
+        const k = Math.min(1, p.mass / Math.max(0.3, b.mass));
+        const add = (want - along) * k;
+        b.velocity.x += pvx * add; b.velocity.z += pvz * add;
+        b.velocity.y += 1.2 * k;
+        b.angularVelocity.x += (Math.random() - 0.5) * 3; b.angularVelocity.z += (Math.random() - 0.5) * 3;
+        if (b.wakeUp) b.wakeUp();
+      }
+    }
+
+    /* 엔진 소리: 움직일 때만, 낮고 작게 */
+    const mv = Math.abs(sp) + Math.abs(w) * 1.5;
+    tankAudio.engine(driving && mv > 0.15 ? Math.min(1, 0.45 + mv / 6 * 0.55) : 0, mv);
   }
 
   function load(id) {
@@ -318,7 +670,11 @@ export async function createVehicleSwitcher({
     loading[id] = new Promise((res, rej) => loader.load(baseUrl + v.url, g => {
       cache[id] = prepare(id, g);
       res(cache[id]);
-    }, undefined, rej)).finally(() => { delete loading[id]; });
+    }, undefined, e => {
+      /* tank.glb 가 아직 없으면 같은 부품 이름의 절차적 탱크로 대신한다 */
+      if (id === 'tank') { cache[id] = prepare(id, { scene: buildTankPlaceholder(THREE), animations: [] }); res(cache[id]); }
+      else rej(e);
+    })).finally(() => { delete loading[id]; });
     return loading[id];
   }
 
@@ -379,7 +735,7 @@ export async function createVehicleSwitcher({
     rider.saved.length = 0;
     if (rig) {
       if (!rig.base) rig.base = buildBase(rig);
-      for (const b of rig.touched) rider.saved.push({ b, p: b.position.clone(), q: b.quaternion.clone() });
+      for (const b of rig.touched) rider.saved.push({ b, p: b.position.clone(), q: b.quaternion.clone(), s: b.scale.clone() });
       for (const e of rig.base) e.bone.quaternion.copy(e.q);
       person.position.set(0, 0, 0); person.quaternion.identity();
       person.updateMatrixWorld(true);
@@ -391,7 +747,7 @@ export async function createVehicleSwitcher({
   }
   function unmount(keepVisible) {
     if (!rider.mounted) return;
-    for (const s of rider.saved) { s.b.position.copy(s.p); s.b.quaternion.copy(s.q); }
+    for (const s of rider.saved) { s.b.position.copy(s.p); s.b.quaternion.copy(s.q); if (s.s) s.b.scale.copy(s.s); }
     rider.saved.length = 0;
     // 기울기만 지우고 진행 방향(yaw)은 남긴다. (Euler 가 (π, y, π) 로 풀려 있을 수 있어 벡터로 다시 구한다)
     _v.set(0, 0, 1).applyQuaternion(person.quaternion);
@@ -434,7 +790,7 @@ export async function createVehicleSwitcher({
     const seat = r.seat || r.model;
     seat.updateWorldMatrix(true, false);
     seat.getWorldPosition(_seatW);
-    r.model.getWorldQuaternion(_qPerson);
+    (r.tank && r.turret ? r.turret : r.model).getWorldQuaternion(_qPerson);   // 전차장은 포탑을 따라 돈다
     person.quaternion.copy(_qPerson);
 
     if (rig) {
@@ -448,6 +804,7 @@ export async function createVehicleSwitcher({
       legPose(rig.legR, -1, tR, pose.spread, kR);
       armPose(rig.armL, 1, pose.arm, pose.fore, pose.inward);
       armPose(rig.armR, -1, pose.arm, pose.fore, pose.inward);
+      if (pose.hideLegs) for (const b of [rig.legL[0], rig.legR[0], rig.legL[3], rig.legR[3]]) if (b) b.scale.setScalar(0.001);
     }
     // 엉덩이 뼈가 seat(+lift) 에 오도록 사람 원점을 옮긴다
     _off.set(0, pose.lift, pose.hipZ).sub(rider.hip).applyQuaternion(_qPerson);
@@ -460,7 +817,8 @@ export async function createVehicleSwitcher({
 
   /* ── 탈것 애니메이션 ── */
   const GAIT = { horse: [0.35, 5.2], carriage: [0.3, 4.2] };   // [걷기 시작, 구보 시작]
-  function animate(r, dt, inp) {
+  function animate(r, dt, inp, driving) {
+    if (r.tank) { animateTank(r, dt, inp, driving); return; }
     const sp = inp.speed || 0, as = Math.abs(sp), st = inp.steer || 0;
     if (r.mixer && r.acts) {
       const g = GAIT[r.id] || GAIT.horse;
@@ -513,8 +871,24 @@ export async function createVehicleSwitcher({
     },
     update,
     preload(ids = VEHICLES.map(v => v.id)) { for (const id of ids) if (BY_ID[id].url) load(id).catch(() => {}); },
+    /* ── 탱크 ── */
+    /** 메인 루프에서 updateCamera(dt) 바로 다음에 부른다 — 포격·폭발 카메라 흔들림 */
+    postCamera(cam = camera) { if (fx) fx.applyShake(cam); },
+    /** 탱크를 몰고 있어 왼쪽 클릭이 사격으로 쓰이는 중 (손님 잡기·주먹은 이때 막는다) */
+    ownsPointer: () => current === 'tank' && wasDriving && !destroyed,
+    /** 폭발 효과·충격 (다른 무기도 쓸 수 있다). pos = {x,y,z} */
+    explode(pos, radius = 6, force = 1) { ensureFx().explode(pos, radius, force); },
+    /** 테스트용: 지금 조준점으로 쏜다 (장전 중이면 false) */
+    fire() { const r = cache.tank; if (!r || current !== 'tank' || aim.reload > 0) return false; fireNow(r); return true; },
+    /** 테스트용: 화면 좌표(ndc -1..1)로 조준 */
+    aimAt(nx, ny) { aim.ndc.set(nx, ny); aim.has = true; },
+    get tankState() { const r = cache.tank; return r ? { yaw: r.yaw, pitch: r.pitch, reload: aim.reload, aim: aim.point, valid: aim.valid } : null; },
     dispose() {
       destroyed = true;
+      if (domElement) { domElement.removeEventListener('pointermove', onPtrMove); domElement.removeEventListener('pointerdown', onPtrDown); }
+      removeEventListener('keydown', onKeyUnlock);
+      reticle.dispose();
+      if (fx) fx.dispose(); else tankAudio.dispose();
       unmount(false);
       syncCarVisibility(true);
       applyLights(null);
@@ -532,8 +906,10 @@ export async function createVehicleSwitcher({
     if (rider.mounted) unmount(id !== 'car' ? true : false);
     current = id;
     const r = cache[id];
-    holder.rotation.z = 0;
-    if (r) { r.model.visible = true; r.lean = 0; }
+    holder.rotation.z = 0; holder.rotation.x = 0;
+    if (r) { r.model.visible = true; r.lean = 0; if (r.tank) r.prevH = null; }
+    if (id === 'tank') tankAudio.unlock();
+    aim.pending = 0;
     syncCarVisibility(id === 'car');
     applyLights(r ? r.light : null);
     if (id === 'car' && wasDriving) person.visible = false;
@@ -547,13 +923,18 @@ export async function createVehicleSwitcher({
     updateMarker(dt, driving);
     const r = current !== 'car' ? cache[current] : null;
     syncCarVisibility(!r);
+    if (fx) fx.update(dt, camera);   // 탈것을 바꿔도 터지던 폭발은 끝까지
+    const tankOn = !!(r && r.tank && driving);
+    reticle.show(tankOn && !blocked());
+    reticle.tick(dt);
+    if (!tankOn && r !== cache.tank && cache.tank) tankAudio.engine(0, 0);
 
     if (!r) {
       if (rider.mounted) unmount(!driving);
       wasDriving = driving;
       return;
     }
-    animate(r, dt, inp || api._zero);
+    animate(r, dt, inp || api._zero, driving);
 
     if (!rider.rig) {
       rider.searchT -= dt;

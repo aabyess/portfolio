@@ -105,6 +105,10 @@
          다시 울리면 계속 도망. 넘어져 있던 손님은 일어나자마자 도망. 술집 주인도 도망갔다 카운터로 복귀.
      npcs.barkeeperServe(stallIndex) → bool    그 가판대 주인이 플레이어 쪽을 보고 잔을 내밀며 "여기 있어요!"
      npcs.say(npc, text, life = 1.6)          머리 위 말풍선 (풀 8개, 35 m 밖은 생략)
+     (events.js 가 쓰는 것) spawnGuard(x, z, rot) / setGuardChase(on) / guardInfo() → {count, nearest}
+       startFight(si = -1) → 가판대 번호 | -1, endFight(), startBard(si = -1) → 가판대 번호 | -1, endBard(),
+       fight / bard 상태 객체, 콜백 onAggression(kind, npc) / onGuardCatch(guard) / onNpcEvent(kind, npc).
+       경비병(guard 모델 + 미늘창)은 최대 4명을 재사용하고, 멀어지면 숨긴다(list() 의 off = true).
 
    ── 거리의 삶 (자동) ──
      구경꾼: 누가 맞거나 넘어지거나 던져지면 12 m 안 걷던 손님 최대 3명이 멈춰서 2초간 웃거나(Cheers) 항의(Stomp).
@@ -153,7 +157,16 @@ const CLIP_LEN = { Idle: 3, Walk: 1, Sit: 4, Drink: 3, Cheers: 1.5 };
 
 const ST = { WANDER: 0, PAUSE: 1, TO_SEAT: 2, SIT_DOWN: 3, SEATED: 4, STAND_UP: 5, LEAVE: 6,
   HELD: 7, FLYING: 8, LYING: 9, GETUP: 10, STOMP: 11, ROLL: 12, CHASE: 13, STAGGER: 14,
-  FLEE: 15, WATCH: 16, CHAT: 17, BAR: 18, SERVE: 19, BAR_RETURN: 20 };
+  FLEE: 15, WATCH: 16, CHAT: 17, BAR: 18, SERVE: 19, BAR_RETURN: 20,
+  GUARD: 21, GUARD_LEAVE: 22, FIGHT: 23, GATHER: 24, BARD_GO: 25, BARD_PLAY: 26, OFF: 27 };
+
+/* 이벤트 (events.js 와 같이 쓴다) */
+const GUARD_MAX = 4, GUARD_SPEED = 5.5, GUARD_CATCH_R = 1.0, GUARD_GONE_R = 45;
+const FIGHT_TIME = 15, GATHER_R = 22, BARD_TIME = 24;
+const GUARD_SHOUT = ['거기 서라!', '멈춰라!', '꼼짝 마!', '잡아라!'];
+const FIGHT_START = ['뭐라고?!', '한판 붙자!', '너 이리 와!'];
+const FIGHT_HIT = ['받아라!', '이얍!', '어딜!'];
+const FIGHT_CROWD = ['때려!', '한 방 더!', '싸움이다!', '와아!'];
 
 /* 거리의 삶 */
 const ALARM_R = { shot: 15, bomb: 24, explosion: 32 };   // 소동 종류별 기본 반경 (m)
@@ -169,7 +182,7 @@ const LAUGHS = ['하하!', '푸하하!', '꼴좋다!', '어이쿠~'];
 const PROTESTS = ['이봐!', '괜찮아?', '그만해!', '무슨 짓이야!'];
 const CHATS = ['그래서 말이야', '정말?', '하하', '음…', '그렇지!', '들었어?'];
 /* 옷 색 바꾸기에서 빼는 재질 (피부·눈·머리·수염·잔·금속) */
-const NO_TINT = /Skin|Eye|Hair|Beard|Mug|Foam|Steel|Emblem/i;
+const NO_TINT = /Skin|Eye|Hair|Beard|Mug|Foam|Steel|Metal|Wood|Gold|Emblem/i;
 const isLying = st => st === ST.LYING || st === ST.GETUP || st === ST.ROLL;
 
 /* 차에 치였을 때 */
@@ -361,11 +374,14 @@ export async function createNPCs({
       anger, react: 0, rolled: false, knockClip: false, hitCD: 0, close: false,
       hist: Array.from({ length: HIST }, () => ({ x: 0, y: 0, z: 0, t: -1 })),
       sc, meshes, mats, shadow: true, bubble: null, boneRest, procDirty: false,
+      guard: false, off: false, fight: null, foe: null, punchAnim: 0, gatherC: null, gx: 0, gz: 0, fx: 0, fz: 0,
       bar: -1, panicT: 0, panicX: 0, panicZ: 0, watchKind: 0, watchV: null, chatG: null, arrived: false, wiping: false, talkT: 0,
     };
   }
   for (let i = 0; i < count; i++) npcs.push(makeNPC(sources[i % sources.length], i, i >= sources.length));
   const nWalkers = npcs.length;   // 이 뒤에 붙는 술집 주인은 배회·의자 계산에서 뺀다
+
+  const api = {};   // 돌려줄 객체 (콜백 onAggression / onGuardCatch / onNpcEvent 를 events.js 가 단다)
 
   /* ── 헬퍼 (update 에서 할당 없이 쓰도록 클로저 밖 스크래치 없이 숫자만 다룬다) ── */
   function play(n, name, fade = FADE) {
@@ -600,6 +616,7 @@ export async function createNPCs({
 
     for (let i = 0; i < npcs.length; i++) {
       const n = npcs[i];
+      if (n.off) continue;
       if (n.stallCooldown > 0) n.stallCooldown -= dt;
       if (n.panicT > 0) n.panicT -= dt;
       if (n.talkT > 0) n.talkT -= dt;
@@ -631,6 +648,8 @@ export async function createNPCs({
           else if ((n.state === ST.STOMP || (n.state === ST.CHASE && n.close) || (n.state === ST.WATCH && n.watchKind === 1)) && !n.actions.Stomp) stompPose(n, t);
           else if (n.state === ST.BAR && n.wiping) wipePose(n, t);
           else if (n.state === ST.CHAT && n.arrived) chatPose(n, t);
+          else if (n.state === ST.FIGHT && n.arrived) jabPose(n, t);
+          else if (n.state === ST.BARD_PLAY && bard.phase === 1) strumPose(n, t);
         }
         if (n.anger.visible) {
           n.anger.scale.setScalar(0.42 + Math.abs(Math.sin(t * 9)) * 0.12);
@@ -786,6 +805,15 @@ export async function createNPCs({
     }
     chatScheduler(dt, px, pz);
     updateBubbles(dt);
+    if (fight.active) {
+      fight.t -= dt;
+      if (fight.t <= 0 || (fight.a.fight !== fight && fight.b.fight !== fight)) endFight();
+    }
+    if (bard.active) {
+      const bs = bard.n.state;
+      if (bs !== ST.BARD_GO && bs !== ST.BARD_PLAY) endBard();
+      else if (bs === ST.BARD_GO && (bard.t -= dt) < -40) endBard();
+    }
   }
 
   /* 먼 손님은 애니메이션을 드문드문 갱신 */
@@ -862,15 +890,16 @@ export async function createNPCs({
       n.spinX = -(4 + Math.min(6, sp * 0.7)); n.spinZ = rr(-1, 1);   // 뒤로 공중제비
       play(n, n.actions.Struggle ? 'Struggle' : 'Idle', 0.12);         // 술잔은 놓친다
     }
-    n.react = pickReact(cause);
+    n.react = cause === 'fight' || n.guard ? 0 : pickReact(cause);
     n.rolled = false;
+    if (cause !== 'fight') emit(cause === 'punch' ? 'knockdown' : cause === 'shot' ? 'weapon' : cause, n);
     setAnger(n, false);
     n.state = ST.FLYING;
     bystanders(n);
   }
 
   /* 휘청: 한 대 맞고 뒤로 젖혀졌다 돌아온 뒤 화낸다 */
-  function stagger(n, dx, dz) {
+  function stagger(n, dx, dz, cause = 'punch') {
     n.yielding = false; n.cheerIn = -1; n.hitCD = 0.3;
     if (!isLying(n.state)) n.body.rotation.set(0, 0, 0);
     n.rot = Math.atan2(-dx, -dz);
@@ -878,16 +907,17 @@ export async function createNPCs({
     n.state = ST.STAGGER; n.timer = 0;
     play(n, 'Idle', 0.1);
     const r = rnd();
-    n.react = r < 0.65 ? ST.CHASE : ST.STOMP;   // 주먹엔 쫓아올 확률이 높다
+    n.react = cause === 'fight' || n.guard ? 0 : r < 0.65 ? ST.CHASE : ST.STOMP;   // 주먹엔 쫓아올 확률이 높다
     setAnger(n, true);
     bystanders(n);
+    if (cause !== 'fight') emit('punch', n);
   }
   /* 주먹: 클릭한 손님이 1.6 m 안이면 그 손님, 아니면 앞쪽 1.6 m 안의 가장 가까운 손님 */
   function punch(facing, clicked) {
     const p = getPlayerPos ? getPlayerPos() : null;
     if (!p) return null;
     const fx = facing == null ? 0 : Math.sin(facing), fz = facing == null ? 0 : Math.cos(facing);
-    const ok = n => n && n.state !== ST.HELD && n.state !== ST.FLYING;
+    const ok = n => n && !n.off && n.state !== ST.HELD && n.state !== ST.FLYING;
     let target = null;
     if (ok(clicked) && Math.hypot(clicked.x - p.x, clicked.z - p.z) < PUNCH_R) target = clicked;
     else {
@@ -919,8 +949,8 @@ export async function createNPCs({
     for (let i = 0; i < npcs.length; i++) {
       const n = npcs[i];
       let o = listOut[i];
-      if (!o) o = listOut[i] = { i, npc: n, model: n.model, gender: n.gender, barkeeper: n.bar >= 0, pos: new THREE.Vector3(), state: '', seated: false, angry: false };
-      o.pos.set(n.x, n.y, n.z); o.state = stNames[n.state]; o.seated = n.state === ST.SEATED; o.angry = n.anger.visible;
+      if (!o) o = listOut[i] = { i, npc: n, model: n.model, gender: n.gender, barkeeper: n.bar >= 0, guard: n.guard, off: false, pos: new THREE.Vector3(), state: '', seated: false, angry: false };
+      o.pos.set(n.x, n.y, n.z); o.off = n.off; o.state = stNames[n.state]; o.seated = n.state === ST.SEATED; o.angry = n.anger.visible;
     }
     listOut.length = npcs.length;
     return listOut;
@@ -929,7 +959,7 @@ export async function createNPCs({
     return pick(raycaster.ray || raycaster, getPlayerPos ? getPlayerPos() : null, range, 1);
   }
   function knockDown(n, impulse, cause = 'shot') {
-    if (!n || n.state === ST.HELD) return false;
+    if (!n || n.off || n.state === ST.HELD) return false;
     knockVel(n, impulse.x, impulse.y, impulse.z, cause);
     return true;
   }
@@ -1002,11 +1032,15 @@ export async function createNPCs({
     n.spinZ = rr(-1.5, 1.5) * (hs > 0.8 ? 1 : 0.3);
     n.react = 0; n.knockClip = false;
     n.state = ST.FLYING;
-    if (!drop) bystanders(n);
+    if (!drop) { bystanders(n); emit('throw', n); }
   }
-  function startLying(n) {
+  function startLying(n, fromClip = false) {
     n.state = ST.LYING; n.timer = 0;
     const clip = !!n.actions.GetUp;
+    /* GetUp 클립의 누운 자세는 발이 원점, 몸통은 등 뒤(−Z)로 0.93 m. 코드로 눕힌 몸(가운데가 원점)에서
+       넘어갈 땐 발 위치를 앞(+Z)으로 옮겨 몸이 제자리에 있게 한다 */
+    if (clip && !fromClip) { const off = 0.93 * S * n.sc; n.fx = n.cx + Math.sin(n.rot) * off; n.fz = n.cz + Math.cos(n.rot) * off; }
+    else { n.fx = n.cx; n.fz = n.cz; }
     /* GetUp 클립은 누운 자세에서 시작하므로 몸은 똑바로 세우고 클립에 맡긴다. 없으면 직접 눕힌다(등을 대고) */
     n.rxT = nearAngle(n.body.rotation.x, clip ? 0 : -Math.PI / 2);
     n.rzT = nearAngle(n.body.rotation.z, 0);
@@ -1017,7 +1051,7 @@ export async function createNPCs({
   }
   function finishGetUp(n) {
     n.body.rotation.set(0, 0, 0);
-    n.x = n.cx; n.z = n.cz; n.y = groundY(n.x, n.z);
+    n.x = n.fx; n.z = n.fz; n.y = groundY(n.x, n.z);
     const react = n.react;
     n.react = 0;
     if (n.panicT > 1) { startFlee(n, false); return; }   // 소동 중이면 화낼 틈 없이 도망
@@ -1091,6 +1125,8 @@ export async function createNPCs({
   function toIdle(n) {
     setAnger(n, false);
     n.body.rotation.set(0, 0, 0);
+    if (n.guard) { n.state = guardWant ? ST.GUARD : ST.GUARD_LEAVE; play(n, guardWant ? 'Run' : 'Walk', 0.3); return; }
+    if (n.fight && n.fight.active) { n.state = ST.FIGHT; n.arrived = true; setAnger(n, true); play(n, 'Idle', 0.3); return; }
     if (n.panicT > 1) { startFlee(n, false); return; }
     if (n.bar >= 0) { n.state = ST.BAR_RETURN; play(n, 'Walk', 0.3); return; }
     n.state = ST.PAUSE; n.timer = rr(0.6, 1.4);
@@ -1111,7 +1147,7 @@ export async function createNPCs({
     const r = radius || ALARM_R[kind] || ALARM_R.shot;
     let n0 = 0;
     for (const n of npcs) {
-      if (Math.hypot(n.x - pos.x, n.z - pos.z) > r) continue;
+      if (n.guard || n.off || Math.hypot(n.x - pos.x, n.z - pos.z) > r) continue;   // 경비병은 도망가지 않는다
       n.panicX = pos.x; n.panicZ = pos.z;
       n.panicT = Math.max(n.panicT, rr(6, 10));
       n0++;
@@ -1232,6 +1268,171 @@ export async function createNPCs({
     return false;
   }
 
+  /* ════ GTA 식 이벤트용 (events.js 가 부른다): 경비병 · 술집 싸움 · 음유시인 ════ */
+  const emit = (kind, n) => { if (api.onAggression) api.onAggression(kind, n); };
+  const isDriving = () => { const r = getRide ? getRide() : null; return !!(r && r.driving); };
+
+  /* ── 경비병 (풀 4명, 필요할 때만 만든다) ── */
+  const guardSrc = sources.find(q => /guard/.test(q.file)) || sources[0];
+  const guards = [];
+  let guardWant = false;
+  const spearMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2e, roughness: 0.8 });
+  const bladeMat = new THREE.MeshStandardMaterial({ color: 0xb8bcc4, roughness: 0.35, metalness: 0.7 });
+  const spearGeo = new THREE.CylinderGeometry(0.025, 0.03, 2.3, 6);
+  const bladeGeo = new THREE.ConeGeometry(0.07, 0.38, 4);
+  const axeGeo = new THREE.BoxGeometry(0.02, 0.18, 0.26);
+  function spawnGuard(x, z, rot = 0) {
+    let n = guards.find(g => g.off);
+    if (!n) {
+      if (guards.length >= GUARD_MAX) return null;
+      n = makeNPC(guardSrc, npcs.length, false);
+      n.guard = true;
+      /* 미늘창 자리표시: 몸(body)에 붙여서 넘어지면 같이 넘어진다. 오른손 옆에 세워 든다 */
+      const pole = new THREE.Mesh(spearGeo, spearMat); pole.position.set(-0.36, 0.25, 0.12);
+      const tip = new THREE.Mesh(bladeGeo, bladeMat); tip.position.y = 1.33;
+      const axe = new THREE.Mesh(axeGeo, bladeMat); axe.position.set(0, 1.0, 0.12);
+      pole.add(tip, axe); pole.castShadow = tip.castShadow = true;
+      n.body.add(pole); n.meshes.push(pole);
+      guards.push(n); npcs.push(n);
+    }
+    n.off = false; n.root.visible = true;
+    n.x = x; n.z = z; n.y = groundY(x, z); n.rot = rot; n.body.rotation.set(0, 0, 0);
+    n.state = guardWant ? ST.GUARD : ST.GUARD_LEAVE; n.timer = rr(0.5, 2);
+    n.react = 0; n.panicT = 0; setAnger(n, false);
+    play(n, guardWant ? 'Run' : 'Walk', 0);
+    n.root.position.set(n.x, n.y, n.z); n.root.rotation.y = n.rot;
+    return n;
+  }
+  function setGuardChase(on) {
+    guardWant = on;
+    for (const g of guards) {
+      if (g.off) continue;
+      if (on && g.state === ST.GUARD_LEAVE) { g.state = ST.GUARD; play(g, 'Run', 0.3); }
+      else if (!on && g.state === ST.GUARD) { g.state = ST.GUARD_LEAVE; play(g, 'Walk', 0.3); }
+    }
+  }
+  function guardInfo() {   // { count, nearest } — 할당 없이 숫자만
+    let c = 0, nd = 1e9;
+    for (const g of guards) if (!g.off) { c++; if (g.dist < nd) nd = g.dist; }
+    guardStat.count = c; guardStat.nearest = nd;
+    return guardStat;
+  }
+  const guardStat = { count: 0, nearest: 1e9 };
+
+  /* ── 술집 싸움 (한 번에 하나) ── */
+  const fight = { active: false, a: null, b: null, t: 0, cx: 0, cz: 0, si: -1, cheer: 0 };
+  function startFight(si = -1) {
+    if (fight.active) return -1;
+    /* 앉은 손님이 둘 이상인 가판대 */
+    let pick = -1, tries = 0;
+    while (tries++ < 12) {
+      const k = si >= 0 ? si : Math.floor(rnd() * stalls.length);
+      let c = 0;
+      for (const seat of stalls[k].seats) if (seat.owner && npcs.includes(seat.owner) && seat.owner.state === ST.SEATED) c++;
+      if (c >= 2) { pick = k; break; }
+      if (si >= 0) break;
+    }
+    if (pick < 0) return -1;
+    const s = stalls[pick];
+    let a = null, b = null;
+    for (const seat of s.seats) {
+      const o = seat.owner;
+      if (o && npcs.includes(o) && o.state === ST.SEATED) { if (!a) a = o; else if (!b) b = o; }
+    }
+    /* 테이블에서 길 쪽으로 조금 나온 자리에서 붙는다 */
+    let ux = s.x - (s.bar ? s.bar.x : s.x), uz = s.z - (s.bar ? s.bar.z : s.z - 1);
+    const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul;
+    fight.cx = s.x + ux * 2.7; fight.cz = s.z + uz * 2.7;
+    fight.active = true; fight.a = a; fight.b = b; fight.t = FIGHT_TIME; fight.si = pick; fight.cheer = 1;
+    for (const [n, foe, sg] of [[a, b, 1], [b, a, -1]]) {
+      releaseSeat(n);
+      n.fight = fight; n.foe = foe; n.state = ST.FIGHT; n.timer = rr(1, 2);
+      n.fromX = fight.cx - uz * 0.55 * sg; n.fromZ = fight.cz + ux * 0.55 * sg;   // 서로 마주 볼 자리
+      n.arrived = false; setAnger(n, true);
+      play(n, 'Walk', 0.3);
+    }
+    say(a, pickOne(FIGHT_START), 1.8);
+    gather(fight, fight.cx, fight.cz, 2.8, 5, false);
+    return pick;
+  }
+  function endFight() {
+    if (!fight.active) return;
+    fight.active = false;
+    for (const n of [fight.a, fight.b]) if (n && n.fight === fight) { n.fight = null; n.foe = null; if (n.state === ST.FIGHT) toIdle(n); }
+  }
+  /* 싸움 주먹: 상대를 휘청이게 하거나(70%) 넘어뜨린다 */
+  function fightHit(n, foe) {
+    let dx = foe.x - n.x, dz = foe.z - n.z;
+    const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+    n.punchAnim = 0.28;
+    if (rnd() < 0.3) knockVel(foe, dx * 3, 2, dz * 3, 'fight');
+    else stagger(foe, dx, dz, 'fight');
+    if (rnd() < 0.35) say(n, pickOne(FIGHT_HIT), 1.3);
+  }
+  /* 싸움 자세: 두 주먹을 들고, 칠 때 오른손을 뻗는다 */
+  function jabPose(n, t) {
+    n.procDirty = true;
+    const b = n.bones, bob = Math.sin(t * 6 + n.idx) * 0.08;
+    if (b.armL) { b.armL.rotation.x -= 1.1 + bob; b.armL.rotation.z += 0.35; }
+    if (b.foreL) b.foreL.rotation.x -= 1.5;
+    const ext = n.punchAnim > 0 ? Math.sin((0.28 - n.punchAnim) / 0.28 * Math.PI) : 0;
+    if (b.armR) { b.armR.rotation.x -= 1.1 - bob + ext * 0.45; b.armR.rotation.z -= 0.35; }
+    if (b.foreR) b.foreR.rotation.x -= 1.5 * (1 - ext);
+  }
+
+  /* ── 구경꾼 모으기 (싸움·공연 둘레에 반원/원으로 선다) ── */
+  function gather(obj, cx, cz, r, max, semi, faceRot = 0) {
+    let k = 0;
+    const slots = Math.min(max, 6);
+    for (let i = 0; i < nWalkers && k < slots; i++) {
+      const n = npcs[i];
+      if (n.state !== ST.WANDER && n.state !== ST.PAUSE) continue;
+      if (n === bard.n || Math.hypot(n.x - cx, n.z - cz) > GATHER_R) continue;
+      const an = semi ? faceRot + (k / Math.max(1, slots - 1) - 0.5) * 2.1 : (k / slots) * Math.PI * 2 + rnd() * 0.3;
+      /* semi: faceRot 방향(공연자가 보는 쪽)으로 펼친 반원 */
+      n.fromX = cx + Math.sin(an) * r; n.fromZ = cz + Math.cos(an) * r;
+      n.state = ST.GATHER; n.gatherC = obj; n.arrived = false; n.gx = cx; n.gz = cz;
+      play(n, 'Walk', 0.3);
+      k++;
+    }
+    return k;
+  }
+
+  /* ── 음유시인 공연 ── */
+  const bard = { active: false, n: null, si: -1, x: 0, z: 0, face: 0, t: 0, phase: 0, playing: false };
+  function startBard(si = -1) {
+    if (bard.active) return -1;
+    const n = npcs.find(q => q.bar < 0 && !q.guard && /bard/.test(q.model) && (q.state === ST.WANDER || q.state === ST.PAUSE));
+    if (!n) return -1;
+    /* 가장 가까운 가판대(또는 지정) 앞, 길 쪽 */
+    let k = si;
+    if (k < 0) { let bd = 1e9; stalls.forEach((s, i) => { const d = Math.hypot(s.x - n.x, s.z - n.z); if (d < bd) { bd = d; k = i; } }); }
+    const s = stalls[k];
+    let ux = s.x - (s.bar ? s.bar.x : s.x), uz = s.z - (s.bar ? s.bar.z : s.z - 1);
+    const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul;
+    bard.active = true; bard.n = n; bard.si = k; bard.phase = 0; bard.playing = false; bard.t = 0;
+    bard.x = s.x + ux * 3.4; bard.z = s.z + uz * 3.4; bard.face = Math.atan2(ux, uz);
+    n.state = ST.BARD_GO; n.fromX = bard.x; n.fromZ = bard.z; n.chatG = null;
+    play(n, 'Walk', 0.3);
+    return k;
+  }
+  function endBard() {
+    if (!bard.active) return;
+    bard.active = false; bard.playing = false;
+    const n = bard.n; bard.n = null;
+    if (n && (n.state === ST.BARD_GO || n.state === ST.BARD_PLAY)) toIdle(n);
+  }
+  /* 류트 치는 몸짓: 왼손은 목을 잡고, 오른손으로 줄을 튕긴다 */
+  function strumPose(n, t) {
+    n.procDirty = true;
+    const b = n.bones;
+    if (b.armL) { b.armL.rotation.x -= 0.9; b.armL.rotation.z += 0.5; }
+    if (b.foreL) b.foreL.rotation.x -= 0.9;
+    if (b.armR) { b.armR.rotation.x -= 0.45; b.armR.rotation.z -= 0.25; }
+    if (b.foreR) b.foreR.rotation.x -= 1.0 + Math.sin(t * 11) * 0.28;
+    if (b.head) { b.head.rotation.x += 0.12; b.head.rotation.y += Math.sin(t * 1.3) * 0.2; }
+  }
+
   function updateGrabbed(n, dt, t, px, pz) {
     const body = n.body;
     if (n.state === ST.HELD) {
@@ -1269,7 +1470,7 @@ export async function createNPCs({
       if (n.cx > bounds.maxX - 1) { n.cx = bounds.maxX - 1; n.vx = -Math.abs(n.vx) * 0.4; }
       if (n.cz < bounds.minZ + 1) { n.cz = bounds.minZ + 1; n.vz = Math.abs(n.vz) * 0.4; }
       if (n.cz > bounds.maxZ - 1) { n.cz = bounds.maxZ - 1; n.vz = -Math.abs(n.vz) * 0.4; }
-      const g = groundY(n.cx, n.cz) + 0.3;
+      const g = groundY(n.cx, n.cz) + (n.knockClip ? COM : 0.3);   // Fall 클립 중엔 발이 땅에
       if (n.cy <= g) {
         n.cy = g;
         if (n.vy < -3) {            // 쿵 — 튕긴다
@@ -1281,7 +1482,7 @@ export async function createNPCs({
           if (sp > 1e-4) { n.vx *= ns / sp; n.vz *= ns / sp; }
           if (!n.knockClip) { n.spinX = (n.spinX < 0 ? -ns : ns) / 0.3; n.spinZ *= Math.exp(-dt * 6); }
           const fa = n.actions.Fall;
-          if (ns < 0.35 && (!n.knockClip || !fa.isRunning() || fa.time >= fa.getClip().duration - 0.03)) { n.knockClip = false; startLying(n); }
+          if (ns < 0.35 && (!n.knockClip || !fa.isRunning() || fa.time >= fa.getClip().duration - 0.03)) { const fc = n.knockClip; n.knockClip = false; startLying(n, fc); }
         }
       }
       body.rotation.x += n.spinX * dt;
@@ -1294,10 +1495,14 @@ export async function createNPCs({
       body.rotation.z = n.rz0 + (n.rzT - n.rz0) * e;
       const g = groundY(n.cx, n.cz);
       n.cy = n.cy0 + ((n.actions.GetUp ? g + COM : g + LIE_Y) - n.cy0) * e;
-      n.x = n.cx; n.y = n.cy - COM; n.z = n.cz;
+      n.x = n.cx + (n.fx - n.cx) * e; n.y = n.cy - COM; n.z = n.cz + (n.fz - n.cz) * e;
       if (n.timer > 1.2 && n.react === ST.ROLL && !n.rolled) {
         /* 데굴데굴: 등을 대고 누워 긴 축으로 좌우로 구른다 */
         n.rolled = true; n.state = ST.ROLL; n.timer = 0;
+        /* 클립으로 누워 있었으면(발이 원점) 몸 가운데로 옮겨서 구른다 */
+        n.fx = n.x; n.fz = n.z;
+        if (n.actions.GetUp) { const off = 0.93 * S * n.sc; n.cx = n.x - Math.sin(n.rot) * off; n.cz = n.z - Math.cos(n.rot) * off; }
+        else { n.cx = n.x; n.cz = n.z; }
         n.rx0 = wrap(body.rotation.x); n.rz0 = wrap(body.rotation.z); n.cy0 = n.cy;
         play(n, n.actions.Struggle ? 'Struggle' : 'Idle', 0.3);
         setAnger(n, true);
@@ -1319,7 +1524,7 @@ export async function createNPCs({
       const g = groundY(n.cx, n.cz);
       n.cy = n.cy0 + (g + LIE_Y - n.cy0) * e;
       const lat = th * 0.28, c = Math.cos(n.rot), sn = Math.sin(n.rot);   // 구르는 만큼 옆으로
-      n.x = n.cx + c * lat; n.z = n.cz - sn * lat; n.y = n.cy - COM;
+      n.x = n.fx + (n.cx - n.fx) * e + c * lat; n.z = n.fz + (n.cz - n.fz) * e - sn * lat; n.y = n.cy - COM;
       if (n.timer >= ROLL_TIME) {
         body.rotation.y = 0;
         n.react = 0;
@@ -1415,6 +1620,98 @@ export async function createNPCs({
       const bp = stalls[n.bar].bar;
       if (walkToward(n, bp.x, bp.z, dt, 0.15)) { n.state = ST.BAR; n.timer = rr(2, 4); n.wiping = false; play(n, 'Idle', 0.4); }
       n.y += (groundY(n.x, n.z) - n.y) * Math.min(1, dt * 12);
+    } else if (n.state === ST.GUARD) {
+      const dx = px - n.x, dz = pz - n.z, d = Math.hypot(dx, dz);
+      const err = turnTo(n, Math.atan2(dx, dz), dt * 1.8);
+      play(n, 'Run', 0.25);
+      const step = Math.min(Math.max(0, d - 0.6), GUARD_SPEED * (err > 1.2 ? 0.25 : Math.cos(err * 0.8)) * dt);
+      n.x = clampX(n.x + Math.sin(n.rot) * step);
+      n.z = Math.max(bounds.minZ + 1, Math.min(bounds.maxZ - 1, n.z + Math.cos(n.rot) * step));
+      pushFromTables(n);
+      n.y += (groundY(n.x, n.z) - n.y) * Math.min(1, dt * 12);
+      n.timer -= dt;
+      if (n.timer <= 0) { n.timer = rr(3, 6); if (d < 25) say(n, pickOne(GUARD_SHOUT), 1.5, '#7a1a10'); }
+      if (d < GUARD_CATCH_R && !isDriving()) {
+        say(n, '체포한다!', 2, '#7a1a10');
+        if (api.onGuardCatch) api.onGuardCatch(n);
+      }
+    } else if (n.state === ST.GUARD_LEAVE) {
+      const dx = n.x - px, dz = n.z - pz;
+      turnTo(n, Math.atan2(dx, dz), dt);
+      play(n, 'Walk', 0.3);
+      const step = 1.4 * dt;
+      n.x = clampX(n.x + Math.sin(n.rot) * step);
+      n.z = Math.max(bounds.minZ + 1, Math.min(bounds.maxZ - 1, n.z + Math.cos(n.rot) * step));
+      n.y += (groundY(n.x, n.z) - n.y) * Math.min(1, dt * 12);
+      if (n.dist > GUARD_GONE_R) {
+        n.off = true; n.root.visible = false; n.state = ST.OFF;
+        if (n.bubble) { n.bubble.sp.visible = false; n.bubble.n = null; n.bubble = null; }
+      }
+    } else if (n.state === ST.FIGHT) {
+      const f = n.fight, foe = n.foe;
+      if (!f || !f.active || !foe) { n.fight = null; n.foe = null; toIdle(n); }
+      else {
+        if (n.punchAnim > 0) n.punchAnim -= dt;
+        const dx = foe.x - n.x, dz = foe.z - n.z, d = Math.hypot(dx, dz);
+        if (!n.arrived) {
+          if (walkToward(n, n.fromX, n.fromZ, dt, 0.15)) { n.arrived = true; play(n, 'Idle', 0.3); }
+        } else {
+          turnTo(n, Math.atan2(dx, dz), dt * 1.5);
+          const foeUp = foe.state === ST.FIGHT && foe.arrived;
+          if (!foeUp) play(n, 'Stomp', 0.3);              // 상대가 쓰러지면 약 올린다
+          else {
+            play(n, 'Idle', 0.3);
+            /* 1 m 거리를 유지하며 들썩인다 */
+            const want = d - 1.0, step = Math.max(-0.8 * dt, Math.min(1.2 * dt, want));
+            if (Math.abs(want) > 0.12 && d > 1e-3) { n.x += dx / d * step; n.z += dz / d * step; }
+            n.timer -= dt;
+            if (n.timer <= 0 && d < 1.4) { n.timer = rr(1.2, 2.6); fightHit(n, foe); }
+          }
+        }
+        n.y += (groundY(n.x, n.z) - n.y) * Math.min(1, dt * 12);
+      }
+    } else if (n.state === ST.GATHER) {
+      const g = n.gatherC;
+      if (!g || !g.active) { n.gatherC = null; toIdle(n); }
+      else {
+        if (!n.arrived) {
+          if (walkToward(n, n.fromX, n.fromZ, dt, 0.2)) { n.arrived = true; play(n, 'Idle', 0.3); n.timer = rr(0.5, 2); }
+        } else {
+          /* 싸움이면 계속 환호, 공연이면 조용히 듣다가 끝에 건배 */
+          const cx = g === fight ? (fight.a.x + fight.b.x) / 2 : g.x, cz = g === fight ? (fight.a.z + fight.b.z) / 2 : g.z;
+          turnTo(n, Math.atan2(cx - n.x, cz - n.z), dt);
+          if (g === fight) {
+            play(n, 'Cheers', 0.3);
+            n.timer -= dt;
+            if (n.timer <= 0) { n.timer = rr(2.5, 5); if (rnd() < 0.4) say(n, pickOne(FIGHT_CROWD), 1.4); }
+          } else play(n, g.phase === 2 ? 'Cheers' : 'Idle', 0.3);
+        }
+        n.y += (groundY(n.x, n.z) - n.y) * Math.min(1, dt * 12);
+      }
+    } else if (n.state === ST.BARD_GO) {
+      if (!bard.active || bard.n !== n) toIdle(n);
+      else if (walkToward(n, bard.x, bard.z, dt, 0.15)) {
+        if (turnTo(n, bard.face, dt) < 0.1) {
+          n.state = ST.BARD_PLAY; bard.phase = 1; bard.playing = true; bard.t = BARD_TIME;
+          play(n, 'Idle', 0.3);
+          gather(bard, bard.x, bard.z, 2.8, 3 + Math.floor(rnd() * 4), true, bard.face);
+          say(n, '♪ 들어보시오~', 2);
+          if (api.onNpcEvent) api.onNpcEvent('bard', n);
+        } else play(n, 'Idle', 0.3);
+      }
+      n.y += (groundY(n.x, n.z) - n.y) * Math.min(1, dt * 12);
+    } else if (n.state === ST.BARD_PLAY) {
+      if (!bard.active || bard.n !== n) toIdle(n);
+      else {
+        bard.t -= dt;
+        turnTo(n, bard.face, dt);
+        if (bard.phase === 1 && bard.t <= 0) {         // 연주 끝 → 인사, 관객 건배
+          bard.phase = 2; bard.playing = false; bard.t = 2.5;
+          play(n, 'Cheers', 0.3); say(n, '감사합니다!', 1.8);
+        } else if (bard.phase === 2 && bard.t <= 0) endBard();
+        if (bard.phase === 1 && rnd() < dt * 0.12) say(n, '♪ ♫', 1.4);
+      }
+      n.y += (groundY(n.x, n.z) - n.y) * Math.min(1, dt * 12);
     } else if (n.state === ST.GETUP) {
       n.timer += dt;
       const g = groundY(n.cx, n.cz);
@@ -1442,7 +1739,7 @@ export async function createNPCs({
     let best = null, bt = 1e9;
     for (let i = 0; i < npcs.length; i++) {
       const n = npcs[i];
-      if (n.state === ST.HELD || n.state === ST.FLYING) continue;
+      if (n.off || n.state === ST.HELD || n.state === ST.FLYING) continue;
       if (pp && Math.hypot(n.x - pp.x, n.z - pp.z) > range) continue;
       const lying = isLying(n.state), seated = n.state === ST.SEATED || n.state === ST.SIT_DOWN;
       for (let k = 0; k < (lying ? 1 : 3); k++) {
@@ -1469,6 +1766,7 @@ export async function createNPCs({
     }
     npcs.length = 0;
     angerTex.dispose(); angerMat.dispose();
+    spearMat.dispose(); bladeMat.dispose(); spearGeo.dispose(); bladeGeo.dispose(); axeGeo.dispose();
     for (const b of bubbles) { scene.remove(b.sp); b.tex.dispose(); b.mat.dispose(); }
     if (debug && globalThis.__npcs) delete globalThis.__npcs;
     /* 클론은 지오메트리·재질을 원본과 공유한다 → 원본에서 한 번만 해제 */
@@ -1483,7 +1781,7 @@ export async function createNPCs({
   }
 
   /* 디버그용: 지금 걷는 비율 */
-  const walkingRatio = () => npcs.filter(n => n.bar < 0 && walking(n.state) && !n.yielding).length / Math.max(1, nWalkers);
+  const walkingRatio = () => npcs.filter(n => n.bar < 0 && !n.guard && walking(n.state) && !n.yielding).length / Math.max(1, nWalkers);
   /* 디버그: __npcs.hit(i) 로 i번 손님을 차에 친 것처럼 넘어뜨린다 */
   if (debug) {
     const names = Object.keys(ST);
@@ -1502,6 +1800,9 @@ export async function createNPCs({
       },
       alarm(x, z, kind = 'shot', radius = 0) { return alarm({ x, z }, radius, kind); },
       serve(si = 0) { return barkeeperServe(si); },
+      fight(si = -1) { return startFight(si); },
+      bard(si = -1) { return startBard(si); },
+      guard(dx = 8) { const p = getPlayerPos(); setGuardChase(true); return spawnGuard(p.x + dx, p.z + 6); },
       punch(i) {   // i번 손님을 플레이어가 친 것처럼 (거리 무시)
         const n = npcs[i]; if (!n) return false;
         const p = getPlayerPos ? getPlayerPos() : null;
@@ -1514,11 +1815,13 @@ export async function createNPCs({
     };
   }
 
-  return { update, dispose, count: npcs.length, npcs, walkingRatio,
+  return Object.assign(api, { update, dispose, count: npcs.length, npcs, walkingRatio, stalls, bounds,
+    spawnGuard, setGuardChase, guardInfo, startFight, endFight, startBard, endBard,
+    get fight() { return fight; }, get bard() { return bard; },
     pick: pickRay, knockDown, list, freeSeatNear, reserveSeat: reserveSeatAPI, releaseSeat: releaseSeatAPI,
     alarm, barkeeperServe, say,
     onPlayerPunch: null,
-    _grab: { pick, grab, setTarget, release, punch, setCtrl: c => { ctrl = c; } } };
+    _grab: { pick, grab, setTarget, release, punch, setCtrl: c => { ctrl = c; } } });
 }
 
 /* ════ 마우스/터치: 짧게 클릭 = 주먹(걸어 다닐 때), 꾹 누르기 = 잡기, 떼기 = 던지기 ════

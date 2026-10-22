@@ -600,39 +600,16 @@ async function initDrive() {
 
   const timeU = { value: 0 };   // 바람·물결 셰이더 공용 시간
 
-  /* ── 하늘 · 안개 · 시간 흐름 ──
-     약 2분 30초에 한 바퀴: 저녁 → 깊은 밤 → 다시 저녁. night(0~1)에 맞춰 하늘·안개·빛을 섞는다. */
+  /* ── 하늘 · 안개 · 하루 (sky.js) ──
+     약 3분 30초에 하루: 새벽 → 한낮 → 황금빛 저녁 → 노을 → 밤. 하늘 돔·별·해·달·안개·빛을 sky.js가 맡는다.
+     계절(seasons.js)이 그 위에 덧칠하므로 step()에서 updateDayNight 다음에 seasons.update. */
   scene.fog = new THREE.Fog(0x2a1a33, 26, 100);
-  const C = h => new THREE.Color(h);
-  const DUSK  = { top: C(0x0e0a22), mid: C(0x4f2546), hor: C(0xe0844a), fog: C(0x2a1a33), hemi: 0.7,  sun: 1.35, fill: 0.45, exp: 1.1 };
-  const NIGHT = { top: C(0x03040e), mid: C(0x0c1430), hor: C(0x2a2048), fog: C(0x0b0d1c), hemi: 0.32, sun: 0.0,  fill: 0.6,  exp: 1.0 };
-  const skyU = { top: { value: DUSK.top.clone() }, mid: { value: DUSK.mid.clone() }, hor: { value: DUSK.hor.clone() } };
-  scene.add(new THREE.Mesh(new THREE.SphereGeometry(320, 32, 20), new THREE.ShaderMaterial({
-    uniforms: skyU, side: THREE.BackSide, depthWrite: false, fog: false,
-    vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-    fragmentShader: `uniform vec3 top; uniform vec3 mid; uniform vec3 hor; varying vec3 vP;
-      void main(){ float h = clamp(vP.y, 0.0, 1.0);
-        vec3 c = mix(hor, mid, smoothstep(0.0, 0.18, h)); c = mix(c, top, smoothstep(0.18, 0.6, h));
-        gl_FragColor = vec4(c, 1.0); }`
-  })));
-  /* 밤에만 보이는 별 */
-  const stars = (() => {
-    const N = 900, a = new Float32Array(N * 3);
-    for (let i = 0; i < N; i++) {
-      const th = Math.random() * Math.PI * 2, ph = Math.acos(0.15 + Math.random() * 0.85);
-      a.set([Math.sin(ph) * Math.cos(th) * 300, Math.cos(ph) * 300, Math.sin(ph) * Math.sin(th) * 300], i * 3);
-    }
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(a, 3));
-    const m = new THREE.PointsMaterial({ color: 0xffffff, size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false });
-    scene.add(new THREE.Points(g, m));
-    return m;
-  })();
 
   /* ── 조명 ── */
-  const hemi = new THREE.HemisphereLight(0xffb48a, 0x1a1030, DUSK.hemi);
+  const hemi = new THREE.HemisphereLight(0xffb48a, 0x1a1030, 0.7);
   scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xff9050, DUSK.sun);   // 지평선에 걸린 마지막 햇빛
-  /* 월드가 길어서 그림자 상자를 플레이어 주변에만 두고 따라다니게 한다 (아래 followSun) */
+  const sun = new THREE.DirectionalLight(0xff9050, 1.35);   // 낮엔 해, 밤엔 달 (sky.js가 방향·색을 바꾼다)
+  /* 월드가 길어서 그림자 상자를 플레이어 주변에만 두고 따라다니게 한다 (아래 followSun). 방향은 sky.js가 매 프레임 정한다 */
   const SUN_OFFSET = new THREE.Vector3(-40, 16, 34);
   sun.position.copy(SUN_OFFSET);
   sun.castShadow = true;
@@ -641,36 +618,31 @@ async function initDrive() {
   sun.shadow.bias = -0.0008; sun.shadow.normalBias = 0.04;
   scene.add(sun, sun.target);
   const followSun = (x, z) => { sun.target.position.set(x, 0, z); sun.position.set(x + SUN_OFFSET.x, SUN_OFFSET.y, z + SUN_OFFSET.z); };
-  const fill = new THREE.DirectionalLight(0x7088ff, DUSK.fill);   // 푸른 달빛
+  const fill = new THREE.DirectionalLight(0x7088ff, 0.45);   // 푸른 보조광
   fill.position.set(40, 20, -30);
   scene.add(fill);
 
+  const { createSky } = await import('./sky.js');
+  const sky = createSky({ THREE, scene, renderer, hemi, sun, fill, sunOffset: SUN_OFFSET });
+  const skyU = sky.skyU;
+
   /* 선술집 불빛과 차 헤드라이트는 밤이 깊을수록 밝아진다 (아래에서 채운다) */
   const nightGlow = { lights: [], lanterns: [], bulbs: [], heads: [] };
-  const DAY_PERIOD = 150;
   let night = 0;
-  function updateDayNight(t) {
-    night = 0.5 - 0.5 * Math.cos(t / DAY_PERIOD * Math.PI * 2);
+  function updateDayNight(dt) {
+    sky.update(dt);
+    night = sky.night;
     const k = night;
-    skyU.top.value.copy(DUSK.top).lerp(NIGHT.top, k);
-    skyU.mid.value.copy(DUSK.mid).lerp(NIGHT.mid, k);
-    skyU.hor.value.copy(DUSK.hor).lerp(NIGHT.hor, k);
-    scene.fog.color.copy(DUSK.fog).lerp(NIGHT.fog, k);
-    hemi.intensity = DUSK.hemi + (NIGHT.hemi - DUSK.hemi) * k;
-    sun.intensity = DUSK.sun + (NIGHT.sun - DUSK.sun) * k;
-    fill.intensity = DUSK.fill + (NIGHT.fill - DUSK.fill) * k;
-    renderer.toneMappingExposure = DUSK.exp + (NIGHT.exp - DUSK.exp) * k;
-    stars.opacity = Math.max(0, (k - 0.35) / 0.65) * 0.9;
-    for (const l of nightGlow.lights) l.intensity = 12 + 14 * k;
-    for (const m of nightGlow.lanterns) m.emissiveIntensity = 1.1 + 1.0 * k;
-    for (const m of nightGlow.bulbs) m.color.setHex(0xffd98a).multiplyScalar(1.1 + 0.9 * k);
-    for (const h of nightGlow.heads) h.intensity = 12 + 28 * k;   // 밤에도 앞 블록이 하얗게 날아가지 않을 만큼만
+    for (const l of nightGlow.lights) l.intensity = 4 + 22 * k;
+    for (const m of nightGlow.lanterns) m.emissiveIntensity = 0.6 + 1.5 * k;
+    for (const m of nightGlow.bulbs) m.color.setHex(0xffd98a).multiplyScalar(0.8 + 1.2 * k);
+    for (const h of nightGlow.heads) h.intensity = 6 + 34 * k;   // 밤에도 앞 블록이 하얗게 날아가지 않을 만큼만
   }
 
   /* ── 계절 (seasons.js) ──
      약 1분마다 가을 → 겨울 → 봄 → 여름. 낮밤 위에 덧칠하므로 step()에서 updateDayNight 바로 다음에 부른다 */
   const { createSeasons } = await import('./seasons.js');
-  const seasons = createSeasons({ THREE, scene, renderer, hemi, sun, skyU, badge: document.getElementById('g-season') });
+  const seasons = createSeasons({ THREE, scene, renderer, hemi, sun, skyU, sky, badge: document.getElementById('g-season') });
 
   /* 월드 바깥 바닥 — 지형 가장자리가 허공에 뜨지 않게 */
   {
@@ -1162,6 +1134,47 @@ async function initDrive() {
 
   /* 가판대 자리는 Blender에서 세운 6곳 (최신 프로젝트가 출발점에서 가장 가깝다) */
   PROJECTS.forEach((p, i) => { const st = WORLD.stalls[i]; if (st) p.pos = [st.x, st.z]; });
+
+  /* ── 중세 선술집 부스 7종 + 나무 의자·테이블 (models/props, README 참고) ──
+     부스 파일은 스테이션 그룹 단위(0.62배)라 그룹에 그대로 넣는다. 출발점에서 가까운 순서대로
+     tudor → norse → bavarian → venta → tent → flemish → osteria. 의자는 부스 분위기에 맞춰 고른다. */
+  const BOOTH_ORDER = ['tudor', 'norse', 'bavarian', 'venta', 'tent', 'flemish', 'osteria'];
+  const BOOTH_TOP = { tudor: 6.3, bavarian: 7.0, norse: 6.6, osteria: 5.1, venta: 5.1, flemish: 7.1, tent: 7.1 };   // 그룹 단위 꼭대기
+  const SEAT_OF = { norse: 'stool-log', venta: 'stool-barrel', flemish: 'stool-barrel' };   // 나머지는 stool
+  const props = {};
+  {
+    const pl = new GLTFLoader(); pl.setDRACOLoader(draco);
+    const get = name => new Promise(res => pl.load(`models/props/tavern-${name}.glb`, g => res(g.scene), undefined, () => res(null)));
+    const names = [...BOOTH_ORDER, 'stool', 'stool-barrel', 'stool-log', 'table'];
+    (await Promise.all(names.map(get))).forEach((sc, i) => { props[names[i]] = sc; });
+  }
+  /* 길을 따라 출발점(z가 큰 쪽)에서 가까운 순서 → 부스 종류 */
+  const boothOf = new Map([...PROJECTS].sort((a, b) => b.pos[1] - a.pos[1]).map((p, i) => [p, BOOTH_ORDER[i % BOOTH_ORDER.length]]));
+  /* 이름판(sign_face)에 프로젝트 이름을 따뜻한 페인트 글씨로 */
+  function paintSign(mesh, p) {
+    mesh.geometry.computeBoundingBox();
+    const bs = mesh.geometry.boundingBox.getSize(new THREE.Vector3());
+    const aspect = Math.max(1, (bs.x || 1) / (bs.y || bs.z || 1));
+    const H = 128, W = Math.min(1024, Math.round(H * aspect)), cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const g = cv.getContext('2d');
+    const grd = g.createLinearGradient(0, 0, 0, H);
+    grd.addColorStop(0, '#6b4024'); grd.addColorStop(1, '#4a2a17');
+    g.fillStyle = grd; g.fillRect(0, 0, W, H);
+    g.globalAlpha = 0.18; g.strokeStyle = '#2a170c';
+    for (let y = 8; y < H; y += 11) { g.beginPath(); g.moveTo(0, y); g.bezierCurveTo(W * 0.3, y + 4, W * 0.7, y - 4, W, y + 2); g.stroke(); }   // 나뭇결
+    g.globalAlpha = 1;
+    g.strokeStyle = p.color; g.lineWidth = 6; g.strokeRect(6, 6, W - 12, H - 12);
+    let fs = 70; g.font = `800 ${fs}px Pretendard, system-ui, sans-serif`;
+    while (g.measureText(p.name).width > W - 40 && fs > 28) { fs -= 4; g.font = `800 ${fs}px Pretendard, system-ui, sans-serif`; }
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.lineWidth = 7; g.strokeStyle = '#2a170c'; g.strokeText(p.name, W / 2, H / 2 + 3);
+    g.fillStyle = '#f6e2b8'; g.fillText(p.name, W / 2, H / 2 + 3);
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+    mesh.material = mesh.material.clone();
+    mesh.material.map = t; mesh.material.color.set(0xffffff); mesh.material.needsUpdate = true;
+  }
+
   for (const p of PROJECTS) {
     const g = new THREE.Group();
     g.position.set(p.pos[0], Math.max(0, heightAt(p.pos[0], p.pos[1])), p.pos[1]);
@@ -1188,49 +1201,32 @@ async function initDrive() {
     ring.rotation.x = -Math.PI / 2; ring.position.y = 0.04;
     g.add(ring);
 
-    /* 수레 몸통 + 색 띠 + 상판 */
-    add(new THREE.BoxGeometry(7, 1.5, 2.2), wood, 0, 1.05, 0);
-    add(new THREE.BoxGeometry(7.04, 0.45, 2.24), paint, 0, 1.25, 0);
-    add(new THREE.BoxGeometry(7.6, 0.18, 2.7), woodDark, 0, 1.88, 0.1);
-    /* 바퀴 두 개 */
-    for (const dx of [-2.6, 2.6]) {
-      const wh = add(new THREE.CylinderGeometry(0.62, 0.62, 0.25, 16), woodDark, dx, 0.62, 1.2);
-      wh.rotation.x = Math.PI / 2;
+    /* 선술집 부스 — 같은 역할의 손수레·차양·전구·상자는 부스 안에 다 들어 있다 */
+    const style = boothOf.get(p);
+    const booth = props[style] ? props[style].clone() : null;
+    if (booth) {
+      booth.traverse(o => {
+        if (!o.isMesh) return;
+        o.castShadow = o.receiveShadow = true;
+        const mn = o.material && o.material.name || '';
+        if (/^(Lantern|Flame|Firebox)_Glow/.test(mn)) {
+          if (!o.material.userData.glow) { o.material.userData.glow = true; nightGlow.lanterns.push(o.material); }
+          o.castShadow = false;
+        }
+        if (o.name.startsWith('sign_face') || /^Sign_Face/.test(mn)) paintSign(o, p);
+      });
+      g.add(booth);
     }
-    /* 기둥 네 개 */
-    for (const dx of [-3.4, 3.4]) for (const dz of [-0.9, 1.1]) add(new THREE.BoxGeometry(0.16, 2.6, 0.16), wood, dx, 3.1, dz);
-    /* 줄무늬 차양 — 앞으로 기울어진 판 여러 장 */
-    for (let i = 0; i < 9; i++) {
-      const a = add(new THREE.BoxGeometry(0.86, 0.08, 3.2), i % 2 ? cream : paint, -3.45 + i * 0.86, 4.55, 0.4);
-      a.rotation.x = 0.22;
-    }
-    /* 차양 끝 물결 장식 */
-    for (let i = 0; i < 9; i++) {
-      const f = add(new THREE.ConeGeometry(0.43, 0.42, 3), i % 2 ? cream : paint, -3.45 + i * 0.86, 4.08, 2.0);
-      f.rotation.set(Math.PI, Math.PI / 6, 0);
-    }
-    /* 전구 줄 */
-    const bulbMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffd98a).multiplyScalar(1.1), fog: false, toneMapped: false });
-    nightGlow.bulbs.push(bulbMat);
-    for (let i = 0; i < 11; i++) {
-      const x = -3.5 + i * 0.7;
-      add(new THREE.SphereGeometry(0.11, 8, 6), bulbMat, x, 3.86 - Math.sin(i / 10 * Math.PI) * 0.22, 2.15);
-    }
-    /* 상판 위 소품 — 상자와 번호판 */
-    add(new THREE.BoxGeometry(0.9, 0.7, 0.8), wood, -2.4, 2.32, 0.3).rotation.y = 0.3;
-    add(new THREE.BoxGeometry(0.7, 0.55, 0.7), paint, -1.55, 2.25, 0.5).rotation.y = -0.2;
-    add(new THREE.BoxGeometry(1.1, 0.8, 0.9), wood, 4.3, 0.4, 1.6).rotation.y = 0.5;
-    add(new THREE.BoxGeometry(0.8, 0.6, 0.7), paint, 4.6, 1.1, 1.5).rotation.y = 0.2;
 
     /* 따뜻한 가판대 불빛 */
     const glow = new THREE.PointLight(0xff9a4a, 12, 20, 2);
     nightGlow.lights.push(glow);
-    glow.position.set(0, 3.6, 1.6);
+    glow.position.set(0, 3.0, 2.2);   // 부스 처마 아래
     g.add(glow);
 
     /* 간판은 수레 뒤에 서서 카메라를 향해 돈다 */
     const face = new THREE.Group();
-    face.position.set(0, 0, -2.6);
+    face.position.set(0, Math.max(0, (BOOTH_TOP[style] || 0) - 4.6), -2.6);   // 높은 지붕이 간판 아래를 가리지 않게 올린다
     g.add(face);
     const boardW = 9.4, boardH = 5.9;
     for (const dx of [-3.4, 3.4]) add(new THREE.BoxGeometry(0.28, 5.2, 0.28), woodDark, dx, 2.6, -0.2, face);
@@ -1283,40 +1279,6 @@ async function initDrive() {
     face.add(label);
 
 
-    /* ── 선술집 꾸밈 ── 빨간 등롱, 酒 깃발, 항아리. 의자·테이블은 물리 몸체라 아래에서 따로 놓는다 */
-    {
-      const lanternMat = new THREE.MeshStandardMaterial({ color: 0xc8261c, emissive: 0xff4a1e, emissiveIntensity: 1.1, roughness: .6 });
-      nightGlow.lanterns.push(lanternMat);
-      const capMat = new THREE.MeshStandardMaterial({ color: 0x1b1210, roughness: .8 });
-      for (const x of [-2.6, 0, 2.6]) {
-        add(new THREE.CylinderGeometry(0.34, 0.34, 0.62, 14), lanternMat, x, 3.25, 2.05).castShadow = false;
-        add(new THREE.CylinderGeometry(0.2, 0.2, 0.08, 10), capMat, x, 3.6, 2.05);
-        add(new THREE.CylinderGeometry(0.2, 0.2, 0.08, 10), capMat, x, 2.9, 2.05);
-        add(new THREE.CylinderGeometry(0.015, 0.015, 0.5, 4), capMat, x, 3.87, 2.05);
-      }
-      /* 酒 깃발 — 수레 옆 장대 */
-      add(new THREE.BoxGeometry(0.14, 5.2, 0.14), woodDark, -4.7, 2.6, 1.0);
-      const fcv = document.createElement('canvas'); fcv.width = 128; fcv.height = 256;
-      const fc = fcv.getContext('2d');
-      fc.fillStyle = p.ai ? '#1c1533' : '#f3e7d0'; fc.fillRect(0, 0, 128, 256);
-      fc.fillStyle = p.ai ? p.color : '#b3241a'; fc.fillRect(0, 0, 128, 14); fc.fillRect(0, 242, 128, 14);
-      fc.fillStyle = p.ai ? '#e9e2ff' : '#1d1512'; fc.font = p.ai ? '900 64px sans-serif' : '900 92px serif'; fc.textAlign = 'center'; fc.textBaseline = 'middle';
-      fc.fillText(p.ai ? 'AI' : '酒', 64, 128);
-      const ftex = new THREE.CanvasTexture(fcv); ftex.colorSpace = THREE.SRGBColorSpace;
-      const flag = add(new THREE.PlaneGeometry(1.0, 2.0), new THREE.MeshStandardMaterial({ map: ftex, side: THREE.DoubleSide, roughness: .9 }), -4.15, 4.0, 1.0);
-      flag.userData.flag = true;
-      /* 막걸리 항아리 */
-      const jarPts = [[0, 0], [0.42, 0.04], [0.62, 0.45], [0.58, 0.85], [0.36, 1.1], [0.38, 1.18], [0, 1.18]].map(([r, y]) => new THREE.Vector2(r, y));
-      const jarMat = new THREE.MeshStandardMaterial({ color: 0x5a2e1a, roughness: .35 });
-      add(new THREE.LatheGeometry(jarPts, 16), jarMat, 4.4, 0, -0.6);
-      add(new THREE.LatheGeometry(jarPts, 16), jarMat, 5.1, 0, 0.2).scale.setScalar(0.7);
-      /* 상판 위 술병과 사발 */
-      const bottle = new THREE.MeshStandardMaterial({ color: 0x2f9a58, emissive: 0x1f6a3a, emissiveIntensity: .5, roughness: .15, transparent: true, opacity: .9 });
-      const bowl = new THREE.MeshStandardMaterial({ color: 0xf1e6cf, roughness: .5 });
-      for (const [x, z] of [[0.6, 0.3], [1.0, 0.6], [1.35, 0.2]]) add(new THREE.CylinderGeometry(0.1, 0.12, 0.5, 10), bottle, x, 2.22, z);
-      for (const [x, z] of [[-0.4, 0.7], [0.1, 0.9]]) add(new THREE.CylinderGeometry(0.22, 0.13, 0.14, 12), bowl, x, 2.04, z);
-    }
-
     /* ── AI 구역 ── 간판 위에 떠서 도는 빛나는 결정, 길가에 "AI 활용 구역" 푯말 */
     let crystal = null;
     if (p.ai) {
@@ -1349,14 +1311,24 @@ async function initDrive() {
     }
 
     scene.add(g);
-    stations.push({ ...p, group: g, face, ring, label, crystal, labelY: label.position.y, phase: Math.random() * Math.PI * 2 });
+    stations.push({ ...p, style, group: g, face, ring, label, crystal, labelY: label.position.y, phase: Math.random() * Math.PI * 2 });
   }
 
-  /* ── 선술집 앞 빨간 플라스틱 의자와 둥근 테이블 ──
-     차로 부딪히면 넘어지고 R로 다시 세운다 (장난감 블록과 같은 목록에 넣는다) */
+  /* ── 선술집 앞 나무 의자와 둥근 테이블 (models/props) ──
+     차로 부딪히면 넘어지고 R로 다시 세운다 (장난감 블록과 같은 목록에 넣는다).
+     GLB 원점은 바닥이고 코드는 메시를 물리 몸체 중심(높이 절반)에 두므로 빈 그룹에 감싸 내린다.
+     모델이 없으면 예전 원기둥으로. 자리·높이는 그대로라 npcs.js STOOL_* 는 안 바꿔도 된다 */
   {
-    const stoolMat = new THREE.MeshStandardMaterial({ color: 0xc8312b, roughness: .45 });
+    const stoolMat = new THREE.MeshStandardMaterial({ color: 0x8a5a34, roughness: .8 });
     const tableMat = new THREE.MeshStandardMaterial({ color: 0x7a4a2a, roughness: .7 });
+    const wrapProp = (name, h) => {
+      if (!props[name]) return null;
+      const holder = new THREE.Group(), m = props[name].clone();   // clone 은 지오메트리·재질을 함께 쓴다
+      m.position.y = -h / 2;
+      m.traverse(o => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; } });
+      holder.add(m);
+      return holder;
+    };
     const v = new THREE.Vector3();
     for (const st of stations) {
       st.group.updateMatrixWorld(true);
@@ -1373,15 +1345,18 @@ async function initDrive() {
       };
       /* 그룹이 0.62배라 크기는 월드 기준으로 바로 잡는다 */
       const tH = 0.7, tR = 0.62;
-      const table = new THREE.Group();
+      let table = wrapProp('table', tH);
+      if (!table) {
+      table = new THREE.Group();
       const top = new THREE.Mesh(new THREE.CylinderGeometry(tR, tR, 0.07, 18), tableMat); top.position.y = tH / 2 - 0.035;
       const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.12, tH, 8), tableMat);
       top.castShadow = leg.castShadow = true;
       table.add(top, leg);
+      }
       place(table, new CANNON.Cylinder(tR, tR, tH, 10), 0, 4.6, tH, 1.2);
       for (let k = 0; k < 4; k++) {
         const a = k * Math.PI / 2 + Math.PI / 4;
-        const stool = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.17, 0.42, 12), stoolMat);
+        const stool = wrapProp(SEAT_OF[st.style] || 'stool', 0.42) || new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.17, 0.42, 12), stoolMat);
         place(stool, new CANNON.Cylinder(0.2, 0.17, 0.42, 10), Math.cos(a) * 1.75, 4.6 + Math.sin(a) * 1.75, 0.42, 0.35);
       }
     }
@@ -2062,7 +2037,7 @@ async function initDrive() {
       updateTrail(dt, stamps);
     }
     timeU.value = t;
-    updateDayNight(t);
+    updateDayNight(dt);   // 하루 (sky.js)
     seasons.update(dt, activePos());   // 계절 — 낮밤 색 위에 덧칠하므로 updateDayNight 다음
     fireflies(t);
     for (const c of contacts) { c.icon.position.y = 1.75 + Math.sin(t * 1.4 + c.phase) * 0.12; c.icon.rotation.y = Math.sin(t * 0.6 + c.phase) * 0.35; }
