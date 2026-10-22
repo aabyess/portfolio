@@ -1121,8 +1121,9 @@ async function initDrive() {
   const NAME = [['최', '#ff6b3d'], ['상', '#1fa59c'], ['호', '#e8466e']];
   NAME.forEach(([ch, c], i) => toyBlock(ch, 2.1, 2.1, 1.05, pathX(NAME_Z) + (i - 1) * 2.35, 1.05, NAME_Z, c, 3));
   const SMALL = ['#f4a53c', '#3a9fc4', '#e8466e', '#2bb38f', '#8a6ad8'];
-  /* 작은 큐브 한 줄: FULLSTACK · DEV (가운데 한 칸 띄움) */
-  [...'FULLSTACK DEV'].forEach((ch, i) => { if (ch !== ' ') toyBlock(ch, 0.74, 0.74, 0.74, pathX(ROW_Z) + (i - 6) * 0.8, 0.37, ROW_Z, SMALL[i % 5], 0.6); });
+  /* 작은 큐브 한 줄: AI · ENGINEER (가운데 한 칸 띄움, 글자 수에 맞춰 가운데 정렬) */
+  const ROW_TEXT = 'AI ENGINEER', ROW_MID = (ROW_TEXT.length - 1) / 2;
+  [...ROW_TEXT].forEach((ch, i) => { if (ch !== ' ') toyBlock(ch, 0.74, 0.74, 0.74, pathX(ROW_Z) + (i - ROW_MID) * 0.8, 0.37, ROW_Z, SMALL[i % 5], 0.6); });
 
   function restackBlocks() {
     /* 차나 캐릭터가 블록 자리에 서 있으면 다시 쌓는 순간 블록이 튕겨 나간다. 출발점으로 옮긴다 */
@@ -1389,8 +1390,11 @@ async function initDrive() {
   /* ── 중세 손님들 — 숲길을 거닐다 포장마차 의자에 앉아 술을 마신다 (npcs.js) ──
      로딩을 막지 않게 기다리지 않는다. 의자 수치를 바꾸면 npcs.js의 STOOL_* 도 같이 바꿀 것 */
   let npcs = null;
+  let ridesRef = null;   // 탈것 바꾸기(rides)는 아래에서 만든다 — getRide 는 매 프레임 update 안에서만 불린다
+  /* 차로 치면 넘어지고 화낸다 — 지금 탈것의 위치·방향·속도·크기. 같은 객체를 재사용한다 */
+  const rideInfo = { x: 0, z: 0, heading: 0, halfX: 1.05, halfZ: 2.15, speed: 0, driving: false };
   {
-    const { createNPCs, stallsFromStations } = await import('./npcs.js');
+    const { createNPCs, stallsFromStations, attachGrab } = await import('./npcs.js');
     createNPCs({
       THREE, scene, GLTFLoader,
       dracoLoader: draco,
@@ -1401,7 +1405,27 @@ async function initDrive() {
       bridge: WORLD.bridge,
       getPlayerPos: () => activePos(),
       getNight: () => night,
-    }).then(n => { npcs = n; }).catch(e => console.warn('[npcs]', e));
+      count: 25,   // 모델을 돌려 써서 25명이 돌아다닌다
+      getRide: () => {
+        rideInfo.x = car.position.x; rideInfo.z = car.position.z;
+        rideInfo.heading = heading;              // 앞 방향 = (sin heading, cos heading)
+        rideInfo.speed = speed;                  // 부호 있는 m/s (후진이면 음수)
+        rideInfo.driving = player.mode === 'driving';
+        if (ridesRef) { const p = ridesRef.params(ridesRef.current); rideInfo.halfX = p.half[0]; rideInfo.halfZ = p.half[2]; }
+        return rideInfo;
+      },
+    }).then(n => {
+      npcs = n;
+      /* 걸어 다닐 때 손님을 짧게 클릭 = 주먹, 꾹 누르기 = 잡아서 던지기 */
+      attachGrab(n, {
+        THREE, camera, domElement: renderer.domElement,
+        getPlayerPos: () => activePos(), groundY,
+        isBlocked: () => !driveActive || panel.classList.contains('open') || (window.__weaponsArmed?.() ?? false),
+        isOnFoot: () => player.mode === 'onfoot',
+        getPlayerFacing: () => person.rotation.y,
+        playPunch: () => playerPunch(),
+      });
+    }).catch(e => console.warn('[npcs]', e));
   }
 
   /* ── 반딧불 — 선술집 근처에 많이, 숲에는 드문드문 ── */
@@ -1694,6 +1718,7 @@ async function initDrive() {
       limbs.legR.rotation.x = -swing;
       limbs.armL.rotation.x = -swing * 0.75;
       limbs.armR.rotation.x = swing * 0.75;
+      if (punchT > 0) { punchT -= dt; limbs.armR.rotation.x = -1.55 * Math.sin(Math.PI * (1 - punchT / 0.3)); }   // 주먹 잽
       person.position.y = groundY(person.position.x, person.position.z) + Math.abs(Math.sin(bob)) * 0.06 * moving;
     }
   }
@@ -1707,6 +1732,30 @@ async function initDrive() {
     next.reset().fadeIn(0.18).play();
     if (charAction) charAction.fadeOut(0.18);
     charAction = next;
+  }
+
+  /* ── 주먹 — 오른손 잽 ──
+     glb 캐릭터는 Punch_Right 클립에서 상체 트랙만 떼어 지금 걸음 위에 한 번 겹친다(다리는 계속 걷는다).
+     기본 박스 캐릭터는 오른팔을 직접 앞으로 뻗는다(walk 안에서 punchT로). */
+  let punchClip = null, punchAction = null, punchTimer = 0, punchT = 0;
+  const UPPER = /^(Abdomen|Torso|Chest|Neck|Head|Shoulder|UpperArm|LowerArm|Wrist|Index|Middle|Ring|Pinky|Thumb)/;
+  function playerPunch() {
+    if (player.mode !== 'onfoot') return;
+    const src = charClips.punch_right;
+    if (!src || !charMixer) { punchT = 0.3; return; }
+    if (!punchClip) {
+      punchClip = src.clone();
+      punchClip.tracks = punchClip.tracks.filter(t => UPPER.test(t.name.split('.')[0]));
+      punchAction = charMixer.clipAction(punchClip);
+      punchAction.setLoop(THREE.LoopOnce, 1);
+    }
+    const dur = punchClip.duration / 1.7;
+    punchAction.stop().reset();
+    punchAction.timeScale = 1.7;                // 원래 클립은 느려서 잽처럼 빠르게
+    punchAction.weight = 3;                     // 걸음 상체보다 강하게 (3:1)
+    punchAction.fadeIn(0.06).play();
+    clearTimeout(punchTimer);
+    punchTimer = setTimeout(() => punchAction.fadeOut(0.12), Math.max(0, dur - 0.12) * 1000);
   }
 
   /* ── 승하차 ── */
@@ -1961,6 +2010,7 @@ async function initDrive() {
     }
   });
   mountVehicleButton({ container: document.getElementById('g-top'), switcher: rides });
+  ridesRef = rides;   // 손님 충돌(getRide)이 지금 탈것 크기를 읽는다
   const rideIn = { speed: 0, steer: 0, moving: false, boosting: false, driving: true };   // 매 프레임 재사용
 
   /* ── 눈 위 발자국 · 바퀴 자국 (tracks.js) ──
