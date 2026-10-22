@@ -793,6 +793,7 @@ export function createMinimap(opts = {}) {
     const want = typeof force === 'boolean' ? force : !bigOpen;
     if (want === bigOpen) return bigOpen;
     if (want && document.body.dataset.view === 'doc') return false;
+    if (want && document.body.classList.contains('talking')) return false;   // 대화·낚시·가게 중엔 안 연다 (Esc가 둘 다 닫던 문제)
     bigOpen = want; big.hidden = !want;
     if (want) { sizeBig(); collect(); renderEvents(); drawBig(); }
     return bigOpen;
@@ -806,7 +807,9 @@ export function createMinimap(opts = {}) {
   big.querySelector('.x').addEventListener('click', () => toggleBig(false));
   const onKey = (e) => {
     if (!bigOpen) return;
-    if (e.code === 'Escape' || (e.code === 'KeyM' && !e.repeat)) { e.preventDefault(); e.stopImmediatePropagation(); toggleBig(false); }
+    if (e.code === 'Escape' || (e.code === 'KeyM' && !e.repeat)) { e.preventDefault(); e.stopImmediatePropagation(); toggleBig(false); return; }
+    if (e.code === 'Tab' || e.code === 'Enter') return;   // 닫기 버튼 키보드 조작은 그대로
+    e.stopPropagation();   // 지도가 열린 동안 걷기·무기·F(탈것) 키를 먹는다 (의뢰 게시판 창과 같은 방식)
   };
   addEventListener('keydown', onKey, true);
   const onResize = () => { sizeMini(); if (bigOpen) { sizeBig(); drawBig(); } acc = 1; };

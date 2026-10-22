@@ -87,7 +87,11 @@ export function createFarCull({ THREE, scene, camera, sun = null, getPlayerPos =
     let meshes = null;
     if (shFar) { meshes = []; o.traverse(x => { if (x.isMesh) { if (x.userData.__cs0 === undefined) x.userData.__cs0 = x.castShadow; meshes.push(x); } }); }
     const old = o.userData.__perfUnit;
-    units.push(o.userData.__perfUnit = { o, off, r, shFar, meshes, shOn: old ? old.shOn : true, top: o.parent === scene });
+    const unit = { o, off, r, shFar, meshes, shOn: old ? old.shOn : true, top: o.parent === scene };
+    /* 열거 안 되는 속성으로 둔다: Object3D.clone() 이 userData 를 JSON 으로 복사하는데, 순환 참조(unit.o)가 있으면
+       "Converting circular structure to JSON" 으로 터진다 (선술집 앉기 → 바텐더 잔 복제에서 발생) */
+    Object.defineProperty(o.userData, '__perfUnit', { value: unit, writable: true, configurable: true, enumerable: false });
+    units.push(unit);
   }
   function scan() {
     const prev = units.splice(0);

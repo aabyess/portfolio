@@ -418,8 +418,12 @@ export function createDialogue({
   function eligible(o) {
     return o && o.npc && !o.off && !o.guard && OK_STATES.has(o.state) && !o.angry;
   }
+  /* 다른 창(의뢰 게시판·가게·큰 지도)이 열려 있으면 대화를 걸지 않는다 — 그 창의 F/Esc 가 먼저다.
+     (캡처 리스너 순서상 대화가 먼저 F 를 먹어 게시판 위에 말풍선이 겹쳐 뜨던 문제) */
+  const OTHER_UI = '.qs-panel:not([hidden]),.sh-panel:not([hidden]),.mm-big:not([hidden])';
+  const otherUiOpen = () => !!document.querySelector(OTHER_UI);
   function findCandidate() {
-    if (S.npc || !isOnFoot() || isBlocked() || !person.visible) return null;
+    if (S.npc || !isOnFoot() || isBlocked() || !person.visible || otherUiOpen()) return null;
     const L = listNpcs(); if (!L) return null;
     const p = playerPos();
     const fx = Math.sin(person.rotation.y), fz = Math.cos(person.rotation.y);
@@ -528,7 +532,7 @@ export function createDialogue({
 
   function tryTalk(target) {
     const n = target || S.cand;
-    if (!n || S.npc || isBlocked() || !isOnFoot()) return false;
+    if (!n || S.npc || isBlocked() || !isOnFoot() || otherUiOpen()) return false;
     const L = listNpcs(); if (!L) return false;
     const info = L.find(o => o.npc === n);
     if (!eligible(info)) return false;

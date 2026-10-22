@@ -1513,6 +1513,7 @@ async function initDrive() {
         onAggro: () => toast('🛡️ 근위병: "감히 임금님께! 다음엔 정말 혼난다!"', 2400),   // 임금님을 쳐도 꾸중만
         bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
         gate: castle ? castle.villageGate(0) : null,   // 행차는 북쪽 성문으로 들어간다
+        isKingBusy: () => !!(pageant && pageant.state().current === 'feast'),   // 연회 중엔 행차 없음 (임금님은 한 분)
       });
       /* 중세 축제: 마상 창시합·활쏘기 대회·수확 모닥불·메이폴·거리 광대·밤하늘 용 (festival.js) */
       festival = createFestival({
@@ -2043,7 +2044,7 @@ async function initDrive() {
       <div class="keys"><span class="key">F</span></div><span>${driving ? '내리기' : '타기'}</span>
       ${driving
         ? '<div class="keys"><span class="key">V</span></div><span>탈것 바꾸기</span><span>· 탱크는 클릭 포격</span>'
-        : '<div class="keys"><span class="key">`</span></div><span>주먹</span><div class="keys"><span class="key">1~0 - =</span></div><span>무기</span><div class="keys"><span class="key">E</span></div><span>앉기</span><div class="keys"><span class="key">F</span></div><span>대화</span><span>· 클릭 공격(맨손: 연타 콤보 잽→스트레이트→발차기→드롭킥, 달리며 클릭 = 드롭킥, 꾹 눌러 잡기)</span>'}`;
+        : '<div class="keys"><span class="key">`</span></div><span>주먹</span><div class="keys"><span class="key">1~0 - =</span></div><span>무기</span><div class="keys"><span class="key">E</span></div><span>앉기</span><div class="keys"><span class="key">M</span></div><span>지도</span><span>· 클릭 공격(연타 콤보) · 꾹 눌러 잡기</span>'}`;
   }
   updateHint();
 
@@ -2330,7 +2331,7 @@ async function initDrive() {
       THREE, camera, person,
       getNpcs: () => npcs,
       isOnFoot: () => player.mode === 'onfoot' && !tavern.seated && !fishing.active,
-      isBlocked: () => !driveActive || panelOpen(),
+      isBlocked: () => !driveActive || panelOpen() || !!(quests && quests.open) || !!(shop && shop.open) || !!(minimap && minimap.bigOpen),
       onStart() { for (const k in keys) keys[k] = false; pSpeed = 0; if (weapons) weapons.holster(); },
       faceTo(h) { pHeading = h; pSpeed = 0; },
       onEnd() { camYaw = pHeading; },

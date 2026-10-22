@@ -48,6 +48,7 @@
      onEvent(text)     → 알림 (toast)
      onAggro(kind, pos)→ 'king' : 임금님(또는 호위병)을 건드렸다
      bounds            → {minX,maxX,minZ,maxZ} (없으면 npcs.bounds)
+     isKingBusy()      → true 면 행차를 새로 시작하지 않는다. portfolio.js: isKingBusy: () => !!(pageant && pageant.state().current === 'feast')
      center            → 불꽃놀이 자리 {x, z} (기본 마을 연못·가판대 사이 (0, 6))
      debug             → true 면 window.__village 디버그 (기본 true)
 
@@ -79,6 +80,7 @@ export function createVillage({
   isVisible = () => document.body.dataset.view !== 'doc',
   onEvent = null, onAggro = null, bounds = null, center = null, debug = true,
   gate = null,   // castle.js villageGate(0): 있으면 행차는 늘 성문으로 들어가 사라진다
+  isKingBusy = () => false,   // true 면 행차를 시작하지 않는다 (pageant.js 연회에 임금님이 앉아 있을 때 — 임금님이 둘이 되지 않게)
 } = {}) {
   if (!npcs || !npcs.addActor) return { update() {}, dispose() {}, state: {} };
   const B = bounds || npcs.bounds || { minX: -42, maxX: 42, minZ: -84, maxZ: 84 };
@@ -817,7 +819,8 @@ export function createVillage({
 
     procClock -= dt;
     if (procClock <= 0) {
-      if (!vis || P.active || !triggerProcession()) procClock = 30;
+      let kingBusy = false; try { kingBusy = !!isKingBusy(); } catch { kingBusy = false; }
+      if (!vis || P.active || kingBusy || !triggerProcession()) procClock = 30;
       else procClock = rr(PROC_EVERY[0], PROC_EVERY[1]);
     }
     if (P.active) procUpdate(dt, t, p);
