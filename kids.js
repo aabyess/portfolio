@@ -43,6 +43,8 @@
 
    옵션: playAreas: [{x, z, r}] 로 놀이터를 직접 줄 수 있다 (기본: 가판대 두 곳 옆 길 바깥 6.5 m).
    ════════════════════════════════════════════════════════════════════ */
+import { shareSkeleton, skinBoundsAll, skinLOD } from './perf.js';
+
 
 const KID_MODELS = [
   { file: 'models/npc/npc-kid-tom.glb', name: '톰' },
@@ -181,7 +183,6 @@ export async function createKids({
     model.traverse(o => {
       if (!o.isMesh) return;
       o.castShadow = true; o.receiveShadow = true;
-      o.frustumCulled = false;   // 스킨 메시: 경계 계산 대신 통째로 (7명이라 싸다)
       meshes.push(o);
       const one = m => {
         const c = m.clone(); mats.push(c);
@@ -193,6 +194,9 @@ export async function createKids({
       };
       o.material = Array.isArray(o.material) ? o.material.map(one) : one(o.material);
     });
+    skinBoundsAll(THREE, model, 1.6);   // 성능: 모델 전체 경계 구 → 화면 밖이면 안 그린다 (예전엔 frustumCulled=false 로 늘 그렸다)
+    shareSkeleton(model);   // 성능: 부위마다 따로 있던 뼈대를 하나로 (perf.js)
+    const lod = skinLOD(THREE, model, { far: 22 });   // 22 m 넘으면 부위 5개 대신 정점색 한 덩어리
     const root = new THREE.Group(); root.name = 'Kid_' + name;
     root.add(model);
     scene.add(root);
@@ -210,7 +214,7 @@ export async function createKids({
     const box = new THREE.Box3().setFromObject(model);
     const h = Math.max(1.0, box.max.y - box.min.y) / 1.3;
     return {
-      idx, name, root, model, mixer, actions, cur: null, curName: '', meshes, mats, bones, h,
+      idx, name, root, model, mixer, actions, cur: null, curName: '', meshes, mats, bones, h, lod,
       x: 0, z: 0, y: 0, rot: 0, vx: 0, vz: 0, speed: 0, hop: 0, hopV: 0,
       group: null, mode: 'play', it: false, immune: 0, frozen: 0, tx: 0, tz: 0, retarget: 0,
       dodgeT: 0, dodgeX: 0, dodgeZ: 0, sayCD: rr(0, 3), boxT: 0, boxN: 0, throwT: rr(1, 3), throwArm: 0,
@@ -646,6 +650,7 @@ export async function createKids({
       k.root.position.set(k.x, k.y + k.hop, k.z);
       k.root.rotation.y = k.rot;
       k.root.visible = k.shown && k.dist < FAR_HIDE;
+      if (k.lod) k.lod.update(k.alpha < 0.999 ? 0 : k.dist);   // 집에 가며 흐려질 땐 원래 메시 (LOD 재질은 공용이라 못 흐린다)
       if (k.dist < FAR_ANIM) {
         k.mixer.update(dt + k.mixAcc); k.mixAcc = 0;
         /* 코드 몸짓 (믹서가 모든 뼈에 키를 넣으므로 매 프레임 덮어써진다 — 누적 없음) */

@@ -61,6 +61,8 @@
      ready            Promise (모델 다 읽으면 끝남)
    콘솔(?test): __animals.list(), __animals.near(), __animals.tp('panda'), __animals.hit(), __animals.spawn('dog', x, z)
    ════════════════════════════════════════════════════════════════════ */
+import { shareSkeleton, skinBoundsAll, skinLOD } from './perf.js';
+
 
 import { PONDS } from './fishing.js';
 
@@ -206,8 +208,11 @@ export function createAnimals({
     const sp = SPECIES[kind];
     const model = clone(gltf.scene);
     model.traverse(o => {
-      if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; o.frustumCulled = false; }
+      if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; }
     });
+    skinBoundsAll(THREE, model, 1.6);   // 성능: 모델 전체 경계 구 → 화면 밖이면 안 그린다 (예전엔 frustumCulled=false 로 늘 그렸다)
+    shareSkeleton(model);   // 성능: 부위마다 따로 있던 뼈대를 하나로 (perf.js)
+    const lod = skinLOD(THREE, model, { far: 22 });   // 22 m 넘으면 부위 3~4개 대신 정점색 한 덩어리
     const obj = new THREE.Group(); obj.name = 'animal-' + kind;
     const tumbler = new THREE.Group();          // 데굴데굴은 이 안쪽에서 돈다 (몸 중심 기준)
     tumbler.position.y = sp.h; model.position.y = -sp.h;
@@ -227,7 +232,7 @@ export function createAnimals({
       x, z, y: obj.position.y, yaw, speed: 0, want: 0, tx: x, tz: z,
       mode: 'idle', timer: rr(0.5, 4), home, wild, flock, mixAcc: 0,
       vx: 0, vy: 0, vz: 0, air: false, spin: 0, roll: 0, rollV: 0, dizzy: 0, stars: null,
-      cool: rr(0, 5), followT: 0, nearT: 0, standCool: rr(0, 6), bamboo: null,
+      cool: rr(0, 5), followT: 0, nearT: 0, standCool: rr(0, 6), bamboo: null, lod,
     };
     if (kind === 'panda') a.bamboo = addBamboo(model);
     play(a, 'Idle', 0);
@@ -579,6 +584,7 @@ export function createAnimals({
     const vis = d < FAR_MIX;
     a.obj.visible = vis;
     if (!vis) { a.mixAcc = 0; return; }
+    if (a.lod) a.lod.update(d);
     a.mixAcc += dt;
     if (d < NEAR_MIX || a.mixAcc > 0.25) { a.mixer.update(a.mixAcc); a.mixAcc = 0; }
   }

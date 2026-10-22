@@ -131,6 +131,8 @@
       캔버스(renderer.domElement)에만 리스너를 달고 stopPropagation 을 하지 않으므로 window 의
       pointerdown(음악 첫 제스처)은 그대로 받는다. 버튼·패널 같은 UI 위에서는 캔버스가 이벤트를 받지 않는다.
    ════════════════════════════════════════════════════════════════════ */
+import { shareSkeleton, flatSkinnedLOD } from './perf.js';   // 성능: 부위끼리 뼈대 공유 + 먼 거리 한 덩어리 LOD
+
 
 /* 10명 (남 6, 여 4). 없는 파일은 경고만 남기고 건너뛴다 */
 export const NPC_MODELS = [
@@ -195,6 +197,7 @@ const BUBBLE_MAX = 12, BUBBLE_DIST = 35;
 const BAR_LOCAL_X = 0, BAR_LOCAL_Z = -2.2;   // 술집 주인 자리 (가판대 그룹 지역좌표, 수레 뒤). 부스 glb 가 오면 여기만 바꾼다
 const MIX_FAR = 35;              // 이보다 먼 손님은 애니메이션을 0.15초마다만 갱신
 const SHADOW_FAR = 30;           // 이보다 먼 손님은 그림자를 끈다
+const LOD_FAR = 24;              // 이보다 먼 손님은 부위 8개 대신 정점색 한 덩어리(그리기 호출 1개)로 그린다 (perf.js)
 const SCREAMS = ['으악!', '살려줘!', '도망쳐!', '꺄악!'];
 const LAUGHS = ['하하!', '푸하하!', '꼴좋다!', '어이쿠~'];
 /* 맷집: 맞으면 휘청만 하다가 쌓인 데미지가 POISE 를 넘으면 넘어진다. 4초 안 맞으면 초당 HEAL 씩 회복 */
@@ -331,6 +334,23 @@ export async function createNPCs({
   /* ── NPC 생성 ── */
   const npcs = [];
   const tint = new THREE.Color();
+  const lodMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0 });
+  const lodBase = new Map();
+  function makeLod(hi) {
+    try { return hi.length > 1 ? flatSkinnedLOD(THREE, hi, lodMat, lodBase) : null; }
+    catch (e) { console.warn('[npcs] LOD', e); return null; }
+  }
+  /* 먼 거리 LOD 켜고 끄기. 배우 옷 색을 나중에 바꿨으면(재질이 바뀜) 켤 때 정점색을 다시 굽는다 */
+  function setLod(n, on) {
+    n.lodOn = on;
+    if (on && n.hi.some((m, k) => m.material !== n.lodMats[k])) {
+      const nl = makeLod(n.hi);
+      if (nl) { n.lod.parent.remove(n.lod); n.lod = nl; n.lodMats = n.hi.map(m => m.material); }
+    }
+    for (let k = 0; k < n.hi.length; k++) n.hi[k].visible = !on;
+    n.lod.visible = on;
+    n.lod.castShadow = on && n.shadow;
+  }
   function makeNPC(src, i, vary) {
     const root = new THREE.Group();
     root.name = 'NPC_' + i;
@@ -344,7 +364,7 @@ export async function createNPCs({
       if (!o.isMesh) return;
       o.castShadow = true; o.receiveShadow = true;
       /* 스킨 메시 컬링용 경계 구 (모델 단위, 앉기·눕기·팔 들기까지 덮게 넉넉히) */
-      o.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.9, 0), 1.4);
+      o.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.9, 0), 1.6);
       meshes.push(o);
       if (!vary) return;
       const one = m => {
@@ -356,6 +376,10 @@ export async function createNPCs({
       };
       o.material = Array.isArray(o.material) ? o.material.map(one) : one(o.material);
     });
+    /* 성능: 부위(메시)마다 따로 있던 뼈대를 하나로 → 뼈 행렬 갱신 8번 → 1번. 먼 거리용 한 덩어리 LOD */
+    shareSkeleton(model);
+    const hi = meshes.filter(m => m.isSkinnedMesh);
+    const lod = makeLod(hi);
     /* root(발밑) → body(무게중심, 던질 때 여기서 구른다) → model */
     const body = new THREE.Group();
     body.position.y = COM;
@@ -403,6 +427,7 @@ export async function createNPCs({
       anger, react: 0, rolled: false, knockClip: false, hitCD: 0, close: false,
       hist: Array.from({ length: HIST }, () => ({ x: 0, y: 0, z: 0, t: -1 })),
       sc, meshes, mats, shadow: true, bubble: null, boneRest, procDirty: false,
+      hi, lod, lodOn: false, lodMats: hi.map(m => m.material),
       guard: false, off: false, fight: null, foe: null, punchAnim: 0, gatherC: null, gx: 0, gz: 0, fx: 0, fz: 0,
       bar: -1, panicT: 0, panicX: 0, panicZ: 0, watchKind: 0, watchV: null, chatG: null, arrived: false, wiping: false, talkT: 0,
       propBone, propShow: null /* null = 클립대로, true/false = 잔 보이기/숨기기 (배우) */, carry: 0 /* 0..1 쟁반 들기 자세 */, bow: 0 /* 0..1 인사 */,
@@ -667,7 +692,8 @@ export async function createNPCs({
       const pdx = n.x - px, pdz = n.z - pz;
       n.dist = Math.hypot(pdx, pdz);
       const sh = n.dist < SHADOW_FAR;
-      if (sh !== n.shadow) { n.shadow = sh; for (let k = 0; k < n.meshes.length; k++) n.meshes[k].castShadow = sh; }
+      if (sh !== n.shadow) { n.shadow = sh; for (let k = 0; k < n.meshes.length; k++) n.meshes[k].castShadow = sh; if (n.lod) n.lod.castShadow = sh && n.lodOn; }
+      if (n.lod && (n.lodOn ? n.dist < LOD_FAR - 2 : n.dist > LOD_FAR)) setLod(n, !n.lodOn);
 
       /* ── 차에 치였나 (차 테두리 직사각형 + 몸 반지름) ── */
       if (n.hitCD > 0) n.hitCD -= dt;

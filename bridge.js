@@ -10,6 +10,8 @@
      // worldLoader.load('models/autumn-world.glb', gltf => { ... bridge.hideOld(gltf.scene); ... })
      // (선택) 밤에 등불 밝게: bridge.setLampGlow(k)   k = 0(낮)..1(밤)
 */
+import { addStaticLOD } from './perf.js';
+
 
 export function createBridge({ THREE, scene, GLTFLoader, dracoLoader, world = null, pathX, bridgeData = null, url = 'models/props/bridge.glb' }) {
   const B = bridgeData ?? { z0: -43.68, z1: -29.12 };
@@ -49,6 +51,7 @@ export function createBridge({ THREE, scene, GLTFLoader, dracoLoader, world = nu
     });
     applyGlow();
     group.add(loaded);
+    addStaticLOD(THREE, loaded, { dist: 45 });   // 성능: 멀면 부위 20여 개 대신 정점색 한 덩어리 (등불 유리·불꽃은 그대로)
   }, undefined, err => console.warn('[bridge] load failed', err));
 
   return {

@@ -26,6 +26,8 @@
    ?test 일 때 window.__gfx = { state, setQuality, bench(frames), grade, fog }
    ════════════════════════════════════════════════════════════ */
 
+import { createFarCull, PERF_OFF } from './perf.js';
+
 const QUALITY = {
   low:  { pr: 1.25, post: false, shadow: 1024, bloomScale: 0,   rays: false, msaa: 0, fxaa: false, grain: 0 },
   mid:  { pr: 1.5,  post: true,  shadow: 2048, bloomScale: 0.5, rays: false, msaa: 0, fxaa: true,  grain: 0 },
@@ -82,7 +84,7 @@ function installFog(THREE) {
   for (const k in THREE.ShaderLib) add(THREE.ShaderLib[k].uniforms);
 }
 
-export async function createGraphics({ THREE, renderer, scene, camera, getNight = () => 0, getSeason = () => 'autumn', sun, hemi, sky = null, quality }) {
+export async function createGraphics({ THREE, renderer, scene, camera, getNight = () => 0, getSeason = () => 'autumn', sun, hemi, sky = null, quality, getPlayerPos = null }) {
   const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { ShaderPass }, { FXAAShader }, { Pass, FullScreenQuad }] = await Promise.all([
     import('three/addons/postprocessing/EffectComposer.js'),
     import('three/addons/postprocessing/RenderPass.js'),
@@ -93,6 +95,16 @@ export async function createGraphics({ THREE, renderer, scene, camera, getNight 
   ]);
 
   installFog(THREE);
+  /* 성능 (perf.js): 안개 너머·몇 픽셀짜리 물체는 그리는 동안만 숨기고, 먼 작은 물체는 그림자를 끈다 */
+  const cull = createFarCull({ THREE, scene, camera, sun, getPlayerPos });
+  /* 그림자 상자: 플레이어 둘레 ±55 m → 카메라가 보는 쪽으로 SHADOW_AHEAD m 당긴 ±SHADOW_HALF m.
+     뒤쪽(화면 밖) 그림자 그리기를 줄이고 같은 지도 크기로 그림자가 더 또렷해진다 */
+  const SHADOW_HALF = 45, SHADOW_AHEAD = PERF_OFF ? 0 : 20;
+  if (sun && sun.shadow && !PERF_OFF) {
+    Object.assign(sun.shadow.camera, { left: -SHADOW_HALF, right: SHADOW_HALF, top: SHADOW_HALF, bottom: -SHADOW_HALF });
+    sun.shadow.camera.updateProjectionMatrix();
+  }
+  const camFwd = new THREE.Vector3(), sunShift = new THREE.Vector3();
   /* 이미 그려진 적 있는 재질은 새 안개 조각으로 다시 컴파일 */
   scene.traverse(o => { const ms = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : []; for (const m of ms) if (m.fog !== false) m.needsUpdate = true; });
 
@@ -406,8 +418,20 @@ export async function createGraphics({ THREE, renderer, scene, camera, getNight 
     /* low: 그림자 지도를 두 프레임에 한 번만 다시 그린다 (그림자 패스 그리기 호출이 절반) */
     if (q === 'low') { renderer.shadowMap.autoUpdate = false; if (perf.frames % 2 === 0) renderer.shadowMap.needsUpdate = true; }
     else renderer.shadowMap.autoUpdate = true;
-    if (composer) composer.render(dt);
-    else renderer.render(scene, camera);
+    cull.begin(dt);
+    if (sun && sun.castShadow) {   // 그림자 상자를 보는 쪽으로 (그린 뒤 되돌린다 — followSun 이 매 프레임 다시 정한다)
+      camFwd.set(0, 0, -1).applyQuaternion(camera.quaternion); camFwd.y = 0;
+      if (camFwd.lengthSq() > 1e-6) camFwd.normalize();
+      sunShift.copy(camFwd).multiplyScalar(SHADOW_AHEAD);
+      sun.position.add(sunShift); sun.target.position.add(sunShift);
+    }
+    try {
+      if (composer) composer.render(dt);
+      else renderer.render(scene, camera);
+    } finally {
+      cull.end();
+      if (sun && sun.castShadow) { sun.position.sub(sunShift); sun.target.position.sub(sunShift); sunShift.set(0, 0, 0); }
+    }
   }
 
   function setSize(w, h) {
@@ -472,6 +496,7 @@ export async function createGraphics({ THREE, renderer, scene, camera, getNight 
       frameMs: +perf.avg.toFixed(2), fps: perf.avg ? Math.round(1000 / perf.avg) : 0,
       passes: composer ? composer.passes.filter(p => p.enabled).length : 0,
       calls: i.render.calls, triangles: i.render.triangles, textures: i.memory.textures, geometries: i.memory.geometries,
+      cull: cull.stats(),
       shadow: sun ? sun.shadow.mapSize.x : 0, waterPatched: waterMeshes.filter(w => w.material.userData.gfxWater).length
     };
   }
@@ -489,7 +514,7 @@ export async function createGraphics({ THREE, renderer, scene, camera, getNight 
 
   if (test) {
     window.__gfx = {
-      state, setQuality, tune, fog: FOG, grade: GRADE,
+      state, setQuality, tune, fog: FOG, grade: GRADE, cull,
       get bloom() { return bloom; },
       /* 프레임 시간 재기: await __gfx.bench(120) */
       bench(frames = 120) {

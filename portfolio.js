@@ -1205,6 +1205,7 @@ async function initDrive() {
   const BOOTH_ORDER = ['tudor', 'norse', 'bavarian', 'venta', 'tent', 'flemish', 'osteria'];
   const BOOTH_TOP = { tudor: 6.3, bavarian: 7.0, norse: 6.6, osteria: 5.1, venta: 5.1, flemish: 7.1, tent: 7.1 };   // 그룹 단위 꼭대기
   const SEAT_OF = { norse: 'stool-log', venta: 'stool-barrel', flemish: 'stool-barrel' };   // 나머지는 stool
+  const { addStaticLOD } = await import('./perf.js');   // 멀리 있는 정적 묶음을 한 덩어리로 (그리기 호출 줄이기)
   const props = {};
   {
     const pl = new GLTFLoader(); pl.setDRACOLoader(draco);
@@ -1280,6 +1281,7 @@ async function initDrive() {
         if (o.name.startsWith('sign_face') || /^Sign_Face/.test(mn)) paintSign(o, p);
       });
       g.add(booth);
+      addStaticLOD(THREE, booth, { dist: 38, keep: o => /_Glow|^Sign_Face/.test(o.material.name || '') || o.name.startsWith('sign_face') });   // perf.js: 멀면 한 덩어리
     }
 
     /* 따뜻한 가판대 불빛 */
@@ -1376,6 +1378,7 @@ async function initDrive() {
 
     scene.add(g);
     stations.push({ ...p, style, group: g, face, ring, label, crystal, labelY: label.position.y, phase: Math.random() * Math.PI * 2 });
+    addStaticLOD(THREE, face, { dist: 38, keep: o => !!o.material.map || o === crystal || o.parent === crystal });   // 간판 기둥·틀·지붕만 합침 (그림 판은 그대로)
   }
 
   /* ── 선술집 앞 나무 의자와 둥근 테이블 (models/props) ──
@@ -1391,6 +1394,7 @@ async function initDrive() {
       m.position.y = -h / 2;
       m.traverse(o => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; } });
       holder.add(m);
+      addStaticLOD(THREE, holder, { dist: 30 });   // 의자·테이블: 멀면 한 덩어리 (holder 째 물리로 움직여도 됨)
       return holder;
     };
     const v = new THREE.Vector3();
@@ -2450,7 +2454,7 @@ async function initDrive() {
 
   /* ── 그래픽 (graphics.js) — 빛 번짐·색 보정·땅안개·물·햇살 줄기, 화질 자동 조절 (음악 버튼 옆 "화질") ── */
   const { createGraphics } = await import('./graphics.js');
-  const gfx = await createGraphics({ THREE, renderer, scene, camera, sun, hemi, sky,
+  const gfx = await createGraphics({ THREE, renderer, scene, camera, sun, hemi, sky, getPlayerPos: () => activePos(),
     getNight: () => night, getSeason: () => seasons.season });
 
   function loop() {

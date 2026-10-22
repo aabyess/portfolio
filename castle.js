@@ -39,6 +39,8 @@
      colliders → [{ x, z, y, hx, hy, hz, rotY, door }]  (CANNON 을 안 넘기면 PM이 직접 박스를 만들 때 쓴다)
      update(dt, t), dispose()
    ════════════════════════════════════════════════════════════ */
+import { addStaticLOD } from './perf.js';
+
 
 /* 길: portfolio.js 의 pathX = 3.08·sin(-0.04286·z) 와 같은 값 (월드 JSON path.amp / path.k) */
 const AMP = 3.08, K = 0.04285714285714286;
@@ -269,6 +271,8 @@ export function createCastle({ THREE, scene, GLTFLoader, dracoLoader = null, gro
       if (g.parts.port) g.parts.portY = g.parts.port.position.y;
       g.root.add(sc);
       applyOpen(g);
+      /* 성능: 멀면 정점색 한 덩어리로 (움직이는 문·쇠창살·깃발·횃불·간판은 그대로) */
+      addStaticLOD(THREE, sc, { dist: 50, keep: o => { for (let p = o; p && p !== sc; p = p.parent) if (/gate_door|portcullis|flag_|banner_|torch_flame|gate_sign/.test(p.name)) return true; return false; } });
     }
     res(true);
   }, undefined, err => { console.warn('[castle] 모델을 못 불러왔어요', err); res(false); }));
