@@ -1117,7 +1117,7 @@ async function initDrive() {
     prevCar.copy(car.position);
     carBody.position.set(car.position.x, car.position.y + 0.85, car.position.z);
     carBody.quaternion.setFromEuler(0, car.rotation.y, 0);
-    if (person.visible) personBody.position.set(person.position.x, person.position.y + 0.9, person.position.z);
+    if (person.visible && !(tavern && tavern.seated)) personBody.position.set(person.position.x, person.position.y + 0.9, person.position.z);   // 앉은 사람은 의자·테이블을 밀지 않게
     else personBody.position.set(0, -50, 0);
     world.step(1 / 60, dt, 3);
     for (const b of toyBlocks) {
@@ -1395,7 +1395,7 @@ async function initDrive() {
       attachGrab(n, {
         THREE, camera, domElement: renderer.domElement,
         getPlayerPos: () => activePos(), groundY,
-        isBlocked: () => !driveActive || panel.classList.contains('open') || (window.__weaponsArmed?.() ?? false),
+        isBlocked: () => !driveActive || panel.classList.contains('open') || !!(weapons && weapons.armed) || !!(tavern && tavern.seated),   // 무기를 들면 클릭은 공격
         isOnFoot: () => player.mode === 'onfoot',
         getPlayerFacing: () => person.rotation.y,
         playPunch: () => playerPunch(),
@@ -1774,7 +1774,10 @@ async function initDrive() {
       <div class="keys"><span class="key">Space</span></div><span>보기·열기</span>
       ${driving ? '<div class="keys"><span class="key">Shift</span></div><span>부스트</span><div class="keys"><span class="key">H</span></div><span>경적</span>' : '<div class="keys"><span class="key">Shift</span></div><span>달리기</span>'}
       <div class="keys"><span class="key">R</span></div><span>다시 쌓기</span>
-      <div class="keys"><span class="key">F</span></div><span>${driving ? '내리기' : '타기'}</span>`;
+      <div class="keys"><span class="key">F</span></div><span>${driving ? '내리기' : '타기'}</span>
+      ${driving
+        ? '<div class="keys"><span class="key">V</span></div><span>탈것 바꾸기</span><span>· 탱크는 클릭 포격</span>'
+        : '<div class="keys"><span class="key">1~0</span></div><span>무기</span><div class="keys"><span class="key">E</span></div><span>앉기</span><span>· 클릭 공격(맨손: 주먹·꾹 눌러 잡기)</span>'}`;
   }
   updateHint();
 
@@ -1972,10 +1975,16 @@ async function initDrive() {
      차 루트 안에서 겉모습만 갈아 끼우고, 속도·회전·카메라·충돌 상자 값만 여기로 넘겨받는다.
      위쪽 바의 버튼이나 V 키로 고른다. 모델은 처음 고를 때 내려받는다. */
   const { createVehicleSwitcher, mountVehicleButton, applyBodyShape } = await import('./vehicles.js');
+  let weapons = null, tavern = null;   // 아래에서 만든다. 탈것(탱크 폭발)·물리·잡기가 먼저 참조하므로 미리 선언
   const rides = await createVehicleSwitcher({
     THREE, GLTFLoader, dracoLoader: draco,
     carGroup: car, person, scene,
     personClips: () => charClips,
+    /* 탱크: 마우스로 포탑 조준, 클릭으로 포격. 폭발은 무기 모듈의 것을 같이 쓴다 */
+    camera, domElement: renderer.domElement, groundY,
+    getNpcs: () => npcs, toyBlocks,
+    isBlocked: () => !driveActive || panelOpen(),
+    explode: (pos, r, f) => { if (weapons) weapons.explode(pos, r, f); },
     onChange(id, p) {
       MAX_FWD = p.maxFwd; MAX_REV = p.maxRev; ACCEL = p.accel; TURN = p.turn;
       ENTER_CAR_R = p.enterR;
@@ -1996,6 +2005,38 @@ async function initDrive() {
     canMark: (x, z) => bridgeY(x, z) === null && heightAt(x, z) > WORLD.stream.water - 0.05
   });
   const trackIn = { mode: 'driving', ride: 'car', heading: 0, speed: 0, car: car.position, person: person.position };   // 매 프레임 재사용
+
+  /* ── 선술집 — 빈 의자 옆에서 E로 앉고, 주문판에서 술을 시켜 마신다 (tavern.js) ── */
+  {
+    const { createTavern } = await import('./tavern.js');
+    const { stallsFromStations } = await import('./npcs.js');
+    tavern = createTavern({
+      THREE, scene, camera, person,
+      personClips: () => charClips,
+      getNpcs: () => npcs,
+      stalls: stallsFromStations(stations, { THREE, toyBlocks }),
+      isBlocked: () => !driveActive || panelOpen(),
+      onSit() { pSpeed = 0; if (weapons) weapons.holster(); },
+      onStand(h) { pHeading = camYaw = h; pSpeed = 0; },
+    });
+  }
+  const tavernIn = { onFoot: false, keys: null };   // 매 프레임 재사용
+
+  /* ── 무기 10종 — 걸을 때 1~9·0으로 고르고 클릭으로 공격 (weapons.js). 피 없이 넘어지기만 한다 ── */
+  {
+    const { createWeapons } = await import('./weapons.js');
+    weapons = createWeapons({
+      THREE, scene, camera, person, GLTFLoader, dracoLoader: draco,
+      domElement: renderer.domElement,
+      personClips: () => charClips,
+      getNpcs: () => npcs,
+      toyBlocks, groundY,
+      colliders: () => stations.map(s => s.group),
+      isBlocked: () => !driveActive || panelOpen(),
+      canUse: () => player.mode === 'onfoot' && !tavern.seated,
+    });
+  }
+  const weaponsIn = { onFoot: false };   // 매 프레임 재사용
 
   function updateCamera(dt) {
     const onFoot = player.mode === 'onfoot';
@@ -2020,7 +2061,9 @@ async function initDrive() {
   function step(dt) {
     t += dt;
     if (player.mode === 'driving') drive(dt);
-    else walk(dt);
+    else if (!tavern.seated) walk(dt);   // 의자에 앉아 있으면 걷기를 멈춘다
+    tavernIn.onFoot = player.mode === 'onfoot'; tavernIn.keys = keys;
+    tavern.update(dt, tavernIn);
     rideIn.speed = speed; rideIn.steer = steer; rideIn.boosting = !!keys.boost;
     rideIn.moving = !!(keys.fwd || keys.back); rideIn.driving = player.mode === 'driving';
     rides.update(dt, rideIn);   // 말 걸음·바퀴·핸들·탄 사람 자세
@@ -2044,7 +2087,9 @@ async function initDrive() {
     dust(dt);
     fallingLeaves(dt, t, activePos().x, activePos().z);
     followSun(activePos().x, activePos().z);
-    updateCamera(dt);
+    tavern.cameraStep(camera, dt, updateCamera);   // 앉으면 어깨 너머 카메라, 취하면 살짝 흔들림
+    weaponsIn.onFoot = player.mode === 'onfoot';
+    weapons.update(dt, weaponsIn);                 // 무기 자세·투사체·효과·카메라 흔들림 (카메라 갱신 다음)
     proximity();
     if (npcs) npcs.update(dt, t);
     trackIn.mode = player.mode; trackIn.ride = rides.current; trackIn.heading = heading; trackIn.speed = speed;

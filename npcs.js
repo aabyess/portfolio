@@ -152,7 +152,7 @@ const TABLE_AVOID_R = 1.9;       // 배회 중 테이블 원 밖으로 밀어내
 const SIDE_STEP = 0.55;          // 의자 옆으로 다가서는 거리
 const FRONT_STEP = 0.22;         // 앉기 직전 의자 앞(테이블 쪽)에 서는 거리
 const SIT_TIME = 0.6;            // 앉기/일어서기 보간 시간
-const PLAYER_R = 3.0, PLAYER_R_OUT = 3.6;
+const PLAYER_R = 1.6, PLAYER_R_OUT = 2.2;   // 부딪힐 만큼 가까울 때만 비켜 간다 (멈추거나 쳐다보지 않음)
 const CLIP_LEN = { Idle: 3, Walk: 1, Sit: 4, Drink: 3, Cheers: 1.5 };
 
 const ST = { WANDER: 0, PAUSE: 1, TO_SEAT: 2, SIT_DOWN: 3, SEATED: 4, STAND_UP: 5, LEAVE: 6,
@@ -174,7 +174,6 @@ const FLEE_SPEED = 4.5;
 const WATCH_R = 12;              // 이 안에서 누가 맞으면 구경꾼이 반응
 const BUBBLE_MAX = 8, BUBBLE_DIST = 35;
 const BAR_LOCAL_X = 0, BAR_LOCAL_Z = -2.2;   // 술집 주인 자리 (가판대 그룹 지역좌표, 수레 뒤). 부스 glb 가 오면 여기만 바꾼다
-const BAR_LOOK_R = 7;
 const MIX_FAR = 35;              // 이보다 먼 손님은 애니메이션을 0.15초마다만 갱신
 const SHADOW_FAR = 30;           // 이보다 먼 손님은 그림자를 끈다
 const SCREAMS = ['으악!', '살려줘!', '도망쳐!', '꺄악!'];
@@ -667,19 +666,16 @@ export async function createNPCs({
         }
       } else n.yielding = false;
 
-      if (n.yielding) {
-        /* 플레이어를 바라보고 길 바깥쪽으로 옆걸음 */
-        turnTo(n, Math.atan2(-pdx, -pdz), dt);
-        if (n.dist < PLAYER_R) {
-          const inv = 1 / Math.max(n.dist, 0.01);
-          let ax = pdx * inv, az = pdz * inv;
-          const roadSide = Math.sign(n.x - pathX(n.z)) || n.side;
-          if (ax * roadSide < 0) ax = roadSide * Math.max(0.6, Math.abs(az));   // 길 가운데로는 피하지 않는다
-          const k = 1.1 * dt * (PLAYER_R - n.dist) / PLAYER_R + 0.6 * dt;
-          n.x = clampX(n.x + ax * k); n.z += az * k;
-        }
-        play(n, 'Idle');
-      } else {
+      if (n.yielding && n.dist < PLAYER_R) {
+        /* 멈추지 않고 자기 갈 길을 걸으면서 플레이어에게서 살짝 비켜 간다 (길 가운데로는 피하지 않는다) */
+        const inv = 1 / Math.max(n.dist, 0.01);
+        let ax = pdx * inv, az = pdz * inv;
+        const roadSide = Math.sign(n.x - pathX(n.z)) || n.side;
+        if (ax * roadSide < 0) ax = roadSide * Math.max(0.6, Math.abs(az));
+        const k = 1.1 * dt * (PLAYER_R - n.dist) / PLAYER_R + 0.6 * dt;
+        n.x = clampX(n.x + ax * k); n.z += az * k;
+      }
+      {
         switch (n.state) {
           case ST.WANDER: {
             play(n, 'Walk');
@@ -1185,7 +1181,7 @@ export async function createNPCs({
       let g = null;
       for (const q of groups) if (!q.active) { g = q; break; }
       const a = npcs[Math.floor(rnd() * nWalkers)];
-      if (g && a && a.state === ST.WANDER && !a.yielding && Math.hypot(a.x - px, a.z - pz) < 60) {
+      if (g && a && a.state === ST.WANDER && !a.yielding) {   // 플레이어 근처가 아니라 맵 어디서든 모인다
         g.mN = 0; g.m[g.mN++] = a;
         const want = rnd() < 0.5 ? 2 : 1;
         for (let i = 0; i < nWalkers && g.mN <= want; i++) {
@@ -1605,7 +1601,7 @@ export async function createNPCs({
       n.y = groundY(n.x, n.z);
       /* 플레이어가 가까우면 플레이어를, 아니면 앉은 손님 쪽(=길 쪽)을 본다 */
       let face = bp.rotY;
-      if (Math.hypot(px - bp.x, pz - bp.z) < BAR_LOOK_R || n.state === ST.SERVE) face = Math.atan2(px - n.x, pz - n.z);
+      if (n.state === ST.SERVE) face = Math.atan2(px - n.x, pz - n.z);   // 주문받을 때만 플레이어를 본다. 평소엔 손님 쪽
       else if (s.occupied > 0) face = Math.atan2(s.x - n.x, s.z - n.z);
       turnTo(n, face, dt * 0.7);
       n.timer -= dt;
