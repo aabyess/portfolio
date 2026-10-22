@@ -158,7 +158,8 @@ const CLIP_LEN = { Idle: 3, Walk: 1, Sit: 4, Drink: 3, Cheers: 1.5 };
 const ST = { WANDER: 0, PAUSE: 1, TO_SEAT: 2, SIT_DOWN: 3, SEATED: 4, STAND_UP: 5, LEAVE: 6,
   HELD: 7, FLYING: 8, LYING: 9, GETUP: 10, STOMP: 11, ROLL: 12, CHASE: 13, STAGGER: 14,
   FLEE: 15, WATCH: 16, CHAT: 17, BAR: 18, SERVE: 19, BAR_RETURN: 20,
-  GUARD: 21, GUARD_LEAVE: 22, FIGHT: 23, GATHER: 24, BARD_GO: 25, BARD_PLAY: 26, OFF: 27 };
+  GUARD: 21, GUARD_LEAVE: 22, FIGHT: 23, GATHER: 24, BARD_GO: 25, BARD_PLAY: 26, OFF: 27,
+  ACTOR: 28 /* village.js 배우: 바깥에서 조종 */ };
 
 /* 이벤트 (events.js 와 같이 쓴다) */
 const GUARD_MAX = 4, GUARD_SPEED = 5.5, GUARD_CATCH_R = 1.0, GUARD_GONE_R = 45;
@@ -888,7 +889,7 @@ export async function createNPCs({
       n.spinX = -(4 + Math.min(6, sp * 0.7)); n.spinZ = rr(-1, 1);   // 뒤로 공중제비
       play(n, n.actions.Struggle ? 'Struggle' : 'Idle', 0.12);         // 술잔은 놓친다
     }
-    n.react = cause === 'fight' || n.guard ? 0 : pickReact(cause);
+    n.react = cause === 'fight' || n.guard || n.actor ? 0 : pickReact(cause);   // [village] 배우는 화내지 않는다
     n.rolled = false;
     if (cause !== 'fight') emit(cause === 'punch' ? 'knockdown' : cause === 'shot' ? 'weapon' : cause, n);
     setAnger(n, false);
@@ -905,7 +906,7 @@ export async function createNPCs({
     n.state = ST.STAGGER; n.timer = 0;
     play(n, 'Idle', 0.1);
     const r = rnd();
-    n.react = cause === 'fight' || n.guard ? 0 : r < 0.65 ? ST.CHASE : ST.STOMP;   // 주먹엔 쫓아올 확률이 높다
+    n.react = cause === 'fight' || n.guard || n.actor ? 0 : r < 0.65 ? ST.CHASE : ST.STOMP;   // 주먹엔 쫓아올 확률이 높다
     setAnger(n, true);
     bystanders(n);
     if (cause !== 'fight') emit('punch', n);
@@ -1068,7 +1069,8 @@ export async function createNPCs({
     n.vx = n.vy = n.vz = 0; n.react = 0; n.panicT = 0; n.yielding = false;
     n.body.rotation.set(0, 0, 0);
     setAnger(n, false);
-    if (n.bar != null && stalls[n.bar] && stalls[n.bar].bar) {
+    if (n.actor) { n.state = ST.ACTOR; n.y = groundY(n.x = Number.isFinite(n.x) ? n.x : 0, n.z = Number.isFinite(n.z) ? n.z : 0); play(n, 'Idle', 0.2); }   // [village]
+    else if (n.bar != null && stalls[n.bar] && stalls[n.bar].bar) {
       const b = stalls[n.bar].bar;
       n.x = b.x; n.z = b.z; n.rot = b.rotY; n.y = groundY(n.x, n.z);
       n.state = ST.BAR; n.timer = rr(1, 4); play(n, 'Idle', 0.2);
@@ -1143,6 +1145,7 @@ export async function createNPCs({
   function toIdle(n) {
     setAnger(n, false);
     n.body.rotation.set(0, 0, 0);
+    if (n.actor) { n.state = ST.ACTOR; play(n, 'Idle', 0.3); return; }   // [village] 배우는 대본으로 돌아간다
     if (n.guard) { n.state = guardWant ? ST.GUARD : ST.GUARD_LEAVE; play(n, guardWant ? 'Run' : 'Walk', 0.3); return; }
     if (n.fight && n.fight.active) { n.state = ST.FIGHT; n.arrived = true; setAnger(n, true); play(n, 'Idle', 0.3); return; }
     if (n.panicT > 1) { startFlee(n, false); return; }
@@ -1166,7 +1169,7 @@ export async function createNPCs({
     const r = radius || ALARM_R[kind] || ALARM_R.shot;
     let n0 = 0;
     for (const n of npcs) {
-      if (n.guard || n.off || !(Math.hypot(n.x - pos.x, n.z - pos.z) <= r)) continue;   // 경비병은 도망가지 않는다
+      if (n.guard || n.actor || n.off || !(Math.hypot(n.x - pos.x, n.z - pos.z) <= r)) continue;   // 경비병은 도망가지 않는다
       n.panicX = pos.x; n.panicZ = pos.z;
       n.panicT = Math.max(n.panicT, rr(6, 10));
       n0++;
@@ -1288,7 +1291,7 @@ export async function createNPCs({
   }
 
   /* ════ GTA 식 이벤트용 (events.js 가 부른다): 경비병 · 술집 싸움 · 음유시인 ════ */
-  const emit = (kind, n) => { if (api.onAggression) api.onAggression(kind, n); };
+  const emit = (kind, n) => { if (n && n.noAggro) return; if (api.onAggression) api.onAggression(kind, n); };
   const isDriving = () => { const r = getRide ? getRide() : null; return !!(r && r.driving); };
 
   /* ── 경비병 (풀 4명, 필요할 때만 만든다) ── */
@@ -1731,6 +1734,8 @@ export async function createNPCs({
         if (bard.phase === 1 && rnd() < dt * 0.12) say(n, '♪ ♫', 1.4);
       }
       n.y += (groundY(n.x, n.z) - n.y) * Math.min(1, dt * 12);
+    } else if (n.state === ST.ACTOR) {   // [village] 위치·방향은 village.js 가 정한다. 높이만 땅에 맞춘다
+      n.y += (groundY(n.x, n.z) - n.y) * Math.min(1, dt * 12);
     } else if (n.state === ST.GETUP) {
       n.timer += dt;
       const g = groundY(n.cx, n.cz);
@@ -1774,6 +1779,45 @@ export async function createNPCs({
     return best;
   }
 
+  /* ── [village] 배우 (village.js 의 임금님·호위병·깃발잡이·소매치기) ──
+     addActor(re, { noAggro }) → n : 파일 이름이 re 와 맞는 모델을 복제해 숨긴 채 만든다(웬만하면 한 번만 만들고 재사용).
+     actorOn(n, x, z, rot) / actorOff(n) : 보이기·숨기기. ACTOR 상태에선 npcs.js 가 움직이지 않으니 n.x/n.z/n.rot 를 직접 쓴다.
+     actorPlay(n, clip, fade, timeScale) : 클립 재생. isActing(n) : 맞거나 잡혀 넘어져 있지 않고 대본대로 움직이는 중인가.
+     맞거나 치이면 평소처럼 넘어졌다 일어나 ACTOR 로 돌아온다(화내기·쫓기 없음). noAggro 면 수배 점수(onAggression)를 안 보낸다.
+     watch(n, target, dur, cheer) : 걷거나 서 있는 손님을 dur 초 동안 target({x,z}) 쪽을 보며 환호(Cheers) 또는 발 동동하게 한다. */
+  function addActor(re, { noAggro = false } = {}) {
+    const rx = new RegExp(re);
+    const src = sources.find(q => rx.test(q.file)) || sources[0];
+    const n = makeNPC(src, npcs.length, false);
+    n.actor = true; n.noAggro = noAggro;
+    n.off = true; n.root.visible = false; n.state = ST.OFF;
+    npcs.push(n);
+    return n;
+  }
+  function actorOn(n, x, z, rot = 0) {
+    if (!n || !n.actor) return;
+    n.off = false; n.root.visible = true; n.state = ST.ACTOR;
+    n.x = x; n.z = z; n.y = groundY(x, z); n.rot = rot;
+    n.body.rotation.set(0, 0, 0); n.react = 0; n.panicT = 0; setAnger(n, false);
+    n.root.position.set(n.x, n.y, n.z); n.root.rotation.y = rot;
+    play(n, 'Idle', 0);
+  }
+  function actorOff(n) {
+    if (!n || !n.actor) return false;
+    if (n.state === ST.HELD && ctrl && ctrl.held === n) return false;   // 잡혀 있으면 놓을 때까지 둔다 → false (나중에 다시 부른다)
+    n.off = true; n.root.visible = false; n.state = ST.OFF;
+    if (n.bubble) { n.bubble.sp.visible = false; n.bubble.n = null; n.bubble = null; }
+    return true;
+  }
+  function actorPlay(n, name, fade = FADE, ts = 1) { play(n, name, fade); if (n.cur && n.curName === name) n.cur.setEffectiveTimeScale(ts); }
+  const isActing = n => !!n && n.state === ST.ACTOR;
+  function watch(n, target, dur = 2, cheer = true) {
+    if (!n || n.off || n.actor || n.guard || n.bar >= 0 || (n.state !== ST.WANDER && n.state !== ST.PAUSE)) return false;
+    n.state = ST.WATCH; n.timer = dur; n.watchV = target; n.yielding = false; n.watchKind = cheer ? 0 : 1;
+    play(n, cheer ? 'Cheers' : (n.actions.Stomp ? 'Stomp' : 'Idle'), 0.25);
+    return true;
+  }
+
   function dispose() {
     if (ctrl) { ctrl.dispose(); ctrl = null; }
     for (const n of npcs) {
@@ -1788,6 +1832,7 @@ export async function createNPCs({
     spearMat.dispose(); bladeMat.dispose(); spearGeo.dispose(); bladeGeo.dispose(); axeGeo.dispose();
     for (const b of bubbles) { scene.remove(b.sp); b.tex.dispose(); b.mat.dispose(); }
     if (debug && globalThis.__npcs) delete globalThis.__npcs;
+    if (debug && globalThis.__npcsApi === api) delete globalThis.__npcsApi;   // [village]
     /* 클론은 지오메트리·재질을 원본과 공유한다 → 원본에서 한 번만 해제 */
     for (const src of sources) {
       src.scene.traverse(o => {
@@ -1804,6 +1849,7 @@ export async function createNPCs({
   /* 디버그: __npcs.hit(i) 로 i번 손님을 차에 친 것처럼 넘어뜨린다 */
   if (debug) {
     const names = Object.keys(ST);
+    globalThis.__npcsApi = api;   // [village] 테스트 페이지에서 진짜 API 를 쓰려고
     globalThis.__npcs = {
       hit(i = 0, speed = 8) {
         const n = npcs[i]; if (!n) return false;
@@ -1839,6 +1885,7 @@ export async function createNPCs({
     get fight() { return fight; }, get bard() { return bard; },
     pick: pickRay, knockDown, list, freeSeatNear, reserveSeat: reserveSeatAPI, releaseSeat: releaseSeatAPI,
     alarm, barkeeperServe, say,
+    addActor, actorOn, actorOff, actorPlay, isActing, watch,   // [village]
     onPlayerPunch: null,
     _grab: { pick, grab, setTarget, release, punch, setCtrl: c => { ctrl = c; } } });
 }

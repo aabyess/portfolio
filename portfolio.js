@@ -1366,13 +1366,14 @@ async function initDrive() {
 
   /* ── 중세 손님들 — 숲길을 거닐다 포장마차 의자에 앉아 술을 마신다 (npcs.js) ──
      로딩을 막지 않게 기다리지 않는다. 의자 수치를 바꾸면 npcs.js의 STOOL_* 도 같이 바꿀 것 */
-  let npcs = null, events = null;
+  let npcs = null, events = null, village = null;
   let ridesRef = null;   // 탈것 바꾸기(rides)는 아래에서 만든다 — getRide 는 매 프레임 update 안에서만 불린다
   /* 차로 치면 넘어지고 화낸다 — 지금 탈것의 위치·방향·속도·크기. 같은 객체를 재사용한다 */
   const rideInfo = { x: 0, z: 0, heading: 0, halfX: 1.05, halfZ: 2.15, speed: 0, driving: false };
   {
     const { createNPCs, stallsFromStations, attachGrab } = await import('./npcs.js');
     const { createEvents } = await import('./events.js');
+    const { createVillage } = await import('./village.js');
     createNPCs({
       THREE, scene, GLTFLoader,
       dracoLoader: draco,
@@ -1421,6 +1422,18 @@ async function initDrive() {
         },
         onEvent: text => toast(text, 2400),
         stallNames: stations.map(s => s.name),
+      });
+      /* 임금님 행차·밤 불꽃놀이·닭 소동·소매치기 (village.js) */
+      village = createVillage({
+        THREE, scene, camera, npcs: n, pathX, groundY,
+        getPlayerPos: () => activePos(),
+        isOnFoot: () => player.mode === 'onfoot',
+        getNight: () => night,
+        isMusicOn: () => document.getElementById('g-music-btn')?.getAttribute('aria-pressed') === 'true',
+        isVisible: () => driveActive,
+        onEvent: text => toast(text, 2400),
+        onAggro: () => { if (events) events.setStars(Math.max(events.stars, 3)); },
+        bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
       });
     }).catch(e => console.warn('[npcs]', e));
   }
@@ -2152,6 +2165,7 @@ async function initDrive() {
     proximity();
     if (npcs) npcs.update(dt, t);
     if (events) events.update(dt, t);
+    if (village) village.update(dt, t);
     if (dialogue) dialogue.update(dt);   // npcs.update 다음 (말 상대를 세워 둔다)
     {
       const busy = !!((dialogue && dialogue.active) || (fishing && fishing.active));   // 대화·낚시 중엔 단축 바·안내를 숨긴다
