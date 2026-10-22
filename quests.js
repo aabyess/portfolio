@@ -996,6 +996,7 @@ export function createQuests({
     get coins() { return coins(); },
     get active() { return active ? active.id : null; },
     board: BOARD, ids: ALL_IDS,
+    target: () => (active ? safe(() => Q[active.id].target(active.d)) : null),   // 미니맵 퀘스트 별
   };
   if (debug) {
     globalThis.__quests = Object.assign(api, {

@@ -858,7 +858,8 @@ export function createVillage({
     get thief() { return TH.active ? { phase: TH.phase, t: Math.round(TH.t) } : null; },
     get clocks() { return { procession: Math.round(procClock), chickens: Math.round(chickClock), thief: Math.round(thiefClock), fireworks: Math.round(FW.clock) }; },
   };
-  const api = { update, dispose, triggerProcession, triggerFireworks, triggerChickens, triggerThief, state };
+  const api = { update, dispose, triggerProcession, triggerFireworks, triggerChickens, triggerThief, state,
+    thiefPos: () => (TH.active && cast && cast.thief ? { x: cast.thief.x, z: cast.thief.z } : null) };   // 미니맵 빨간 점
   if (debug) globalThis.__village = {
     procession: triggerProcession, fireworks: triggerFireworks, chickens: triggerChickens, thief: triggerThief,
     state: () => JSON.parse(JSON.stringify(state)),

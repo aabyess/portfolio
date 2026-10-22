@@ -719,7 +719,7 @@ async function initDrive() {
   const { FESTIVAL_CLEAR, createFestival } = await import('./festival.js');   // 창시합장·활터·마을 광장
   const { SHOP_CLEAR, createShop } = await import('./shop.js');                // 물약 가게·상인 자리
   const { PAGEANT_CLEAR, createPageant } = await import('./pageant.js');       // 연회·결혼식·등불·투석기·줄다리기 자리
-  let castle = null, animals = null, quests = null, kids = null, shop = null;   // 아래에서 만든다 (걷기·운전 충돌, 행차가 먼저 참조)
+  let castle = null, animals = null, quests = null, kids = null, shop = null, minimap = null;   // 아래에서 만든다 (걷기·운전 충돌, 행차가 먼저 참조)
   /* 개울 위 돌다리 (bridge.js) — 월드의 옛 나무다리(EX_Bridge)는 숨긴다. 높이 곡선은 bridgeY 그대로 */
   const { createBridge } = await import('./bridge.js');
   const bridge = createBridge({ THREE, scene, GLTFLoader, dracoLoader: draco, pathX, bridgeData: WORLD.bridge });
@@ -1731,6 +1731,7 @@ async function initDrive() {
       if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') { e.preventDefault(); galGo(e.code === 'ArrowLeft' ? -1 : 1); }
       return;
     }
+    if (e.code === 'KeyM' && !e.repeat && minimap) { e.preventDefault(); minimap.toggleBig(); return; }   // 큰 지도
     /* 게시판 근처에서 Space는 브레이크가 아니라 "프로젝트 보기" */
     if (e.code === 'Space' && promptFor) { e.preventDefault(); activate(promptFor); hideHint(); return; }
     if (e.code === 'KeyR') { e.preventDefault(); restackBlocks(); return; }
@@ -2365,6 +2366,25 @@ async function initDrive() {
     onOpen() { for (const k in keys) keys[k] = false; pSpeed = 0; speed = 0; if (weapons) weapons.holster(); },
   });
 
+  /* ── 미니맵(오른쪽 위, 클릭 = 북쪽 고정) + M 큰 지도 — 행사·퀘스트·상인 표시 (minimap.js) ── */
+  {
+    const { createMinimap } = await import('./minimap.js');
+    minimap = createMinimap({
+      THREE, pathX, world: WORLD, camera,
+      bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
+      getPlayerPos: () => activePos(),
+      getPlayerHeading: () => (player.mode === 'onfoot' ? pHeading : heading),
+      getRidePos: () => (player.mode === 'onfoot' ? car.position : null),
+      stations,
+      getPonds: () => (fishing && fishing.ponds) || null,
+      castle, vprops,
+      getFestival: () => festival, getPageant: () => pageant, getShop: () => shop,
+      getQuests: () => quests, getVillage: () => village,
+      getNpcs: () => npcs, getAnimals: () => animals,
+      isActive: () => driveActive,
+    });
+  }
+
   /* ── 배경 소리: 바람·낙엽·개울·선술집 웅성거림·새·귀뚜라미·부엉이·개구리·발소리 (audio.js, 전부 합성음) ── */
   const { createAudio } = await import('./audio.js');
   const ambience = createAudio({
@@ -2466,6 +2486,7 @@ async function initDrive() {
     if (animals) animals.update(dt, t);
     if (quests) quests.update(dt, t);
     if (kids) kids.update(dt, t);
+    if (minimap) minimap.update(dt);
     bridge.setLampGlow(night);
     if (dialogue) dialogue.update(dt);   // npcs.update 다음 (말 상대를 세워 둔다)
     {
