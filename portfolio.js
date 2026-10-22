@@ -710,6 +710,11 @@ async function initDrive() {
   const NAME_Z = WORLD.start.z - 12, ROW_Z = WORLD.start.z - 9.6, BLOCK_X = pathX(NAME_Z) + 15;
   const KINGDOM_SIGN = { x: pathX(WORLD.start.z - 6) - 3.6, z: WORLD.start.z - 6 };
   const { PONDS } = await import('./fishing.js');   // 연못 자리의 나무는 치운다
+  const { CASTLE_CLEAR } = await import('./castle.js');   // 성문·성벽 자리의 나무도
+  let castle = null, animals = null;   // 아래에서 만든다 (걷기·운전 충돌, 행차가 먼저 참조)
+  /* 개울 위 돌다리 (bridge.js) — 월드의 옛 나무다리(EX_Bridge)는 숨긴다. 높이 곡선은 bridgeY 그대로 */
+  const { createBridge } = await import('./bridge.js');
+  const bridge = createBridge({ THREE, scene, GLTFLoader, dracoLoader: draco, pathX, bridgeData: WORLD.bridge });
   worldLoader.load('models/autumn-world.glb', gltf => {
     gltf.scene.traverse(o => {
       if (!o.isMesh) return;
@@ -731,10 +736,12 @@ async function initDrive() {
     });
     seasons.attachWorld(gltf.scene);   // 계절: 잎·땅·길 색과 눈 쌓임 (addWind 다음에 붙여야 둘 다 산다)
     scene.add(gltf.scene);
+    bridge.hideOld(gltf.scene);
     clearTrees(gltf.scene, PROJECTS.filter(p => p.ai).map(p => p.pos), 7.5);
     clearTrees(gltf.scene, PONDS.map(p => [p.x, p.z]), 6.2);
     clearTrees(gltf.scene, [[BLOCK_X, (NAME_Z + ROW_Z) / 2]], 6);       // 장난감 블록 자리
     clearTrees(gltf.scene, [[KINGDOM_SIGN.x, KINGDOM_SIGN.z]], 2.6);   // 상호왕국 표지판
+    clearTrees(gltf.scene, CASTLE_CLEAR.spots, CASTLE_CLEAR.r);         // 북쪽 성문
   });
 
   /* ── 풀 — 브루노 시몽 숲처럼 짧고 뾰족한 풀을 촘촘히 ──
@@ -1406,6 +1413,11 @@ async function initDrive() {
 
   /* ── 중세 손님들 — 숲길을 거닐다 포장마차 의자에 앉아 술을 마신다 (npcs.js) ──
      로딩을 막지 않게 기다리지 않는다. 의자 수치를 바꾸면 npcs.js의 STOOL_* 도 같이 바꿀 것 */
+  /* ── 북쪽 길 끝 성문 "상호성" (castle.js) — 임금님 행차가 이리로 들어간다. 성벽은 물리 상자로 막는다 ── */
+  {
+    const { createCastle } = await import('./castle.js');
+    castle = createCastle({ THREE, scene, GLTFLoader, dracoLoader: draco, groundY, pathX, CANNON, world, getNight: () => night });
+  }
   let npcs = null, events = null, village = null;
   let ridesRef = null;   // 탈것 바꾸기(rides)는 아래에서 만든다 — getRide 는 매 프레임 update 안에서만 불린다
   /* 차로 치면 넘어지고 화낸다 — 지금 탈것의 위치·방향·속도·크기. 같은 객체를 재사용한다 */
@@ -1442,7 +1454,7 @@ async function initDrive() {
         isBlocked: () => !driveActive || panel.classList.contains('open') || !!(weapons && weapons.armed) || !!(tavern && tavern.seated) || !!(dialogue && dialogue.active) || !!(fishing && fishing.active) || attackBusy(),   // 무기를 들면 클릭은 공격
         isOnFoot: () => player.mode === 'onfoot',
         getPlayerFacing: () => person.rotation.y,
-        playPunch: () => playerPunch(),
+        playPunch: () => { playerPunch(); if (animals) animals.punchFrom(person.position, person.rotation.y); },
       });
       /* 수배 ★·경비병·술집 싸움·음유시인 (events.js) */
       events = createEvents({
@@ -1479,8 +1491,25 @@ async function initDrive() {
         onEvent: text => toast(text, 2400),
         onAggro: () => toast('🛡️ 근위병: "감히 임금님께! 다음엔 정말 혼난다!"', 2400),   // 임금님을 쳐도 꾸중만
         bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
+        gate: castle ? castle.villageGate(0) : null,   // 행차는 북쪽 성문으로 들어간다
       });
     }).catch(e => console.warn('[npcs]', e));
+  }
+
+  /* ── 돌아다니는 동물 19마리: 판다·곰·사슴·여우·토끼·양·멧돼지·강아지·고양이 (animals.js) ── */
+  {
+    const { createAnimals } = await import('./animals.js');
+    animals = createAnimals({
+      THREE, scene, GLTFLoader, dracoLoader: draco, groundY, pathX,
+      bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
+      roadHalf: WORLD.path.half, waterY: WORLD.stream.water,
+      stalls: stations.map(s => ({ x: s.group.position.x, z: s.group.position.z })),
+      getPlayerPos: () => activePos(), getNpcs: () => npcs,
+      isOnFoot: () => player.mode === 'onfoot',
+      isBlocked: () => !driveActive,
+      onEvent: text => toast(text, 2200),
+      getRide: () => rideInfo,   // 차로 치면 데굴데굴 (npcs 의 getRide 가 매 프레임 채운다)
+    });
   }
 
   /* ── 반딧불 — 선술집 근처에 많이, 숲에는 드문드문 ── */
@@ -1696,6 +1725,7 @@ async function initDrive() {
 
     if (clampToBounds(car.position)) speed *= 0.3;
     if (fishing && fishing.pushOut(car.position, 1.4)) speed *= 0.5;   // 연못에 빠지지 않게
+    if (castle && castle.pushOut(car.position, 1.4)) speed *= 0.5;     // 성벽
     car.position.y += (groundY(car.position.x, car.position.z) - car.position.y) * Math.min(1, dt * 12);
     car.rotation.order = 'YXZ';
     car.rotation.y = heading;
@@ -1755,6 +1785,7 @@ async function initDrive() {
 
     if (clampToBounds(person.position)) pSpeed = 0;
     if (fishing && fishing.pushOut(person.position, 0.35)) pSpeed *= 0.5;
+    if (castle && castle.pushOut(person.position, 0.35)) pSpeed *= 0.5;
     person.rotation.y = pHeading;
 
     /* 달리는 동안만 카메라가 진행 방향으로 따라 돈다 */
@@ -2142,7 +2173,7 @@ async function initDrive() {
     camera, domElement: renderer.domElement, groundY,
     getNpcs: () => npcs, toyBlocks,
     isBlocked: () => !driveActive || panelOpen(),
-    explode: (pos, r, f) => { if (weapons) weapons.explode(pos, r, f); if (events) events.notify('explosion', pos); },
+    explode: (pos, r, f) => { if (weapons) weapons.explode(pos, r, f); if (events) events.notify('explosion', pos); if (animals) animals.hitAt(pos, r, f); },
     onChange(id, p) {
       MAX_FWD = p.maxFwd; MAX_REV = p.maxRev; ACCEL = p.accel; TURN = p.turn;
       ENTER_CAR_R = p.enterR;
@@ -2207,6 +2238,8 @@ async function initDrive() {
       toyBlocks, groundY,
       colliders: () => stations.map(s => s.group),
       isBlocked: () => !driveActive || panelOpen() || !!(dialogue && dialogue.active),
+      onExplode: (p, r, f) => { if (animals) animals.hitAt(p, r, f); },   // 폭탄·바주카·박격포에 동물도 데굴데굴
+      onNoise: (k, p) => { if (animals) animals.alarm(p); },              // 총소리에 동물이 도망
       canUse: () => player.mode === 'onfoot' && !tavern.seated && !(fishing && fishing.active),
     });
   }
@@ -2223,6 +2256,8 @@ async function initDrive() {
       onStart() { for (const k in keys) keys[k] = false; pSpeed = 0; if (weapons) weapons.holster(); },
       faceTo(h) { pHeading = h; pSpeed = 0; },
       onEnd() { camYaw = pHeading; },
+      getSeason: () => seasons.season,   // 계절·밤 전용 대사
+      getNight: () => night,
     });
   }
 
@@ -2300,6 +2335,9 @@ async function initDrive() {
     if (npcs) npcs.update(dt, t);
     if (events) events.update(dt, t);
     if (village) village.update(dt, t);
+    if (castle) castle.update(dt, t);
+    if (animals) animals.update(dt, t);
+    bridge.setLampGlow(night);
     if (dialogue) dialogue.update(dt);   // npcs.update 다음 (말 상대를 세워 둔다)
     {
       const busy = !!((dialogue && dialogue.active) || (fishing && fishing.active));   // 대화·낚시 중엔 단축 바·안내를 숨긴다

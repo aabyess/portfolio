@@ -1,0 +1,55 @@
+<!doctype html>
+<!-- bridge.js 단독 확인 페이지: http://localhost:8732/tools/blender/bridge/test.html -->
+<html><head><meta charset="utf-8"><title>bridge test</title>
+<style>html,body{margin:0;height:100%;background:#222;overflow:hidden}</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script></head><body>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { createBridge } from '../../../bridge.js';
+const WORLD = await (await fetch('../../../models/autumn-world.json')).json();
+const pathX = z => WORLD.path.amp * Math.sin(-WORLD.path.k * z);
+const B = WORLD.bridge;
+const bridgeY = (x, z) => (z < B.z0 || z > B.z1 || Math.abs(x - pathX(z)) > B.halfW) ? null : B.top + B.arch * Math.sin(Math.PI * (z - B.z0) / (B.z1 - B.z0));
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight); renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xc9a98f);
+scene.add(new THREE.HemisphereLight(0xffb48a, 0x1a1030, 0.9));
+const sun = new THREE.DirectionalLight(0xff9050, 1.6); sun.position.set(-20, 16, -10); sun.castShadow = true;
+Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 20, bottom: -20 }); sun.target.position.set(3, 0, -36);
+scene.add(sun, sun.target);
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 300);
+camera.position.set(-9, 4, -30);
+const ctl = new OrbitControls(camera, renderer.domElement); ctl.target.set(3, 0.3, -36.4);
+const draco = new DRACOLoader(); draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/');
+const bridge = createBridge({ THREE, scene, GLTFLoader, dracoLoader: draco, pathX, bridgeData: B, url: '../../../models/props/bridge.glb' });
+const wl = new GLTFLoader(); wl.setDRACOLoader(draco);
+wl.load('../../../models/autumn-world.glb', g => { scene.add(g.scene); bridge.hideOld(g.scene); window.__world = g.scene; });
+// red markers on the bridgeY profile (should sit exactly on the cobbles)
+for (let z = B.z0; z <= B.z1 + 0.01; z += 1.2) for (const dx of [-2.4, 0, 2.4]) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(0.06), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+  m.position.set(pathX(z) + dx, bridgeY(pathX(z) + dx, z), z); scene.add(m);
+}
+window.__bridge = bridge; window.__cam = camera; window.__ctl = ctl;
+// raycast check: deck surface vs bridgeY
+window.__check = () => {
+  const rc = new THREE.Raycaster(); const out = [];
+  for (let z = B.z0 + 0.05; z < B.z1; z += 1.0) for (const dx of [-2.3, 0, 2.3]) {
+    const x = pathX(z) + dx;
+    rc.set(new THREE.Vector3(x, 5, z), new THREE.Vector3(0, -1, 0));
+    const hit = rc.intersectObject(bridge.group, true)[0];
+    out.push(hit ? +(hit.point.y - bridgeY(x, z)).toFixed(3) : 'miss');
+  }
+  return out;
+};
+renderer.setAnimationLoop(() => { ctl.update(); renderer.render(scene, camera); });
+</script></body></html>
