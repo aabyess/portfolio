@@ -338,6 +338,15 @@ body.is-touch #g-found{bottom:150px;padding:10px 12px}
 /* ── 배경음악 ── */
 .g-music-btn{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font:inherit}
 body.intro-on .g-music-btn{visibility:hidden}
+/* ── 계절 배지 — 아래 얇은 막대가 이번 계절이 얼마나 지났는지 ── */
+.g-season{position:relative;display:inline-flex;align-items:center;gap:6px;overflow:hidden;cursor:default;--p:0}
+.g-season .i{font-style:normal;font-size:14px;line-height:1}
+.g-season::after{content:"";position:absolute;left:0;bottom:0;height:2px;width:calc(var(--p) * 100%);
+  background:#e8734a;opacity:.6;transition:width .25s linear}
+.g-season[data-season="winter"]::after{background:#7fa8d8}
+.g-season[data-season="spring"]::after{background:#ea8fb4}
+.g-season[data-season="summer"]::after{background:#4f9a3c}
+body.intro-on .g-season{visibility:hidden}
 .g-music-btn[aria-pressed="false"]{opacity:.62}
 .g-music-btn[aria-pressed="false"] svg{opacity:.5}
 #g-music{position:fixed;right:0;bottom:0;width:200px;height:200px;z-index:-1;opacity:0;pointer-events:none;overflow:hidden}
@@ -613,6 +622,7 @@ body.is-touch #g-prompt .space{display:none}
     </button>
     <div class="g-brand"><b>최상호</b><span>Full-stack Developer</span></div>
     <span class="sp"></span>
+    <span class="g-btn g-season" id="g-season" role="status" aria-live="polite" title="지금 계절 — 1분마다 계절이 바뀝니다"><i class="i" aria-hidden="true">🍂</i><span class="t">가을</span></span>
     <button class="g-btn g-music-btn" id="g-music-btn" type="button" aria-pressed="true" title="배경음악 켜기/끄기 — ♪ 중세시대 선술집 Ambience · 한석봉 ASMR (YouTube)">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
       <span>음악 켜짐</span>

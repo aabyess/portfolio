@@ -315,7 +315,10 @@ function createMusic() {
       player = new YT.Player('g-music-player', {
         width: 200, height: 200, videoId: VIDEO,
         playerVars: { controls: 0, start: 7, loop: 1, playlist: VIDEO, playsinline: 1, rel: 0, modestbranding: 1 },
-        events: { onReady: () => { ready = true; player.setVolume(35); sync(); } }
+        events: { onReady: () => {
+          ready = true; player.setVolume(35); sync();
+          if (navigator.userActivation?.hasBeenActive) start();   // 인트로 중에 이미 클릭·키 입력이 있었다면 바로 튼다
+        } }
       });
     };
     const sc = document.createElement('script');
@@ -332,10 +335,21 @@ function createMusic() {
     if (!ready) return;
     if (on) player.playVideo(); else player.pauseVideo();
   }
-  /* 자동 재생이 막혔다면 사용자의 첫 조작 순간에 다시 튼다 */
+  /* 자동 재생이 막혔다면 사용자의 첫 조작 순간에 다시 튼다.
+     유튜브 플레이어는 첫 조작의 playVideo()를 무시할 때가 있어서 0.8초 뒤 확인하고 최대 3번까지 다시 부른다 */
+  let retry = 0;
+  const canPlay = () => want && ready && document.body.dataset.view === 'drive';
+  const playing = () => player.getPlayerState() === YT.PlayerState.PLAYING;
   function start() {
-    if (!want || !ready || document.body.dataset.view !== 'drive') return;
-    if (player.getPlayerState() !== YT.PlayerState.PLAYING) player.playVideo();
+    if (!canPlay() || playing()) return;
+    clearTimeout(retry);
+    let tries = 0;
+    const attempt = () => {
+      if (!canPlay() || playing()) return;
+      player.playVideo();
+      if (++tries < 3) retry = setTimeout(attempt, 800);
+    };
+    attempt();
   }
   btn.addEventListener('click', e => {
     e.stopPropagation();
@@ -653,9 +667,15 @@ async function initDrive() {
     for (const h of nightGlow.heads) h.intensity = 12 + 28 * k;   // 밤에도 앞 블록이 하얗게 날아가지 않을 만큼만
   }
 
+  /* ── 계절 (seasons.js) ──
+     약 1분마다 가을 → 겨울 → 봄 → 여름. 낮밤 위에 덧칠하므로 step()에서 updateDayNight 바로 다음에 부른다 */
+  const { createSeasons } = await import('./seasons.js');
+  const seasons = createSeasons({ THREE, scene, renderer, hemi, sun, skyU, badge: document.getElementById('g-season') });
+
   /* 월드 바깥 바닥 — 지형 가장자리가 허공에 뜨지 않게 */
   {
     const outer = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), new THREE.MeshStandardMaterial({ color: 0x6e3412, roughness: 1 }));
+    seasons.addGround(outer.material);   // 계절: 바깥 바닥 색과 눈
     outer.rotation.x = -Math.PI / 2; outer.position.y = -0.6; outer.receiveShadow = true;
     scene.add(outer);
   }
@@ -733,6 +753,7 @@ async function initDrive() {
       }
       if (o.name.includes('Water')) o.castShadow = false;
     });
+    seasons.attachWorld(gltf.scene);   // 계절: 잎·땅·길 색과 눈 쌓임 (addWind 다음에 붙여야 둘 다 산다)
     scene.add(gltf.scene);
     clearTrees(gltf.scene, PROJECTS.filter(p => p.ai).map(p => p.pos), 7.5);
   });
@@ -786,7 +807,9 @@ async function initDrive() {
       sh.uniforms.uTime = timeU;
       sh.uniforms.uTrail = { value: trailTex };
       sh.uniforms.uHalf = { value: new THREE.Vector2(HX, HZ) };
-      sh.vertexShader = 'uniform float uTime; uniform sampler2D uTrail; uniform vec2 uHalf;\nvarying float vH; varying float vPatch; varying float vPress;\n' +
+      /* 계절: 풀 색(dry/lush)과 쌓인 눈(uSnow)은 seasons.js가 매 프레임 바꾼다 */
+      Object.assign(sh.uniforms, seasons.uniforms);
+      sh.vertexShader = 'uniform float uTime; uniform sampler2D uTrail; uniform vec2 uHalf; uniform float uSnow;\nvarying float vH; varying float vPatch; varying float vPress;\n' +
         sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
         vec4 gw = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
         vH = clamp(position.y / ${H.toFixed(2)}, 0.0, 1.0);
@@ -795,14 +818,15 @@ async function initDrive() {
         float press = texture2D(uTrail, (gw.xz + uHalf) / (uHalf * 2.0)).r;
         vPress = press;
         transformed.y *= 1.0 - press * 0.82;                       // 밟히면 눕는다
+        transformed.y *= 1.0 - uSnow * 0.5;                        // 눈에 묻혀 짧아진다
         float gs = sin(uTime*1.7 + gw.x*0.33 + gw.z*0.27)*0.55 + sin(uTime*2.9 + gw.x*0.8 - gw.z*0.45)*0.2 + 0.3;
         float bw = vH * vH * (1.0 - press);
         transformed.x += gs * bw * 0.22; transformed.z += gs * bw * 0.09;`);
-      sh.fragmentShader = 'varying float vH; varying float vPatch; varying float vPress;\n' + sh.fragmentShader.replace('#include <color_fragment>',
+      sh.fragmentShader = 'uniform vec3 uDry; uniform vec3 uLush; uniform float uSnow;\nvarying float vH; varying float vPatch; varying float vPress;\n' + sh.fragmentShader.replace('#include <color_fragment>',
         `#include <color_fragment>
-        vec3 dry = vec3(0.86, 0.55, 0.22), lush = vec3(0.62, 0.52, 0.18);
-        diffuseColor.rgb *= mix(dry, lush, vPatch) * 1.35;
-        diffuseColor.rgb *= mix(0.38, 1.12, vH) * (1.0 - vPress * 0.1);`);
+        diffuseColor.rgb *= mix(uDry, uLush, vPatch) * 1.35;
+        diffuseColor.rgb *= mix(0.38, 1.12, vH) * (1.0 - vPress * 0.1);
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.9, 0.97), uSnow * (0.35 + 0.6 * vH));   // 눈이 쌓이면 하얗게`);
     };
     const spots = [];
     for (let j = 0; j < GZ; j++) for (let i = 0; i < GX; i++) {
@@ -837,6 +861,7 @@ async function initDrive() {
       mesh.setColorAt(i, cols[i % 4]);
     }
     scene.add(mesh);
+    seasons.attachLeaves(mesh);   // 계절: 겨울엔 그치고 봄엔 분홍 꽃잎으로 (보이는 개수 mesh.count를 seasons가 정한다)
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), one = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
     return (dt, t, cx, cz) => {
       st.forEach((l, i) => {
@@ -1938,6 +1963,7 @@ async function initDrive() {
     }
     timeU.value = t;
     updateDayNight(t);
+    seasons.update(dt, activePos());   // 계절 — 낮밤 색 위에 덧칠하므로 updateDayNight 다음
     fireflies(t);
     for (const c of contacts) { c.icon.position.y = 1.75 + Math.sin(t * 1.4 + c.phase) * 0.12; c.icon.rotation.y = Math.sin(t * 0.6 + c.phase) * 0.35; }
     dust(dt);
