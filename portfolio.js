@@ -716,6 +716,7 @@ async function initDrive() {
   const KINGDOM_SIGN = { x: pathX(WORLD.start.z - 6) - 3.6, z: WORLD.start.z - 6 };
   const { PONDS } = await import('./fishing.js');   // 연못 자리의 나무는 치운다
   const { CASTLE_CLEAR } = await import('./castle.js');   // 성문·성벽 자리의 나무도
+  const { FESTIVAL_CLEAR, createFestival } = await import('./festival.js');   // 창시합장·활터·마을 광장
   let castle = null, animals = null, quests = null, kids = null;   // 아래에서 만든다 (걷기·운전 충돌, 행차가 먼저 참조)
   /* 개울 위 돌다리 (bridge.js) — 월드의 옛 나무다리(EX_Bridge)는 숨긴다. 높이 곡선은 bridgeY 그대로 */
   const { createBridge } = await import('./bridge.js');
@@ -748,6 +749,7 @@ async function initDrive() {
     clearTrees(gltf.scene, [[KINGDOM_SIGN.x, KINGDOM_SIGN.z]], 2.6);   // 상호왕국 표지판
     clearTrees(gltf.scene, CASTLE_CLEAR.spots, CASTLE_CLEAR.r);         // 북쪽 성문
     for (const g of vprops.clearGroups) clearTrees(gltf.scene, g.spots, g.r);   // 오두막·밭·풍차
+    clearTrees(gltf.scene, FESTIVAL_CLEAR.spots, FESTIVAL_CLEAR.r);              // 축제 자리
   });
 
   /* ── 풀 — 브루노 시몽 숲처럼 짧고 뾰족한 풀을 촘촘히 ──
@@ -1429,7 +1431,7 @@ async function initDrive() {
     const { createCastle } = await import('./castle.js');
     castle = createCastle({ THREE, scene, GLTFLoader, dracoLoader: draco, groundY, pathX, CANNON, world, getNight: () => night });
   }
-  let npcs = null, events = null, village = null;
+  let npcs = null, events = null, village = null, festival = null;
   let ridesRef = null;   // 탈것 바꾸기(rides)는 아래에서 만든다 — getRide 는 매 프레임 update 안에서만 불린다
   /* 차로 치면 넘어지고 화낸다 — 지금 탈것의 위치·방향·속도·크기. 같은 객체를 재사용한다 */
   const rideInfo = { x: 0, z: 0, heading: 0, halfX: 1.05, halfZ: 2.15, speed: 0, driving: false };
@@ -1503,6 +1505,19 @@ async function initDrive() {
         onAggro: () => toast('🛡️ 근위병: "감히 임금님께! 다음엔 정말 혼난다!"', 2400),   // 임금님을 쳐도 꾸중만
         bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
         gate: castle ? castle.villageGate(0) : null,   // 행차는 북쪽 성문으로 들어간다
+      });
+      /* 중세 축제: 마상 창시합·활쏘기 대회·수확 모닥불·메이폴·거리 광대·밤하늘 용 (festival.js) */
+      festival = createFestival({
+        THREE, scene, camera, npcs: n, GLTFLoader, dracoLoader: draco, pathX, groundY,
+        getPlayerPos: () => activePos(),
+        isOnFoot: () => player.mode === 'onfoot',
+        getNight: () => night,
+        getSeason: () => seasons.season,
+        isMusicOn: () => document.getElementById('g-music-btn')?.getAttribute('aria-pressed') === 'true',
+        isVisible: () => driveActive,
+        onEvent: text => toast(text, 2600),
+        getPlayerWeapon: () => (weapons ? weapons.current : 'none'),
+        bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
       });
     }).catch(e => console.warn('[npcs]', e));
   }
@@ -2268,7 +2283,7 @@ async function initDrive() {
       personClips: () => charClips,
       getNpcs: () => npcs,
       toyBlocks, groundY,
-      colliders: () => stations.map(s => s.group),
+      colliders: () => festival ? [...stations.map(s => s.group), ...festival.colliders()] : stations.map(s => s.group),   // 활터 과녁에 화살이 꽂힌다
       isBlocked: () => !driveActive || panelOpen() || !!(dialogue && dialogue.active) || !!(quests && quests.open),
       onExplode: (p, r, f) => { if (animals) animals.hitAt(p, r, f); },   // 폭탄·바주카·박격포에 동물도 데굴데굴
       onNoise: (k, p) => { if (animals) animals.alarm(p); },              // 총소리에 동물이 도망
@@ -2383,6 +2398,7 @@ async function initDrive() {
     if (npcs) npcs.update(dt, t);
     if (events) events.update(dt, t);
     if (village) village.update(dt, t);
+    if (festival) festival.update(dt, t);
     if (castle) castle.update(dt, t);
     vprops.update(dt, t);
     if (animals) animals.update(dt, t);
