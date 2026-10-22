@@ -718,6 +718,7 @@ async function initDrive() {
   const { CASTLE_CLEAR } = await import('./castle.js');   // 성문·성벽 자리의 나무도
   const { FESTIVAL_CLEAR, createFestival } = await import('./festival.js');   // 창시합장·활터·마을 광장
   const { SHOP_CLEAR, createShop } = await import('./shop.js');                // 물약 가게·상인 자리
+  const { PAGEANT_CLEAR, createPageant } = await import('./pageant.js');       // 연회·결혼식·등불·투석기·줄다리기 자리
   let castle = null, animals = null, quests = null, kids = null, shop = null;   // 아래에서 만든다 (걷기·운전 충돌, 행차가 먼저 참조)
   /* 개울 위 돌다리 (bridge.js) — 월드의 옛 나무다리(EX_Bridge)는 숨긴다. 높이 곡선은 bridgeY 그대로 */
   const { createBridge } = await import('./bridge.js');
@@ -752,6 +753,7 @@ async function initDrive() {
     for (const g of vprops.clearGroups) clearTrees(gltf.scene, g.spots, g.r);   // 오두막·밭·풍차
     clearTrees(gltf.scene, FESTIVAL_CLEAR.spots, FESTIVAL_CLEAR.r);              // 축제 자리
     clearTrees(gltf.scene, SHOP_CLEAR.spots, SHOP_CLEAR.r);                      // 물약 가게·상인
+    clearTrees(gltf.scene, PAGEANT_CLEAR.spots, PAGEANT_CLEAR.r);                // 연회장·투석기·줄다리기
   });
 
   /* ── 풀 — 브루노 시몽 숲처럼 짧고 뾰족한 풀을 촘촘히 ──
@@ -1437,7 +1439,7 @@ async function initDrive() {
     const { createCastle } = await import('./castle.js');
     castle = createCastle({ THREE, scene, GLTFLoader, dracoLoader: draco, groundY, pathX, CANNON, world, getNight: () => night });
   }
-  let npcs = null, events = null, village = null, festival = null;
+  let npcs = null, events = null, village = null, festival = null, pageant = null;
   let ridesRef = null;   // 탈것 바꾸기(rides)는 아래에서 만든다 — getRide 는 매 프레임 update 안에서만 불린다
   /* 차로 치면 넘어지고 화낸다 — 지금 탈것의 위치·방향·속도·크기. 같은 객체를 재사용한다 */
   const rideInfo = { x: 0, z: 0, heading: 0, halfX: 1.05, halfZ: 2.15, speed: 0, driving: false };
@@ -1523,6 +1525,21 @@ async function initDrive() {
         isVisible: () => driveActive,
         onEvent: text => toast(text, 2600),
         getPlayerWeapon: () => (weapons ? weapons.current : 'none'),
+        bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
+      });
+      /* 왕실 연회·결혼식 행렬·하늘 등불·투석기 시연·줄다리기 (pageant.js) — 축제·행차와 겹치지 않는다 */
+      pageant = createPageant({
+        THREE, scene, camera, npcs: n, pathX, groundY,
+        getPlayerPos: () => activePos(),
+        isOnFoot: () => player.mode === 'onfoot',
+        getNight: () => night,
+        getSeason: () => seasons.season,
+        isMusicOn: () => document.getElementById('g-music-btn')?.getAttribute('aria-pressed') === 'true',
+        isVisible: () => driveActive,
+        isBusy: () => !!(festival && festival.state().current),
+        isKingBusy: () => !!(village && village.state().procession),
+        onEvent: text => toast(text, 2600),
+        getTavern: () => tavern, getKids: () => kids, castle,
         bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
       });
     }).catch(e => console.warn('[npcs]', e));
@@ -1721,6 +1738,7 @@ async function initDrive() {
     if (e.code === 'KeyF') {   // F: 대화(dialogue.js 가 먼저 가로챈다) > 의뢰 게시판 > 낚시 > 탈것
       e.preventDefault();
       if (player.mode === 'onfoot' && quests && quests.onF()) { hideHint(); return; }
+      if (player.mode === 'onfoot' && pageant && pageant.onF(e.repeat)) { hideHint(); return; }   // 연회 자리·소원 등불·투석기·줄다리기
       if (player.mode === 'onfoot' && shop && shop.onF()) { hideHint(); return; }
       if (player.mode === 'onfoot' && fishing && fishing.onF()) return;
       toggleVehicle(); hideHint();
@@ -2421,6 +2439,7 @@ async function initDrive() {
     if (events) events.update(dt, t);
     if (village) village.update(dt, t);
     if (festival) festival.update(dt, t);
+    if (pageant) pageant.update(dt, t);
     if (castle) castle.update(dt, t);
     vprops.update(dt, t);
     if (animals) animals.update(dt, t);
