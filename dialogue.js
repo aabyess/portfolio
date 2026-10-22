@@ -76,7 +76,7 @@ const CAM_BLEND = 0.7;        // 대화가 끝나고 원래 카메라로 돌아�
 /* 대화할 수 있는 상태 (npcs.list() 의 state 이름) */
 const OK_STATES = new Set(['WANDER', 'PAUSE', 'SEATED', 'BAR', 'SERVE', 'WATCH', 'CHAT']);
 /* 대화 중 이 상태가 되면 대화를 끝낸다 */
-const ABORT_STATES = new Set(['HELD', 'FLYING', 'LYING', 'GETUP', 'STOMP', 'ROLL', 'CHASE', 'STAGGER', 'FLEE',
+const ABORT_STATES = new Set(['ARGUE', 'ARM', 'DANCE', 'HUG', 'BREAKUP', 'HELD', 'FLYING', 'LYING', 'GETUP', 'STOMP', 'ROLL', 'CHASE', 'STAGGER', 'FLEE',
   'FIGHT', 'GUARD', 'GUARD_LEAVE', 'BARD_GO', 'BARD_PLAY', 'OFF', 'SIT_DOWN', 'STAND_UP']);
 
 /* ── 직업별 이름·이름표 색 (models/npc/npc-*.glb) — 같은 모델 복제는 idx 로 다른 이름 ── */

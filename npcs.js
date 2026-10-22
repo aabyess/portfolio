@@ -119,6 +119,15 @@
      인원: count 옵션(예: 25). 처음 10명은 원래 색, 그 뒤 복제는 옷 색·키(0.95~1.05)를 조금씩 바꾼다.
      성능: 35 m 밖 애니메이션 0.15초 간격, 30 m 밖 그림자 끔, 스킨 메시 경계 구 고정, 말풍선 8개 재사용.
        25명 + 주인 7명 기준 update 한 번 약 0.1~0.2 ms (테스트 페이지).
+     사회생활 [social] (자동, 연결 코드 필요 없음):
+       술자리 — 같은 테이블이 다 같이 건배("건배!"/"상호왕국을 위하여!"), 세 잔 마시면 "한 잔 더!" → 주인이 걸어와 잔을 준다.
+       취기 n.drunk 0..1 — 마실수록 오르고 4~5분이면 깬다. 취객은 갈지자로 휘청이며 걷고 "딸꾹!"·♪ 노래, 가끔 넘어진다.
+       말다툼 → 주먹다짐 — 취객끼리 부딪치거나 시비 → 4마디 말싸움(ARGUE) → 취한 만큼 확률로 FIGHT(맷집 게이지).
+         한쪽이 넘어지면 승자 환호, 오래가면 주인·순찰 경비병이 말린다(BREAKUP). 45% 는 뒤에 화해 포옹(HUG).
+         손님끼리 생긴 일(cause 'brawl'·'trip')은 수배 ★ 를 올리지 않는다.
+       팔씨름(ARM) · 춤(DANCE, 음유시인 연주 중·밤 술집 앞, 짝지어 빙글빙글) · 커플 산책 · 지나가며 인사 ·
+       임금님 행차에 절(watch) · 밤엔 의자에서 잠(Z z z) · 아침 하품.
+       디버그: __npcs.toast(si) brawl(skip) argue() armwrestle(si) dance(k) drunk(i,v) trip(i) couple() sleep(si) hug() social()
       캔버스(renderer.domElement)에만 리스너를 달고 stopPropagation 을 하지 않으므로 window 의
       pointerdown(음악 첫 제스처)은 그대로 받는다. 버튼·패널 같은 UI 위에서는 캔버스가 이벤트를 받지 않는다.
    ════════════════════════════════════════════════════════════════════ */
@@ -165,7 +174,10 @@ const ST = { WANDER: 0, PAUSE: 1, TO_SEAT: 2, SIT_DOWN: 3, SEATED: 4, STAND_UP: 
   HELD: 7, FLYING: 8, LYING: 9, GETUP: 10, STOMP: 11, ROLL: 12, CHASE: 13, STAGGER: 14,
   FLEE: 15, WATCH: 16, CHAT: 17, BAR: 18, SERVE: 19, BAR_RETURN: 20,
   GUARD: 21, GUARD_LEAVE: 22, FIGHT: 23, GATHER: 24, BARD_GO: 25, BARD_PLAY: 26, OFF: 27,
-  ACTOR: 28 /* village.js 배우: 바깥에서 조종 */ };
+  ACTOR: 28 /* village.js 배우: 바깥에서 조종 */,
+  /* 사회생활 (social) — 대화(F) 불가 상태 */
+  ARGUE: 29 /* 취객 말다툼 */, ARM: 30 /* 팔씨름 (의자에 앉은 채) */, DANCE: 31 /* 춤 */, HUG: 32 /* 화해 포옹 */,
+  BREAKUP: 33 /* 술집 주인·경비병이 싸움 말리러 감 */ };
 
 /* 이벤트 (events.js 와 같이 쓴다) */
 const GUARD_MAX = 4, GUARD_SPEED = 5.5, GUARD_CATCH_R = 1.0, GUARD_GONE_R = 45;
@@ -179,7 +191,7 @@ const FIGHT_CROWD = ['때려!', '한 방 더!', '싸움이다!', '와아!'];
 const ALARM_R = { shot: 15, bomb: 24, explosion: 32 };   // 소동 종류별 기본 반경 (m)
 const FLEE_SPEED = 4.5;
 const WATCH_R = 12;              // 이 안에서 누가 맞으면 구경꾼이 반응
-const BUBBLE_MAX = 8, BUBBLE_DIST = 35;
+const BUBBLE_MAX = 12, BUBBLE_DIST = 35;
 const BAR_LOCAL_X = 0, BAR_LOCAL_Z = -2.2;   // 술집 주인 자리 (가판대 그룹 지역좌표, 수레 뒤). 부스 glb 가 오면 여기만 바꾼다
 const MIX_FAR = 35;              // 이보다 먼 손님은 애니메이션을 0.15초마다만 갱신
 const SHADOW_FAR = 30;           // 이보다 먼 손님은 그림자를 끈다
@@ -188,6 +200,7 @@ const LAUGHS = ['하하!', '푸하하!', '꼴좋다!', '어이쿠~'];
 /* 맷집: 맞으면 휘청만 하다가 쌓인 데미지가 POISE 를 넘으면 넘어진다. 4초 안 맞으면 초당 HEAL 씩 회복 */
 const POISE = 100, HEAL = 20, HEAL_DELAY = 4;
 const HIT_DMG = { punch: 18, kick: 40, dropkick: 70, sword: 30, axe: 40, hammer: 75, pan: 25, flail: 45, shot: 45, arrow: 40, bolt: 50, javelin: 60, weapon: 35 };
+const NPC_CAUSE = new Set(['fight', 'brawl', 'trip']);   // 손님끼리 일어난 일 — 플레이어 탓이 아니다 (수배 ★ 없음)
 const KNOCK_NOW = new Set(['car', 'explosion', 'throw', 'fight', 'rocket', 'shell']);   // 이건 바로 넘어진다
 const RIDE_LAUGHS = ['하하하하!', '나이스!', '푸하하하!', '크하하 날아갔다!', '나이스 샷!', '스트라이크!', '배꼽 빠지겠네!', '저거 봐 저거!', '와하하하!', '10점 만점!'];   // 탈것에 치이면 구경꾼이 박장대소
 const PROTESTS = ['이봐!', '괜찮아?', '그만해!', '무슨 짓이야!'];
@@ -393,6 +406,10 @@ export async function createNPCs({
       guard: false, off: false, fight: null, foe: null, punchAnim: 0, gatherC: null, gx: 0, gz: 0, fx: 0, fz: 0,
       bar: -1, panicT: 0, panicX: 0, panicZ: 0, watchKind: 0, watchV: null, chatG: null, arrived: false, wiping: false, talkT: 0,
       propBone, propShow: null /* null = 클립대로, true/false = 잔 보이기/숨기기 (배우) */, carry: 0 /* 0..1 쟁반 들기 자세 */, bow: 0 /* 0..1 인사 */,
+      /* 사회생활 */
+      drunk: 0 /* 0..1 취기 */, cups: 0, greetCD: rr(0, 20), bumpCD: 0, lead: null /* 같이 걷는 앞사람 */, pal: null /* 따라오는 사람 */, palT: 0,
+      sleeping: false, wantSleep: false, yawnT: 0, nodT: 0, swayed: false, dSay: '', dSayT: 0, dSayC: null,
+      socG: null, dPal: null, dAng0: 0, pcx: 0, pcz: 0, serveTo: null, hugO: null,
     };
   }
   for (let i = 0; i < count; i++) npcs.push(makeNPC(sources[i % sources.length], i, i >= sources.length));
@@ -428,6 +445,7 @@ export async function createNPCs({
   }
   function releaseSeat(n) {
     if (n.seat) { n.seat.owner = null; n.seat.stall.occupied--; n.seat = null; }
+    n.sleeping = false; n.wantSleep = false;
   }
   function reserve(n, seat) {
     seat.owner = n; seat.stall.occupied++; n.seat = seat;
@@ -504,6 +522,7 @@ export async function createNPCs({
     n.state = ST.SEATED;
     n.seatedLeft = rr(14, 30) * (1 + night * 0.6);
     n.animTimer = rr(1.5, 3);
+    if (n.wantSleep) { n.wantSleep = false; n.sleeping = true; n.animTimer = rr(1, 2.5); n.cheerIn = -1; play(n, 'Sit', 0.5); return; }   // [social] 밤잠
     /* 같은 테이블 손님들과 건배 */
     let others = 0;
     for (const o of npcs) {
@@ -603,8 +622,8 @@ export async function createNPCs({
     const px = p ? p.x : 1e9, pz = p ? p.z : 1e9;
 
     /* 앉았거나 앉으러 가는 인원 (동시 착석 상한용) */
-    let seatedNow = 0;
-    for (let i = 0; i < npcs.length; i++) if (npcs[i].seat) seatedNow++;
+    let seatedNow = 0, sleepersNow = 0;
+    for (let i = 0; i < npcs.length; i++) if (npcs[i].seat) { seatedNow++; if (npcs[i].sleeping || npcs[i].wantSleep) sleepersNow++; }
 
     /* 걷는 손님끼리 겹치지 않게 (10명 → 45쌍): 0.75 m 안이면 밀어내고,
        2.5 m 안에서 서로 마주 보고 오면 각자 오른쪽으로 비켜 걷는다 */
@@ -620,9 +639,12 @@ export async function createNPCs({
         if (d2 < 0.5625 && d2 > 1e-6) {
           const d = Math.sqrt(d2), push = (0.75 - d) * 0.5 / d;
           a.x -= dx * push; a.z -= dz * push; b.x += dx * push; b.z += dz * push;
+          /* [social] 취객끼리 부딪치면 말다툼 */
+          if (a.state === ST.WANDER && b.state === ST.WANDER && a.drunk + b.drunk > 0.7 && a.bumpCD <= 0 && b.bumpCD <= 0 && a.lead !== b && b.lead !== a) bump(a, b);
         } else if (d2 < 6.25 && a.state === ST.WANDER && b.state === ST.WANDER) {
           const fax = Math.sin(a.rot), faz = Math.cos(a.rot), fbx = Math.sin(b.rot), fbz = Math.cos(b.rot);
           if (fax * fbx + faz * fbz < -0.5 && fax * dx + faz * dz > 0) {   // 마주 보고 다가오는 중
+            if (a.greetCD <= 0 && b.greetCD <= 0 && a.dist < BUBBLE_DIST) greet(a, b, night);   // [social] 지나가며 인사
             const k = 0.5 * dt;
             a.x += faz * k; a.z -= fax * k;   // 각자 진행 방향 오른쪽으로
             b.x += fbz * k; b.z -= fbx * k;
@@ -663,6 +685,7 @@ export async function createNPCs({
 
       if (n.state >= ST.HELD) {
         n.yielding = false;
+        if (n.swayed) { n.swayed = false; if (n.state !== ST.HELD && n.state !== ST.FLYING && n.state !== ST.STAGGER && !isLying(n.state)) n.body.rotation.x = n.body.rotation.z = 0; }
         updateGrabbed(n, dt, t, px, pz);
         stepMixer(n, dt);
         if (n.mixed) {
@@ -673,6 +696,11 @@ export async function createNPCs({
           else if (n.state === ST.FIGHT && n.arrived) jabPose(n, t);
           else if (n.state === ST.BARD_PLAY && bard.phase === 1) strumPose(n, t);
           else if (n.state === ST.ACTOR && (n.carry > 0 || n.bow > 0)) actorPose(n);
+          else if (n.state === ST.ARM) armPose(n, t);                                         // [social]
+          else if (n.state === ST.DANCE && n.arrived) dancePose(n, t, 1);
+          else if (n.state === ST.GATHER && n.arrived && n.gatherC === bard && bard.phase === 1) dancePose(n, t, 0.45);
+          else if (n.state === ST.WATCH && n.watchKind === 3) actorPose(n);                  // 임금님께 절
+          else if (n.state === ST.HUG && n.arrived) hugPose(n);
           if (n.propBone && n.propShow !== null) n.propBone.scale.setScalar(n.propShow && n.state === ST.ACTOR ? 1 : 0.001);
         }
         if (n.anger.visible) {
@@ -703,6 +731,7 @@ export async function createNPCs({
       {
         switch (n.state) {
           case ST.WANDER: {
+            if (n.lead && followLead(n, dt)) break;   // [social] 커플 산책: 앞사람 옆에서 나란히
             play(n, 'Walk');
             /* 앞쪽 4 m 길가 지점을 목표로 걷는다 */
             let tz = n.z + n.dir * 4;
@@ -712,6 +741,7 @@ export async function createNPCs({
               const dx = tx - s.x, dz = tz - s.z, d = Math.hypot(dx, dz);
               if (d < TABLE_AVOID_R + 0.4 && d > 1e-4) { const k = (TABLE_AVOID_R + 0.4) / d; tx = s.x + dx * k; tz = s.z + dz * k; }
             }
+            if (n.drunk > 0.25) tx = clampX(tx + Math.sin(now * 1.3 + n.idx * 1.7) * (n.drunk - 0.15) * 1.4);   // [social] 갈지자 걸음
             const before = n.z;
             walkToward(n, tx, tz, dt, 0.05);
             pushFromTables(n);
@@ -719,7 +749,10 @@ export async function createNPCs({
             if (n.legLeft <= 0) {
               const wantSit = rnd() < 0.35 + night * 0.3 && seatedNow < Math.max(1, Math.floor(nWalkers * (SEATED_MAX + night * 0.1)));
               const seat = wantSit ? pickSeat(n, night) : null;
-              if (seat) { reserve(n, seat); planToSeat(n, seat); n.state = ST.TO_SEAT; }
+              if (seat) {
+                reserve(n, seat); planToSeat(n, seat); n.state = ST.TO_SEAT;
+                if (night > 0.65 && sleepersNow < SLEEP_MAX && rnd() < 0.25 + n.drunk * 0.4) { n.wantSleep = true; sleepersNow++; }   // [social] 의자에서 잔다
+              }
               else if (rnd() < 0.25) { n.state = ST.PAUSE; n.timer = rr(1.5, 4); }
               else {
                 /* 플레이어가 멀면 가끔 길을 건너 반대편으로 */
@@ -763,6 +796,19 @@ export async function createNPCs({
           }
           case ST.SEATED: {
             const seat = n.seat;
+            if (n.sleeping) {   // [social] 꾸벅꾸벅 — 아침(밤 < 0.35)이 되거나 의자가 쓰러지면 하품하며 깬다
+              n.cheerIn = -1;
+              n.drunk = Math.max(0, n.drunk - dt * 0.01);
+              if (seatBroken(seat) || night < 0.35) {
+                n.sleeping = false; n.seatedLeft = 0; n.animTimer = rr(1.5, 2.5); n.yawnT = 2;
+                say(n, pickOne(YAWN), 1.8);
+              } else {
+                play(n, 'Sit', 0.5);
+                n.animTimer -= dt;
+                if (n.animTimer <= 0) { n.animTimer = rr(3.5, 6); say(n, rnd() < 0.8 ? 'Z z z…' : pickOne(SLEEP_TALK), 2.2, '#4a5a8a'); }
+                break;
+              }
+            }
             n.seatedLeft -= dt;
             if (seatBroken(seat)) { n.seatedLeft = 0; n.animTimer = 0; n.cheerIn = -1; }   // 의자가 쓰러지면 바로 일어난다
             if (n.cheerIn >= 0) {
@@ -779,7 +825,11 @@ export async function createNPCs({
               }
               /* Sit ↔ Drink 번갈아 */
               if (n.curName === 'Drink') { play(n, 'Sit'); n.animTimer = rr(2, 5); }
-              else { play(n, 'Drink'); n.animTimer = CLIP_LEN.Drink * (rnd() < 0.3 ? 2 : 1) - 0.05; }
+              else {
+                play(n, 'Drink'); n.animTimer = CLIP_LEN.Drink * (rnd() < 0.3 ? 2 : 1) - 0.05;
+                n.drunk = Math.min(1, n.drunk + 0.035 * (1 + night * 0.5));   // [social] 마실수록 취한다
+                if (++n.cups >= 3 && n.seatedLeft > 6) requestRefill(n);
+              }
             }
             break;
           }
@@ -813,6 +863,13 @@ export async function createNPCs({
         }
       }
 
+      /* [social] 취객은 몸을 좌우로 휘청인다 */
+      if (n.drunk > 0.25 && (walking(n.state) || n.state === ST.PAUSE)) {
+        const d = n.drunk;
+        n.body.rotation.z = Math.sin(now * 2.4 + n.idx) * 0.12 * d; n.body.rotation.x = Math.sin(now * 1.6 + n.idx * 2) * 0.05 * d;
+        n.swayed = true;
+      } else if (n.swayed) { n.swayed = false; n.body.rotation.x = n.body.rotation.z = 0; }
+
       /* 높이: 앉는 중/앉아 있을 땐 보간값, 아니면 지형 */
       if (n.state !== ST.SIT_DOWN && n.state !== ST.SEATED && n.state !== ST.STAND_UP) {
         n.y += (groundY(n.x, n.z) - n.y) * Math.min(1, dt * 12);
@@ -821,10 +878,12 @@ export async function createNPCs({
       n.root.rotation.y = n.rot;
 
       /* 걷기 애니메이션 속도는 실제 이동과 맞춘다 */
-      if (n.curName === 'Walk' && n.cur) n.cur.setEffectiveTimeScale(n.speed / WALK_SPEED);
+      if (n.curName === 'Walk' && n.cur) n.cur.setEffectiveTimeScale((n.lead ? n.lead.speed : n.speed) / WALK_SPEED);
       stepMixer(n, dt);
+      if (n.mixed && (n.sleeping || n.yawnT > 0 || n.nodT > 0)) socialPose(n, t);
     }
     chatScheduler(dt, px, pz);
+    socialUpdate(dt, night);
     updateBubbles(dt);
     if (fight.active) {
       fight.t -= dt;
@@ -913,9 +972,10 @@ export async function createNPCs({
       n.spinX = -(4 + Math.min(6, sp * 0.7)); n.spinZ = rr(-1, 1);   // 뒤로 공중제비
       play(n, n.actions.Struggle ? 'Struggle' : 'Idle', 0.12);         // 술잔은 놓친다
     }
-    n.react = cause === 'fight' || n.guard || n.actor ? 0 : pickReact(cause);   // [village] 배우는 화내지 않는다
+    const npcOnly = NPC_CAUSE.has(cause);   // [social] 손님끼리 싸움·취해서 넘어짐 → 화내지 않고 수배 점수도 없다
+    n.react = npcOnly || n.guard || n.actor ? 0 : pickReact(cause);   // [village] 배우는 화내지 않는다
     n.rolled = false;
-    if (cause !== 'fight') emit(cause === 'punch' ? 'knockdown' : cause === 'shot' ? 'weapon' : cause, n);
+    if (!npcOnly) emit(cause === 'punch' ? 'knockdown' : cause === 'shot' ? 'weapon' : cause, n);
     setAnger(n, false);
     n.state = ST.FLYING;
     bystanders(n, cause);
@@ -964,7 +1024,7 @@ export async function createNPCs({
     n.dmg = (n.dmg || 0) + dmg; n.hitAt = now;
     if (n.dmg >= POISE) { knockVel(n, vx, vy, vz, cause); return true; }
     const l = Math.hypot(vx, vz) || 1;
-    stagger(n, vx / l, vz / l, cause === 'fight' ? 'fight' : 'punch');
+    stagger(n, vx / l, vz / l, NPC_CAUSE.has(cause) ? 'fight' : 'punch');
     if (cause === 'shot' || cause === 'arrow' || cause === 'bolt') emit('weapon', n);   // 총·활에 맞으면 넘어지지 않아도 큰 사건
     showHp(n);
     return true;
@@ -1377,7 +1437,7 @@ export async function createNPCs({
     for (const n of npcs) {
       if (n.bar !== si) continue;
       if (n.state !== ST.BAR && n.state !== ST.BAR_RETURN && n.state !== ST.SERVE) return false;
-      n.state = ST.SERVE; n.timer = 1.6;
+      n.state = ST.SERVE; n.timer = 1.6; n.serveTo = null;
       play(n, 'Cheers', 0.2);                    // 잔을 들어 내미는 동작
       say(n, '여기 있어요!', 1.8);
       return true;
@@ -1437,7 +1497,7 @@ export async function createNPCs({
   const guardStat = { count: 0, nearest: 1e9 };
 
   /* ── 술집 싸움 (한 번에 하나) ── */
-  const fight = { active: false, a: null, b: null, t: 0, cx: 0, cz: 0, si: -1, cheer: 0 };
+  const fight = { active: false, isFight: true, a: null, b: null, t: 0, cx: 0, cz: 0, si: -1, cheer: 0 };
   function startFight(si = -1) {
     if (fight.active) return -1;
     /* 앉은 손님이 둘 이상인 가판대 */
@@ -1482,6 +1542,11 @@ export async function createNPCs({
     let dx = foe.x - n.x, dz = foe.z - n.z;
     const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
     n.punchAnim = 0.28;
+    if (n.fight && n.fight.brawl) {   // [social] 취객 주먹다짐: 맷집 게이지가 닳다가 넘어진다
+      takeHit(foe, rr(16, 30), dx * 3, 2, dz * 3, 'brawl');
+      if (rnd() < 0.35) say(n, pickOne(FIGHT_HIT), 1.3);
+      return;
+    }
     if (rnd() < 0.3) knockVel(foe, dx * 3, 2, dz * 3, 'fight');
     else stagger(foe, dx, dz, 'fight');
     if (rnd() < 0.35) say(n, pickOne(FIGHT_HIT), 1.3);
@@ -1549,6 +1614,701 @@ export async function createNPCs({
     if (b.foreR) b.foreR.rotation.x -= 1.0 + Math.sin(t * 11) * 0.28;
     if (b.head) { b.head.rotation.x += 0.12; b.head.rotation.y += Math.sin(t * 1.3) * 0.2; }
   }
+
+  /* ════ [social] 사회생활: 술자리 건배 · 취기 · 말다툼 → 주먹다짐 · 화해 · 팔씨름 · 춤 · 커플 산책 · 인사 · 밤잠 ════
+     전부 타이머로 돌고, 사람 고르기(O(n))는 몇 초에 한 번만 한다. 매 프레임은 손님당 숫자 몇 개만 갱신.
+     동시에: 취객 싸움 ≤ 2, 말다툼 ≤ 2, 건배 ≤ 3, 춤판 ≤ 2, 팔씨름 1, 커플 ≤ 3, 의자에서 자는 사람 ≤ SLEEP_MAX.
+     손님끼리 생긴 일(brawl·trip)은 수배 ★ 를 올리지 않는다 (emit 은 플레이어 행동에만). */
+  const SLEEP_MAX = 4, COUPLE_MAX = 3;
+  const TOASTS = ['건배!', '상호왕국을 위하여!', '임금님을 위하여!', '위하여!', '쭉 들이켜!'];
+  const SONGS = ['♪ 라랄라~', '♪ 술이 좋아~', '♫ 상호왕국 만세~', '♪ 둥가둥가~', '♫ 오늘 밤은 안 자~'];
+  const INSULTS = ['내 술 쏟았잖아!', '뭐라고 이 양배추야!', '눈을 어디 두고 다녀?', '이 감자 같은 놈!', '너 방금 밀었지?', '이 순무 머리야!', '어디서 굴러온 당근이야!'];
+  const REPLIES = ['뭐야?!', '네가 먼저 부딪쳤잖아!', '이 양파 같은 게!', '한번 해보자는 거냐?', '누가 양배추래!'];
+  const PARTING = ['흥! 오늘은 봐준다', '에잇, 관두자', '취했구먼…', '흥!'];
+  const MAKEUP = ['미안하네 친구…', '내가 취했었나 봐', '우린 친구잖아!', '내가 한 잔 살게!'];
+  const WIN = ['내가 이겼다!', '하하 약골이구먼!', '어림없지!'];
+  const LOSE = ['으으 분하다!', '다시 해!', '반칙이야!'];
+  const ARM_CROWD = ['힘내!', '버텨!', '조금만 더!', '우와!', '넘겨라!'];
+  const GREET_DAY = ['좋은 아침!', '안녕하시오!', '날씨 좋네!', '잘 지내나?'];
+  const GREET_NIGHT = ['좋은 밤 되게', '조심히 들어가!', '밤이 깊었네'];
+  const REFILL = ['한 잔 더!', '여기 한 잔 더요!', '술이 비었네!'];
+  const SERVE_LINES = ['여기 있소!', '천천히 드시오!', '자, 한 잔!'];
+  const BREAK_UP = ['그만! 그만들 해!', '여기서 싸우면 안 돼!', '둘 다 진정해!'];
+  const TRIP = ['어이쿠!', '으앗!', '어어어…'];
+  const YAWN = ['하아암~', '잘 잤다~', '으으 머리야…'];
+  const SLEEP_TALK = ['음냐음냐…', '한 잔만 더…', '임금님 만세… 쿨'];
+  const DANCE_LINES = ['♪ 얼씨구!', '♫ 좋다!', '♪ 랄랄라~', '빙글빙글~'];
+  const BUMP = ['어이쿠, 미안!', '조심 좀 하게!', '어이쿠!'];
+  const WALK_TALK = ['같이 걷세!', '어디 가는 길이오?', '같이 가요~'];
+
+  stalls.forEach((s, i) => { s.idx = i; s.toastCD = rr(2, 8); s.toastT = 0; });
+  const barBy = [];
+  for (const n of npcs) if (n.bar >= 0) barBy[n.bar] = n;
+  /* 처음부터 몇 명은 얼큰하게 취해 있다 */
+  for (let i = 0; i < nWalkers; i++) { const n = npcs[i]; n.drunk = n.seat ? rr(0, 0.35) : rnd() < 0.22 ? rr(0.35, 0.8) : 0; }
+
+  const freeWalker = n => !!n && !n.off && n.bar < 0 && !n.guard && !n.actor && (n.state === ST.WANDER || n.state === ST.PAUSE)
+    && !n.yielding && n.dist > 2.8 && !n.lead && !n.pal;   // 2.8 m 밖: 플레이어와 대화(F 2.2 m) 중인 사람은 안 데려간다
+  const isDown = n => n.state === ST.FLYING || n.state === ST.HELD || isLying(n.state);
+  const isNpc = o => !!o && o.mixer !== undefined && o.body !== undefined;
+  function sayLater(n, text, delay, color = null) { n.dSay = text; n.dSayT = delay; n.dSayC = color; }
+  const tmpSeated = [];
+  function seatedAt(s) {
+    tmpSeated.length = 0;
+    for (const seat of s.seats) { const o = seat.owner; if (isNpc(o) && o.state === ST.SEATED && !o.sleeping) tmpSeated.push(o); }
+    return tmpSeated;
+  }
+  /* 가판대 앞(길 쪽) d m 지점 */
+  const frontPt = { x: 0, z: 0, face: 0 };
+  function stallFront(s, d) {
+    let ux = s.x - (s.bar ? s.bar.x : s.x), uz = s.z - (s.bar ? s.bar.z : s.z - 1);
+    const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul;
+    frontPt.x = clampX(s.x + ux * d); frontPt.z = Math.max(zMin, Math.min(zMax, s.z + uz * d)); frontPt.face = Math.atan2(ux, uz);
+    return frontPt;
+  }
+  function nearestStall(x, z, maxD = 1e9, filter = null) {
+    let best = null, bd = maxD;
+    for (const s of stalls) { if (filter && !filter(s)) continue; const d = Math.hypot(s.x - x, s.z - z); if (d < bd) { bd = d; best = s; } }
+    return best;
+  }
+  function walkAt(n, x, z, dt, r, sp) { const s0 = n.speed; n.speed = sp; const ok = walkToward(n, x, z, dt, r); n.speed = s0; return ok; }
+  const groundSnap = (n, dt) => { n.y += (groundY(n.x, n.z) - n.y) * Math.min(1, dt * 12); };
+
+  /* ── 1. 술자리: 같은 테이블이 다 같이 건배, 잔이 비면 주인을 부른다 ── */
+  function toast(si) {
+    const s = stalls[si];
+    if (!s) return false;
+    let live = 0; for (const q of stalls) if (q.toastT > 0) live++;
+    const m = seatedAt(s);
+    if (m.length < 2 || live >= 3) return false;
+    s.toastCD = rr(14, 26); s.toastT = 3;
+    const lead = m[Math.floor(rnd() * m.length)];
+    say(lead, pickOne(TOASTS), 1.8, '#8a4a10');
+    for (let k = 0; k < m.length; k++) {
+      const o = m[k];
+      o.cheerIn = 0.35 + k * 0.05;                 // 거의 동시에 잔을 든다
+      o.drunk = Math.min(1, o.drunk + 0.06);
+      if (o !== lead) sayLater(o, rnd() < 0.7 ? '건배!' : pickOne(TOASTS), 0.55 + rnd() * 0.4, '#8a4a10');
+    }
+    return true;
+  }
+  function requestRefill(n) {
+    n.cups = 0;
+    const s = n.seat && n.seat.stall, bk = s ? barBy[s.idx] : null;
+    if (!bk || bk.off || bk.state !== ST.BAR || bk.dist < 3) return false;   // 플레이어가 주인 앞에 있으면(주문·대화) 방해 안 한다
+    say(n, pickOne(REFILL), 1.6);
+    bk.state = ST.SERVE; bk.serveTo = n; bk.arrived = false; bk.timer = 14; bk.wiping = false;
+    play(bk, 'Walk', 0.3);
+    return true;
+  }
+  function serveWalk(n, dt) {
+    const c = n.serveTo;
+    n.timer -= dt;
+    if (!n.arrived) {
+      if ((c.state !== ST.SEATED && c.state !== ST.ARM) || n.timer <= 0) { n.serveTo = null; n.state = ST.BAR_RETURN; play(n, 'Walk', 0.3); }
+      else {
+        play(n, 'Walk', 0.3);
+        if (walkToward(n, c.x, c.z, dt, 1.05)) {
+          n.arrived = true; n.timer = 1.8;
+          play(n, 'Cheers', 0.2); say(n, pickOne(SERVE_LINES), 1.6);
+          sayLater(c, '고맙소!', 0.9); c.cups = 0;
+        }
+        pushFromTables(n);
+      }
+    } else {
+      turnTo(n, Math.atan2(c.x - n.x, c.z - n.z), dt);
+      if (n.timer <= 0) { n.serveTo = null; n.state = ST.BAR_RETURN; play(n, 'Walk', 0.3); }
+    }
+    groundSnap(n, dt);
+  }
+  /* 취해서 발이 꼬여 넘어진다 (구경꾼은 웃는다, 화내지 않음) */
+  function trip(n) {
+    say(n, pickOne(TRIP), 1.4);
+    n.drunk = Math.max(0, n.drunk - 0.08);
+    breakPair(n);
+    knockVel(n, Math.sin(n.rot) * 2.4, 2.2, Math.cos(n.rot) * 2.4, 'trip');
+  }
+
+  /* ── 2. 말다툼 → 주먹다짐 → (말리기) → 가끔 화해 ── */
+  const argues = [0, 1].map(() => ({ active: false, a: null, b: null, k: 0, next: 0, force: false, t: 0, spk: null, spkT: 0 }));
+  const brawls = [0, 1].map(() => ({ active: false, isFight: true, brawl: true, a: null, b: null, t: 0, cx: 0, cz: 0, si: -1, cheer: 0,
+    over: 0, winner: null, breaker: null, hugA: null, hugB: null, hugT: 0 }));
+  function bump(a, b) {
+    a.bumpCD = b.bumpCD = rr(15, 25);
+    if (a.dist < 2.8 || b.dist < 2.8 || rnd() > 0.75 || !startArgue(a, b)) say(a, pickOne(BUMP), 1.4);
+  }
+  function startArgue(a, b, force = false) {
+    const g = argues.find(q => !q.active);
+    if (!g || a === b) return false;
+    g.active = true; g.a = a; g.b = b; g.k = 0; g.next = 0.4; g.force = force; g.t = 25; g.spk = null; g.spkT = 0;
+    for (const n of [a, b]) {
+      breakPair(n); releaseSeat(n);
+      n.state = ST.ARGUE; n.socG = g; n.arrived = false; n.yielding = false; n.chatG = null; n.bumpCD = 25;
+      play(n, 'Walk', 0.3);
+    }
+    return true;
+  }
+  function endArgue(g, part) {
+    g.active = false;
+    const da = rnd() < 0.5 ? -1 : 1;
+    for (const n of [g.a, g.b]) {
+      if (!n || n.socG !== g) continue;
+      n.socG = null;
+      if (n.state !== ST.ARGUE) continue;
+      setAnger(n, false);
+      n.dir = n === g.a ? da : -da;   // 서로 반대쪽으로 걸어간다
+      startWanderLeg(n); play(n, 'Walk', 0.4);
+      if (part && n === g.b) sayLater(n, pickOne(PARTING), 0.3);
+    }
+  }
+  function startBrawl(a, b, f) {
+    f.active = true; f.a = a; f.b = b; f.t = rr(14, 18); f.over = 0; f.winner = null; f.breaker = null; f.hugT = 0; f.hugA = f.hugB = null;
+    const cx = (a.x + b.x) / 2, cz = (a.z + b.z) / 2;
+    let ux = b.x - a.x, uz = b.z - a.z;
+    const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul;
+    f.cx = cx; f.cz = cz;
+    for (const [n, foe, sg] of [[a, b, -1], [b, a, 1]]) {
+      n.socG = null; releaseSeat(n); breakPair(n);
+      n.fight = f; n.foe = foe; n.state = ST.FIGHT; n.timer = rr(0.6, 1.5);
+      n.fromX = cx + ux * 0.55 * sg; n.fromZ = cz + uz * 0.55 * sg;
+      n.arrived = false; setAnger(n, true); play(n, 'Walk', 0.3);
+    }
+    say(a, pickOne(FIGHT_START), 1.6, '#a0281e');
+    gather(f, cx, cz, 2.8, 4, false);
+    return true;
+  }
+  function endBrawl(f) {
+    f.active = false;
+    for (const n of [f.a, f.b]) {
+      if (!n || n.fight !== f) continue;
+      n.fight = null; n.foe = null;
+      n.drunk = Math.max(0, n.drunk - 0.25);   // 한바탕 하고 나면 술이 좀 깬다
+      if (n.state === ST.FIGHT) toIdle(n);
+    }
+    if (rnd() < 0.45) { f.hugA = f.a; f.hugB = f.b; f.hugT = rr(3, 4.5); }   // 넘어진 쪽이 일어날 즈음
+  }
+  function callBreaker(f) {
+    let best = null, bd = 30;
+    for (const g of guards) {   // 순찰 중(떠나는) 경비병이 가까우면 경비병이
+      if (g.off || g.state !== ST.GUARD_LEAVE) continue;
+      const d = Math.hypot(g.x - f.cx, g.z - f.cz); if (d < bd) { bd = d; best = g; }
+    }
+    if (!best) for (const k of barBy) {   // 아니면 가까운 술집 주인이
+      if (!k || k.off || (k.state !== ST.BAR && k.state !== ST.BAR_RETURN) || k.dist < 3) continue;
+      const d = Math.hypot(k.x - f.cx, k.z - f.cz); if (d < bd) { bd = d; best = k; }
+    }
+    if (!best) return null;
+    best.state = ST.BREAKUP; best.socG = f; best.arrived = false; best.timer = 15; best.wiping = false;
+    play(best, best.actions.Run ? 'Run' : 'Walk', 0.3);
+    say(best, '거기 무슨 일이야!', 1.6, '#7a1a10');
+    return best;
+  }
+  function tryHug(a, b) {
+    const ok = n => n && !n.off && (n.state === ST.WANDER || n.state === ST.PAUSE) && n.dist > 2.8;
+    if (!ok(a) || !ok(b) || Math.hypot(a.x - b.x, a.z - b.z) > 10) return false;
+    for (const [n, o] of [[a, b], [b, a]]) { breakPair(n); n.state = ST.HUG; n.hugO = o; n.arrived = false; n.timer = 2.6; play(n, 'Walk', 0.3); }
+    sayLater(a, pickOne(MAKEUP), 0.8, '#2f6f3a'); sayLater(b, pickOne(MAKEUP), 2.4, '#2f6f3a');
+    return true;
+  }
+
+  /* ── 3. 팔씨름 (테이블 건너편끼리) ── */
+  const arm = { active: false, loud: true, crowd: ARM_CROWD, a: null, b: null, s: null, t: 0, phase: 0, x: 0, z: 0, winner: null, loser: null };
+  function armPair(s) {
+    const ok = o => isNpc(o) && o.state === ST.SEATED && !o.sleeping && o.dist > 2.8;
+    for (let k = 0; k < 2; k++) {   // 마주 보는 자리(k, k+2) 먼저
+      const a = s.seats[k] && s.seats[k].owner, b = s.seats[k + 2] && s.seats[k + 2].owner;
+      if (ok(a) && ok(b)) return [a, b];
+    }
+    const m = seatedAt(s).filter(ok);
+    return m.length >= 2 ? [m[0], m[1]] : null;
+  }
+  function startArm(si = -1, force = false) {
+    if (arm.active) return -1;
+    let s = null, pr = null;
+    if (si >= 0) { s = stalls[si]; pr = s && armPair(s); }
+    else for (const k of stalls.map((q, i) => i).sort(() => rnd() - 0.5)) { pr = armPair(stalls[k]); if (pr) { s = stalls[k]; break; } }
+    if (!pr && force) {   // 디버그: 플레이어 가까운 가판대 마주 보는 의자에 손님 둘을 앉힌다
+      const p = getPlayerPos ? getPlayerPos() : { x: 0, z: 0 };
+      s = si >= 0 ? stalls[si] : nearestStall(p.x, p.z);
+      if (s && fillSeats(s, [0, 2])) pr = armPair(s);
+    }
+    if (!pr) return -1;
+    const [a, b] = pr;
+    arm.active = true; arm.a = a; arm.b = b; arm.s = s; arm.t = rr(4, 7); arm.phase = 1; arm.x = s.x; arm.z = s.z; arm.winner = arm.loser = null;
+    for (const n of pr) { n.state = ST.ARM; n.socG = arm; n.cheerIn = -1; play(n, 'Sit', 0.3); }
+    say(a, '팔씨름 한판 어때?', 1.8); sayLater(b, '좋지! 덤벼!', 1.3);
+    for (const o of seatedAt(s)) { o.cheerIn = rr(0.5, 1.5); sayLater(o, pickOne(ARM_CROWD), rr(2, 4)); }
+    gather(arm, s.x, s.z, 3.3, 3, false);
+    return s.idx;
+  }
+  function backToSeat(n) {
+    n.body.rotation.set(0, 0, 0); n.socG = null;
+    const seat = n.seat;
+    if (!seat || seatBroken(seat)) { releaseSeat(n); toIdle(n); return; }
+    n.x = seat.x; n.z = seat.z; n.y = seatY(seat, n); n.rot = seat.rotY;
+    n.state = ST.SEATED; n.animTimer = rr(1, 2.5); n.cheerIn = -1;
+    play(n, 'Sit', 0.35);
+  }
+  function endArm() {
+    arm.active = false;
+    for (const n of [arm.a, arm.b]) if (n && n.state === ST.ARM && n.socG === arm) backToSeat(n);
+  }
+  /* 디버그용: 가판대 s 의 의자 idx 들에 빈자리면 근처 손님을 바로 앉힌다 */
+  function fillSeats(s, idxs) {
+    for (const k of idxs) {
+      const seat = s.seats[k];
+      if (!seat || seatBroken(seat)) return false;
+      if (seat.owner) { if (isNpc(seat.owner) && seat.owner.state === ST.SEATED) continue; return false; }
+      let best = null, bd = 1e9;
+      for (let i = 0; i < nWalkers; i++) {
+        const n = npcs[i];
+        if (!freeWalker(n)) continue;
+        const d = Math.hypot(n.x - s.x, n.z - s.z); if (d < bd) { bd = d; best = n; }
+      }
+      if (!best) return false;
+      placeAtSeat(best, seat);
+      best.drunk = Math.max(best.drunk, 0.3);
+      best.root.position.set(best.x, best.y, best.z); best.root.rotation.y = best.rot;
+    }
+    return true;
+  }
+
+  /* ── 4. 춤: 음유시인이 연주하면 그 앞에서, 밤엔 술집 앞에서 짝지어 빙글빙글 ── */
+  const dances = [0, 1].map(() => ({ active: false, cx: 0, cz: 0, t: 0, clock: 0, m: [], bard: false }));
+  function startDance(cx, cz, maxN = 4, dur = 20, isBard = false, recruitR = 26) {
+    const g = dances.find(q => !q.active);
+    if (!g || !Number.isFinite(cx) || !Number.isFinite(cz)) return 0;
+    g.m.length = 0;
+    for (let i = 0; i < nWalkers && g.m.length < maxN; i++) {
+      const n = npcs[i];
+      if (freeWalker(n) && n !== bard.n && Math.hypot(n.x - cx, n.z - cz) < recruitR) g.m.push(n);
+    }
+    if (g.m.length < 2) { g.m.length = 0; return 0; }
+    g.active = true; g.cx = cx; g.cz = cz; g.t = dur; g.clock = 0; g.bard = isBard;
+    const slots = Math.ceil(g.m.length / 2);
+    for (let k = 0; k < g.m.length; k++) {
+      const n = g.m[k], an = (k >> 1) / slots * Math.PI * 2 + 0.4, R = slots > 1 ? 1.7 : 0;
+      const partner = (k ^ 1) < g.m.length ? g.m[k ^ 1] : null;
+      n.pcx = cx + Math.cos(an) * R; n.pcz = cz + Math.sin(an) * R;
+      n.dPal = partner; n.dAng0 = (k & 1) ? Math.PI : 0;
+      n.fromX = n.pcx + (partner ? Math.cos(n.dAng0) * 0.55 : 0); n.fromZ = n.pcz + (partner ? Math.sin(n.dAng0) * 0.55 : 0);
+      breakPair(n);
+      n.state = ST.DANCE; n.socG = g; n.arrived = false; n.timer = rr(0.5, 2); n.chatG = null;
+      play(n, 'Walk', 0.3);
+    }
+    return g.m.length;
+  }
+  function endDance(g) {
+    g.active = false;
+    for (const n of g.m) {
+      if (n.socG !== g) continue;
+      n.socG = null; n.dPal = null;
+      if (n.state === ST.DANCE) toIdle(n);
+    }
+    g.m.length = 0;
+  }
+
+  /* ── 5. 커플 산책 · 인사 ── */
+  function breakPair(n) {
+    if (n.lead) { n.lead.pal = null; n.lead = null; }
+    if (n.pal) { n.pal.lead = null; n.pal = null; }
+  }
+  function startCouple() {
+    let pairs = 0;
+    for (let i = 0; i < nWalkers; i++) if (npcs[i].lead) pairs++;
+    if (pairs >= COUPLE_MAX) return false;
+    const a = npcs[Math.floor(rnd() * nWalkers)];
+    if (!freeWalker(a) || a.state !== ST.WANDER) return false;
+    let best = null, bd = 9;
+    for (let i = 0; i < nWalkers; i++) {
+      const b = npcs[i];
+      if (b === a || !freeWalker(b)) continue;
+      const d = Math.hypot(b.x - a.x, b.z - a.z); if (d < bd) { bd = d; best = b; }
+    }
+    if (!best) return false;
+    best.lead = a; a.pal = best; best.palT = rr(18, 35);
+    best.state = ST.WANDER; best.side = a.side; best.dir = a.dir; best.legLeft = 99;
+    play(best, 'Walk', 0.3);
+    sayLater(best, pickOne(WALK_TALK), 0.3);
+    return true;
+  }
+  /* 앞사람의 길가 바깥쪽 옆 0.8 m 에서 나란히 걷는다. 다루었으면 true */
+  function followLead(n, dt) {
+    const L = n.lead;
+    n.palT -= dt;
+    if (L.off || (L.state !== ST.WANDER && L.state !== ST.PAUSE) || n.palT <= 0) { breakPair(n); startWanderLeg(n); return false; }
+    if (L.state === ST.PAUSE) {   // 앞사람이 멈추면 같이 서서 본다
+      play(n, 'Idle', 0.3);
+      turnTo(n, Math.atan2(L.x - n.x, L.z - n.z), dt);
+      return true;
+    }
+    play(n, 'Walk');
+    const fx = Math.sin(L.rot), fz = Math.cos(L.rot);
+    const roadS = Math.sign(L.x - pathX(L.z)) || L.side;
+    let ox = fz, oz = -fx;
+    if (ox * roadS < 0) { ox = -ox; oz = -oz; }
+    const tx = clampX(L.x + ox * 0.8 + fx * 0.3), tz = L.z + oz * 0.8 + fz * 0.3;
+    const d = Math.hypot(tx - n.x, tz - n.z);
+    if (d > 0.15) walkAt(n, tx, tz, dt, 0.05, Math.max(0.4, Math.min(2.6, L.speed + (d - 0.3) * 1.5)));
+    else turnTo(n, L.rot, dt);
+    pushFromTables(n);
+    n.dir = L.dir; n.side = L.side;
+    if (rnd() < dt * 0.06) say(rnd() < 0.5 ? n : L, rnd() < 0.5 ? '…' : pickOne(CHATS), 1.5);
+    return true;
+  }
+  function greet(a, b, night) {
+    a.greetCD = rr(25, 50); b.greetCD = rr(25, 50);
+    const pool = night > 0.5 ? GREET_NIGHT : GREET_DAY;
+    say(a, pickOne(pool), 1.6); sayLater(b, pickOne(pool), 0.7);
+    a.nodT = b.nodT = 0.9;
+  }
+
+  /* ── 6. 사회생활 상태 (updateGrabbed 에서 부른다) ── */
+  function socialState(n, dt, t) {
+    switch (n.state) {
+      case ST.ARGUE: {
+        const g = n.socG, o = g && g.active ? (g.a === n ? g.b : g.a) : null;
+        if (!o) { n.socG = null; toIdle(n); break; }
+        const dx = o.x - n.x, dz = o.z - n.z, d = Math.hypot(dx, dz);
+        if (!n.arrived) {
+          if (d < 1.3) { n.arrived = true; play(n, 'Idle', 0.3); }
+          else { play(n, 'Walk', 0.3); walkToward(n, o.x, o.z, dt, 1.2); }
+        } else {
+          turnTo(n, Math.atan2(dx, dz), dt * 1.5);
+          if (d > 1.9) n.arrived = false;
+          play(n, g.spk === n && g.spkT > 0 && n.actions.Stomp ? 'Stomp' : 'Idle', 0.25);
+        }
+        groundSnap(n, dt);
+        break;
+      }
+      case ST.ARM: {
+        const g = n.socG, seat = n.seat;
+        if (!g || !g.active || !seat) { backToSeat(n); break; }
+        if (g.phase === 2 && g.loser === n) {   // 진 쪽은 벌떡 일어나 발을 구른다
+          const fx = seat.x - Math.cos(seat.ang) * 0.4, fz = seat.z - Math.sin(seat.ang) * 0.4, k = Math.min(1, dt * 6);
+          n.x += (fx - n.x) * k; n.z += (fz - n.z) * k; n.y += (groundY(fx, fz) - n.y) * k;
+          n.body.rotation.x = 0;
+          play(n, n.actions.Stomp ? 'Stomp' : 'Idle', 0.25);
+        } else {
+          n.x = seat.x; n.z = seat.z; n.y = seatY(seat, n);
+          n.body.rotation.x = g.phase === 1 ? 0.22 : 0;   // 테이블 쪽으로 몸을 숙인다
+        }
+        turnTo(n, seat.rotY, dt);
+        break;
+      }
+      case ST.DANCE: {
+        const g = n.socG;
+        if (!g || !g.active || !g.m.includes(n)) { n.socG = null; n.dPal = null; toIdle(n); break; }
+        if (!n.arrived) {
+          play(n, 'Walk', 0.3);                                   // 신나서 종종걸음
+          if (n.cur) n.cur.setEffectiveTimeScale(1.7);
+          if (walkAt(n, n.fromX, n.fromZ, dt, 0.15, 2.2)) { n.arrived = true; play(n, 'Idle', 0.3); }
+          pushFromTables(n);
+          groundSnap(n, dt);
+          break;
+        }
+        const p = n.dPal;
+        if (p && p.state === ST.DANCE && p.socG === g && p.arrived) {   // 짝과 마주 보고 빙글빙글
+          const a = n.dAng0 + g.clock * 1.5, k = Math.min(1, dt * 6);
+          n.x += (n.pcx + Math.cos(a) * 0.55 - n.x) * k; n.z += (n.pcz + Math.sin(a) * 0.55 - n.z) * k;
+          turnTo(n, Math.atan2(n.pcx - n.x, n.pcz - n.z), dt * 3);
+        } else turnTo(n, Math.atan2(g.cx - n.x, g.cz - n.z), dt);
+        n.timer -= dt;
+        if (n.timer <= 0) {
+          if (n.curName === 'Cheers') { play(n, 'Idle', 0.3); n.timer = rr(2, 3.5); }
+          else { play(n, 'Cheers', 0.3); n.timer = CLIP_LEN.Cheers; }
+        }
+        if (rnd() < dt * 0.05) say(n, pickOne(DANCE_LINES), 1.4, '#7a3a8a');
+        n.y = groundY(n.x, n.z) + Math.abs(Math.sin(g.clock * 7 + n.idx)) * 0.07;
+        break;
+      }
+      case ST.HUG: {
+        const o = n.hugO;
+        if (!o || o.state !== ST.HUG || o.hugO !== n) { n.hugO = null; toIdle(n); break; }
+        const dx = o.x - n.x, dz = o.z - n.z, d = Math.hypot(dx, dz);
+        if (!n.arrived) {
+          if (d < 0.85) { n.arrived = true; play(n, 'Cheers', 0.3); }
+          else { play(n, 'Walk', 0.3); walkToward(n, o.x, o.z, dt, 0.8); }
+          n.timer -= dt * 0.25;   // 너무 오래 못 만나면 포기
+          if (n.timer <= 0) { n.hugO = null; o.hugO = null; startWanderLeg(n); play(n, 'Walk', 0.4); }
+        } else {
+          turnTo(n, Math.atan2(dx, dz), dt * 2);
+          n.timer -= dt;
+          if (n.timer <= 0) { n.hugO = null; startWanderLeg(n); play(n, 'Walk', 0.4); }
+        }
+        groundSnap(n, dt);
+        break;
+      }
+      case ST.BREAKUP: {
+        const f = n.socG;
+        if (n.arrived) {
+          n.timer -= dt;
+          if (f) turnTo(n, Math.atan2(f.cx - n.x, f.cz - n.z), dt);
+          if (n.timer <= 0) { n.socG = null; toIdle(n); }
+        } else if (!f || !f.active || f.breaker !== n || (n.timer -= dt) <= 0) { n.socG = null; toIdle(n); }
+        else {
+          const cx = (f.a.x + f.b.x) / 2, cz = (f.a.z + f.b.z) / 2;
+          play(n, n.actions.Run ? 'Run' : 'Walk', 0.3);
+          if (!n.actions.Run && n.cur) n.cur.setEffectiveTimeScale(2);
+          walkAt(n, cx, cz, dt, 1.6, 3.4);
+          pushFromTables(n);
+          if (Math.hypot(cx - n.x, cz - n.z) < 1.7) {
+            n.arrived = true; n.timer = 2.6;
+            play(n, n.actions.Stomp ? 'Stomp' : 'Idle', 0.25);
+            say(n, pickOne(BREAK_UP), 2, '#7a1a10');
+            f.over = 2.4; f.winner = null;
+            sayLater(f.a, '쳇…', 0.9);
+          }
+        }
+        groundSnap(n, dt);
+        break;
+      }
+    }
+  }
+
+  /* 몸짓 */
+  function armPose(n, t) {
+    n.procDirty = true;
+    const b = n.bones, g = n.socG;
+    if (!g || g.phase !== 1) return;
+    const sh = Math.sin(t * 13 + n.idx) * 0.07, push = Math.sin(t * 0.9 + n.idx) * 0.15;
+    if (b.armR) { b.armR.rotation.x -= 1.25 + push; b.armR.rotation.z += 0.15; }
+    if (b.foreR) b.foreR.rotation.x -= 0.9 + sh;
+    if (b.armL) b.armL.rotation.x -= 0.5;
+    if (b.chest) b.chest.rotation.z += sh * 0.6;
+    if (b.head) b.head.rotation.x += 0.12;
+  }
+  function dancePose(n, t, amp) {
+    n.procDirty = true;
+    const b = n.bones, w = t * 7 + n.idx * 1.3;
+    if (b.spine) b.spine.rotation.z += Math.sin(w * 0.5) * 0.14 * amp;
+    if (b.head) b.head.rotation.y += Math.sin(w * 0.5 + 1) * 0.25 * amp;
+    if (n.curName !== 'Cheers') {   // 건배 클립이 아닐 땐 두 팔을 들고 흔든다
+      if (b.armL) b.armL.rotation.z += (0.9 + Math.sin(w) * 0.35) * amp;
+      if (b.armR) b.armR.rotation.z -= (0.9 + Math.sin(w + 1) * 0.35) * amp;
+    }
+    if (b.legL) b.legL.rotation.x -= Math.max(0, Math.sin(w)) * 0.45 * amp;
+    if (b.legR) b.legR.rotation.x -= Math.max(0, -Math.sin(w)) * 0.45 * amp;
+  }
+  function hugPose(n) {
+    n.procDirty = true;
+    const b = n.bones;
+    if (n.curName === 'Cheers') return;
+    if (b.armL) { b.armL.rotation.x -= 1.1; b.armL.rotation.z -= 0.3; }
+    if (b.armR) { b.armR.rotation.x -= 1.1; b.armR.rotation.z += 0.3; }
+  }
+  /* 보통 상태용: 졸기 · 기지개 · 인사 끄덕 */
+  function socialPose(n, t) {
+    n.procDirty = true;
+    const b = n.bones;
+    if (n.state === ST.SEATED && n.sleeping) {
+      if (b.head) b.head.rotation.x += 0.55 + Math.sin(t * 1.3 + n.idx) * 0.06;
+      if (b.chest) b.chest.rotation.x += 0.2;
+    } else if (n.yawnT > 0) {
+      const k = Math.min(1, n.yawnT, 2.4 - n.yawnT);   // 기지개: 두 팔을 쭉
+      if (b.armL) b.armL.rotation.z += 2.2 * Math.max(0, k);
+      if (b.armR) b.armR.rotation.z -= 2.2 * Math.max(0, k);
+      if (b.head) b.head.rotation.x -= 0.3 * Math.max(0, k);
+    } else if (n.nodT > 0 && b.head) b.head.rotation.x += Math.sin((0.9 - n.nodT) / 0.9 * Math.PI) * 0.35;
+  }
+
+  /* ── 매 프레임 (update 끝에서 한 번) ── */
+  let toastClock = rr(4, 8), coupleClock = rr(5, 10), provokeClock = rr(10, 18), armClock = rr(30, 50), danceClock = rr(20, 40);
+  let nightMode = false, bardDanced = false, bardRetry = 0;
+  function socialUpdate(dt, night) {
+    const isNight = night > 0.5;
+    /* 손님마다: 늦은 말풍선 · 쿨다운 · 취기(딸꾹·노래·비틀·넘어짐·술 깨기) */
+    for (let i = 0; i < npcs.length; i++) {
+      const n = npcs[i];
+      if (n.off) continue;
+      if (n.dSayT > 0 && (n.dSayT -= dt) <= 0 && !isDown(n)) say(n, n.dSay, 1.6, n.dSayC);
+      if (i >= nWalkers) continue;
+      if (n.greetCD > 0) n.greetCD -= dt;
+      if (n.bumpCD > 0) n.bumpCD -= dt;
+      if (n.yawnT > 0) n.yawnT -= dt;
+      if (n.nodT > 0) n.nodT -= dt;
+      if (n.lead && n.state !== ST.WANDER) breakPair(n);
+      if (n.drunk <= 0) continue;
+      const st = n.state;
+      if (st !== ST.SEATED && st !== ST.ARM) n.drunk = Math.max(0, n.drunk - dt * 0.0035);   // 4~5분이면 깬다
+      if (n.drunk > 0.3 && !n.bubble && n.dist < BUBBLE_DIST && (st === ST.WANDER || st === ST.PAUSE || st === ST.SEATED)) {
+        if (rnd() < dt * 0.07 * n.drunk) say(n, '딸꾹!', 1.1);
+        else if (rnd() < dt * (isNight ? 0.07 : 0.025) * n.drunk) say(n, pickOne(SONGS), 2, '#7a3a8a');
+      }
+      if (st === ST.WANDER && n.drunk > 0.5 && !n.lead && n.dist < 60 && rnd() < dt * 0.012 * n.drunk) trip(n);
+    }
+
+    /* 건배 (밤엔 더 자주, 더 시끄럽게) */
+    for (const s of stalls) { if (s.toastCD > 0) s.toastCD -= dt; if (s.toastT > 0) s.toastT -= dt; }
+    if ((toastClock -= dt * (isNight ? 1.7 : 1)) <= 0) {
+      toastClock = rr(4, 8);
+      const s = stalls[Math.floor(rnd() * stalls.length)];
+      if (s && s.toastCD <= 0) toast(s.idx);
+    }
+    /* 커플 산책 */
+    if ((coupleClock -= dt) <= 0) { coupleClock = rr(6, 12); startCouple(); }
+    /* 취객 시비: 가까운 행인에게 다가가 말다툼 */
+    if ((provokeClock -= dt) <= 0) {
+      provokeClock = rr(10, 18);
+      const a = npcs[Math.floor(rnd() * nWalkers)];
+      if (freeWalker(a) && a.drunk > 0.45 && a.bumpCD <= 0) {
+        for (let i = 0; i < nWalkers; i++) {
+          const b = npcs[i];
+          if (b !== a && freeWalker(b) && b.bumpCD <= 0 && Math.hypot(b.x - a.x, b.z - a.z) < 6) { startArgue(a, b); break; }
+        }
+      }
+    }
+    /* 말다툼 진행: 서로 4마디 → 취한 만큼 주먹다짐으로 번진다 */
+    for (const g of argues) {
+      if (!g.active) continue;
+      const a = g.a, b = g.b;
+      if (a.state !== ST.ARGUE || b.state !== ST.ARGUE || a.socG !== g || b.socG !== g || (g.t -= dt) <= 0) { endArgue(g, false); continue; }
+      if (!a.arrived || !b.arrived) continue;
+      g.spkT -= dt; g.next -= dt;
+      if (g.next > 0) continue;
+      if (g.k < 4) {
+        const sp = g.k % 2 ? b : a;
+        g.spk = sp; g.spkT = 1.1; g.next = 1.35;
+        say(sp, pickOne(g.k % 2 ? REPLIES : INSULTS), 1.5, '#a0281e');
+        setAnger(sp, true);
+        g.k++;
+      } else {
+        const f = brawls.find(q => !q.active && q.hugT <= 0);
+        if (f && rnd() < (g.force ? 1 : 0.3 + (a.drunk + b.drunk) * 0.3)) { g.active = false; startBrawl(a, b, f); }
+        else endArgue(g, true);
+      }
+    }
+    /* 주먹다짐 진행: 한쪽이 넘어지면 끝 / 오래가면 술집 주인·경비병이 말린다 / 끝나고 가끔 화해 */
+    for (const f of brawls) {
+      if (!f.active) { if (f.hugT > 0 && (f.hugT -= dt) <= 0) tryHug(f.hugA, f.hugB); continue; }
+      f.t -= dt;
+      if (f.over > 0) { if ((f.over -= dt) <= 0) endBrawl(f); continue; }
+      const a = f.a, b = f.b;
+      if (a.fight !== f || b.fight !== f || a.off || b.off) { endBrawl(f); continue; }
+      const ad = isDown(a), bd = isDown(b);
+      if (ad !== bd) {
+        f.winner = ad ? b : a; f.over = 3.2;
+        say(f.winner, pickOne(WIN), 2, '#8a4a10');
+        sayLater(ad ? a : b, pickOne(LOSE), 1.6);
+      } else if (ad && bd) f.over = 2;
+      else if (f.t <= 0 && !f.breaker) {
+        f.breaker = callBreaker(f);
+        if (!f.breaker) { f.over = 1.5; say(a, pickOne(PARTING), 1.6); }
+      } else if (f.t < -15) endBrawl(f);
+    }
+    /* 팔씨름 */
+    if (arm.active) {
+      const a = arm.a, b = arm.b;
+      if (a.state !== ST.ARM || b.state !== ST.ARM) endArm();
+      else if ((arm.t -= dt) <= 0) {
+        if (arm.phase === 1) {
+          arm.phase = 2; arm.t = 2.8;
+          const w = rnd() < 0.5 + (b.drunk - a.drunk) * 0.4 ? a : b, l = w === a ? b : a;   // 덜 취한 쪽이 조금 유리
+          arm.winner = w; arm.loser = l;
+          play(w, 'Cheers', 0.2); say(w, pickOne(WIN), 2, '#8a4a10'); sayLater(l, pickOne(LOSE), 0.6);
+          w.drunk = Math.min(1, w.drunk + 0.05);
+        } else endArm();
+      }
+    } else if ((armClock -= dt) <= 0) { armClock = rr(35, 60); startArm(); }
+    /* 춤: 음유시인 연주 중이면 그 앞에서, 밤이면 가끔 플레이어 가까운 술집 앞에서 */
+    for (const g of dances) {
+      if (!g.active) continue;
+      g.clock += dt; g.t -= dt;
+      let live = 0;
+      for (const m of g.m) if (m.state === ST.DANCE && m.socG === g) live++;
+      if (g.t <= 0 || live === 0 || (g.bard && !bard.playing)) endDance(g);
+    }
+    if (bard.active && bard.playing && !bardDanced) {   // 구경꾼으로 다 뽑혀 갔으면 3초마다 다시 모아 본다
+      if ((bardRetry -= dt) <= 0) {
+        bardRetry = 3;
+        bardDanced = startDance(clampX(bard.x + Math.sin(bard.face) * 5.5), bard.z + Math.cos(bard.face) * 5.5, 4, bard.t + 1, true, 40) > 0;
+      }
+    } else if (!bard.active) { bardDanced = false; bardRetry = 0; }
+    if ((danceClock -= dt) <= 0) {
+      danceClock = rr(35, 60);
+      const p = getPlayerPos ? getPlayerPos() : null;
+      if (night > 0.6 && p) {
+        const s = nearestStall(p.x, p.z, 45, q => q.occupied > 0);
+        if (s) { const fp = stallFront(s, 4.6); if (startDance(fp.x, fp.z, 4, rr(16, 24))) toast(s.idx); }
+      }
+    }
+    /* 아침: 밤새 놀던 사람들이 하품하며 기지개 */
+    if (night > 0.55) nightMode = true;
+    else if (nightMode && night < 0.35) {
+      nightMode = false;
+      let k = 0;
+      for (let i = 0; i < nWalkers && k < 5; i++) {
+        const n = npcs[i];
+        if (!freeWalker(n) || n.dist > BUBBLE_DIST || rnd() < 0.5) continue;
+        n.state = ST.PAUSE; n.timer = 2.8; play(n, 'Idle', 0.3); n.yawnT = 2.4;
+        sayLater(n, pickOne(YAWN), rnd() * 1.2);
+        k++;
+      }
+    }
+  }
+
+  /* 디버그·다른 모듈용 */
+  function nearPlayerWalker(exclude = null, from = null, minD = 3) {
+    const p = from || (getPlayerPos ? getPlayerPos() : null);
+    if (!p) return null;
+    let best = null, bd = 1e9;
+    for (let i = 0; i < nWalkers; i++) {
+      const n = npcs[i];
+      if (n === exclude || !freeWalker(n) || n.dist < minD) continue;
+      const d = Math.hypot(n.x - p.x, n.z - p.z); if (d < bd) { bd = d; best = n; }
+    }
+    return best;
+  }
+  const social = {
+    toast(si = -1) {
+      const p = getPlayerPos ? getPlayerPos() : { x: 0, z: 0 };
+      const s = si >= 0 ? stalls[si] : nearestStall(p.x, p.z);
+      if (!s) return false;
+      if (seatedAt(s).length < 2) fillSeats(s, [0, 1, 2]);
+      s.toastT = 0;
+      return toast(s.idx);
+    },
+    brawl(skipArgue = false) {   // 플레이어 근처 두 사람을 취하게 해 시비 → 싸움
+      const a = nearPlayerWalker();
+      const b = a && nearPlayerWalker(a, a, 0);
+      if (!a || !b) return false;
+      if (Math.hypot(b.x - a.x, b.z - a.z) > 8) { b.x = a.x + Math.sin(a.rot) * 1.4; b.z = a.z + Math.cos(a.rot) * 1.4; b.y = groundY(b.x, b.z); }
+      a.drunk = b.drunk = 0.85;
+      if (skipArgue) { const f = brawls.find(q => !q.active); return f ? startBrawl(a, b, f) : false; }
+      return startArgue(a, b, true);
+    },
+    argue() { const a = nearPlayerWalker(), b = a && nearPlayerWalker(a, a, 0); return !!(a && b) && startArgue(a, b); },
+    armwrestle(si = -1) { return startArm(si, true); },
+    dance(n = 4) {
+      const p = getPlayerPos ? getPlayerPos() : { x: 0, z: 0 };
+      const s = nearestStall(p.x, p.z);
+      const fp = s ? stallFront(s, 4.6) : { x: p.x + 4, z: p.z };
+      return startDance(fp.x, fp.z, n, 20);
+    },
+    drunk(i, v = 0.9) { const n = npcs[i]; if (!n) return false; n.drunk = Math.max(0, Math.min(1, v)); return n.drunk; },
+    trip(i) { const n = npcs[i]; if (!n || n.state !== ST.WANDER) return false; trip(n); return true; },
+    couple() { for (let k = 0; k < 20; k++) if (startCouple()) return true; return false; },
+    sleep(si = -1) {   // 가까운 가판대 빈 의자에 한 명을 재운다 (낮이면 금방 깬다)
+      const p = getPlayerPos ? getPlayerPos() : { x: 0, z: 0 };
+      const s = si >= 0 ? stalls[si] : nearestStall(p.x, p.z, 1e9, q => q.seats.some(st => !st.owner && !seatBroken(st)));
+      if (!s) return false;
+      const k = s.seats.findIndex(st => !st.owner && !seatBroken(st));
+      if (k < 0 || !fillSeats(s, [k])) return false;
+      const n = s.seats[k].owner;
+      n.sleeping = true; n.animTimer = 0.5; n.cheerIn = -1; play(n, 'Sit', 0.3);
+      return n.idx;
+    },
+    status() {
+      return {
+        drunk: npcs.slice(0, nWalkers).filter(n => n.drunk > 0.3).length,
+        sleeping: npcs.filter(n => n.sleeping).length,
+        couples: npcs.filter(n => n.lead).length,
+        argues: argues.filter(g => g.active).length,
+        brawls: brawls.filter(f => f.active).length,
+        arm: arm.active, dances: dances.filter(g => g.active).length,
+      };
+    },
+  };
 
   function updateGrabbed(n, dt, t, px, pz) {
     const body = n.body;
@@ -1662,7 +2422,7 @@ export async function createNPCs({
       body.rotation.z = 0.15 * Math.sin(u * 13) * (1 - u);
       if (n.timer >= STAGGER_TIME) {
         body.rotation.set(0, 0, 0);
-        n.cx = n.x; n.cz = n.z;
+        n.cx = n.fx = n.x; n.cz = n.fz = n.z;   // finishGetUp 이 fx/fz 로 옮기므로 지금 자리로 (안 그러면 지난번 누웠던 곳으로 순간이동)
         finishGetUp(n);                          // react(쫓기/발 동동)로 넘어간다
       }
     } else if (n.state === ST.STOMP) {
@@ -1714,7 +2474,8 @@ export async function createNPCs({
         n.body.rotation.x = 0.16 + Math.sin(n.laughPh) * 0.1 - Math.max(0, Math.sin(n.laughPh * 0.23)) * 0.28;
         n.body.rotation.z = Math.sin(n.laughPh * 0.5) * 0.04;
       }
-      if (n.timer <= 0) { n.watchV = null; toIdle(n); }
+      if (n.watchKind === 3) n.bow = Math.min(1, n.bow + dt * 3);   // [social] 임금님께 고개 숙여 절
+      if (n.timer <= 0) { n.watchV = null; n.bow = 0; toIdle(n); }
     } else if (n.state === ST.CHAT) {
       const g = n.chatG;
       if (!g) { startWanderLeg(n); }
@@ -1722,6 +2483,10 @@ export async function createNPCs({
         if (walkToward(n, n.fromX, n.fromZ, dt, 0.12)) { n.arrived = true; play(n, 'Idle', 0.4); }
       } else turnTo(n, Math.atan2(g.cx - n.x, g.cz - n.z), dt);
       n.y += (groundY(n.x, n.z) - n.y) * Math.min(1, dt * 12);
+    } else if (n.state === ST.SERVE && n.serveTo) {   // [social] 앉은 손님에게 술을 갖다준다
+      serveWalk(n, dt);
+    } else if (n.state >= ST.ARGUE) {                   // [social] 말다툼·팔씨름·춤·포옹·싸움 말리기
+      socialState(n, dt, t);
     } else if (n.state === ST.BAR || n.state === ST.SERVE) {
       const s = stalls[n.bar], bp = s.bar;
       n.x += (bp.x - n.x) * Math.min(1, dt * 4); n.z += (bp.z - n.z) * Math.min(1, dt * 4);
@@ -1781,14 +2546,14 @@ export async function createNPCs({
         } else {
           turnTo(n, Math.atan2(dx, dz), dt * 1.5);
           const foeUp = foe.state === ST.FIGHT && foe.arrived;
-          if (!foeUp) play(n, 'Stomp', 0.3);              // 상대가 쓰러지면 약 올린다
+          if (!foeUp) play(n, f.winner === n ? 'Cheers' : 'Stomp', 0.3);   // 상대가 쓰러지면 약 올린다 (취객 싸움 승자는 환호)
           else {
             play(n, 'Idle', 0.3);
             /* 1 m 거리를 유지하며 들썩인다 */
             const want = d - 1.0, step = Math.max(-0.8 * dt, Math.min(1.2 * dt, want));
             if (Math.abs(want) > 0.12 && d > 1e-3) { n.x += dx / d * step; n.z += dz / d * step; }
             n.timer -= dt;
-            if (n.timer <= 0 && d < 1.4) { n.timer = rr(1.2, 2.6); fightHit(n, foe); }
+            if (!f.over && n.timer <= 0 && d < 1.4) { n.timer = rr(1.2, 2.6); fightHit(n, foe); }
           }
         }
         n.y += (groundY(n.x, n.z) - n.y) * Math.min(1, dt * 12);
@@ -1801,12 +2566,12 @@ export async function createNPCs({
           if (walkToward(n, n.fromX, n.fromZ, dt, 0.2)) { n.arrived = true; play(n, 'Idle', 0.3); n.timer = rr(0.5, 2); }
         } else {
           /* 싸움이면 계속 환호, 공연이면 조용히 듣다가 끝에 건배 */
-          const cx = g === fight ? (fight.a.x + fight.b.x) / 2 : g.x, cz = g === fight ? (fight.a.z + fight.b.z) / 2 : g.z;
+          const cx = g.isFight ? (g.a.x + g.b.x) / 2 : g.x, cz = g.isFight ? (g.a.z + g.b.z) / 2 : g.z;
           turnTo(n, Math.atan2(cx - n.x, cz - n.z), dt);
-          if (g === fight) {
+          if (g.isFight || g.loud) {   // 싸움·팔씨름은 계속 환호
             play(n, 'Cheers', 0.3);
             n.timer -= dt;
-            if (n.timer <= 0) { n.timer = rr(2.5, 5); if (rnd() < 0.4) say(n, pickOne(FIGHT_CROWD), 1.4); }
+            if (n.timer <= 0) { n.timer = rr(2.5, 5); if (rnd() < 0.4) say(n, pickOne(g.crowd || FIGHT_CROWD), 1.4); }
           } else play(n, g.phase === 2 ? 'Cheers' : 'Idle', 0.3);
         }
         n.y += (groundY(n.x, n.z) - n.y) * Math.min(1, dt * 12);
@@ -1919,6 +2684,9 @@ export async function createNPCs({
   function watch(n, target, dur = 2, cheer = true) {
     if (!n || n.off || n.actor || n.guard || n.bar >= 0 || (n.state !== ST.WANDER && n.state !== ST.PAUSE)) return false;
     n.state = ST.WATCH; n.timer = dur; n.watchV = target; n.yielding = false; n.watchKind = cheer ? 0 : 1;
+    breakPair(n);
+    /* [social] 임금님 행차엔 절반쯤은 환호 대신 고개 숙여 절한다 */
+    if (cheer && target && target.actor && /king/.test(target.model || '') && rnd() < 0.55) { n.watchKind = 3; n.bow = 0; play(n, 'Idle', 0.25); return true; }
     play(n, cheer ? 'Cheers' : (n.actions.Stomp ? 'Stomp' : 'Idle'), 0.25);
     return true;
   }
@@ -1982,6 +2750,23 @@ export async function createNPCs({
         takeHit(n, HIT_DMG.punch, dx * 3.2, 2.2, dz * 3.2, 'punch');
         return true;
       },
+      /* [social] 사회생활 장면 바로 띄우기 */
+      toast: si => social.toast(si),            // 가까운(또는 si) 가판대 건배 (모자라면 손님을 앉힌다)
+      brawl: skip => social.brawl(skip),        // 근처 두 사람 시비 → 주먹다짐 (skip=true 면 말다툼 생략)
+      argue: () => social.argue(),
+      armwrestle: si => social.armwrestle(si),
+      dance: k => social.dance(k),
+      drunk: (i, v) => social.drunk(i, v),      // i번 취기 0..1
+      trip: i => social.trip(i),
+      couple: () => social.couple(),
+      sleep: si => social.sleep(si),
+      hug: () => {
+        const a = nearPlayerWalker(), b = a && nearPlayerWalker(a, a, 0);
+        if (!a || !b) return false;
+        if (Math.hypot(b.x - a.x, b.z - a.z) > 8) { b.x = a.x + Math.sin(a.rot) * 2; b.z = a.z + Math.cos(a.rot) * 2; b.y = groundY(b.x, b.z); }
+        return tryHug(a, b);
+      },
+      social: () => social.status(),
     };
   }
 
@@ -1991,6 +2776,7 @@ export async function createNPCs({
     pick: pickRay, knockDown, list, freeSeatNear, reserveSeat: reserveSeatAPI, releaseSeat: releaseSeatAPI,
     alarm, barkeeperServe, say,
     addActor, actorOn, actorOff, actorPlay, isActing, watch,   // [village]
+    social,                                                    // [social] toast/brawl/argue/armwrestle/dance/drunk/trip/couple/status
     onPlayerPunch: null,
     _grab: { pick, grab, setTarget, release, punch, setCtrl: c => { ctrl = c; } } });
 }
