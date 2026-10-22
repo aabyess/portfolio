@@ -706,6 +706,9 @@ async function initDrive() {
   draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/');
   const worldLoader = new GLTFLoader(worldManager);
   worldLoader.setDRACOLoader(draco);
+  /* 장난감 블록·상호왕국 표지판 자리 (나무를 치우려고 월드 로딩 전에 정한다) */
+  const NAME_Z = WORLD.start.z - 12, ROW_Z = WORLD.start.z - 9.6, BLOCK_X = pathX(NAME_Z) + 15;
+  const KINGDOM_SIGN = { x: pathX(WORLD.start.z - 6) - 3.6, z: WORLD.start.z - 6 };
   const { PONDS } = await import('./fishing.js');   // 연못 자리의 나무는 치운다
   worldLoader.load('models/autumn-world.glb', gltf => {
     gltf.scene.traverse(o => {
@@ -730,6 +733,8 @@ async function initDrive() {
     scene.add(gltf.scene);
     clearTrees(gltf.scene, PROJECTS.filter(p => p.ai).map(p => p.pos), 7.5);
     clearTrees(gltf.scene, PONDS.map(p => [p.x, p.z]), 6.2);
+    clearTrees(gltf.scene, [[BLOCK_X, (NAME_Z + ROW_Z) / 2]], 6);       // 장난감 블록 자리
+    clearTrees(gltf.scene, [[KINGDOM_SIGN.x, KINGDOM_SIGN.z]], 2.6);   // 상호왕국 표지판
   });
 
   /* ── 풀 — 브루노 시몽 숲처럼 짧고 뾰족한 풀을 촘촘히 ──
@@ -1090,14 +1095,49 @@ async function initDrive() {
     mesh.position.set(x, y, z);
     return b;
   }
-  /* 출발점 바로 앞 숲길 위 */
-  const NAME_Z = WORLD.start.z - 7, ROW_Z = WORLD.start.z - 4.6;
+  /* 출발점 앞 길 오른쪽 풀밭 (길은 비워 두고, 연락처 조형물 너머에서 보이게) */
   const NAME = [['최', '#ff6b3d'], ['상', '#1fa59c'], ['호', '#e8466e']];
-  NAME.forEach(([ch, c], i) => toyBlock(ch, 2.1, 2.1, 1.05, pathX(NAME_Z) + (i - 1) * 2.35, 1.05, NAME_Z, c, 3));
+  NAME.forEach(([ch, c], i) => toyBlock(ch, 2.1, 2.1, 1.05, BLOCK_X + (i - 1) * 2.35, 1.05, NAME_Z, c, 3));
   const SMALL = ['#f4a53c', '#3a9fc4', '#e8466e', '#2bb38f', '#8a6ad8'];
   /* 작은 큐브 한 줄: AI · ENGINEER (가운데 한 칸 띄움, 글자 수에 맞춰 가운데 정렬) */
   const ROW_TEXT = 'AI ENGINEER', ROW_MID = (ROW_TEXT.length - 1) / 2;
-  [...ROW_TEXT].forEach((ch, i) => { if (ch !== ' ') toyBlock(ch, 0.74, 0.74, 0.74, pathX(ROW_Z) + (i - ROW_MID) * 0.8, 0.37, ROW_Z, SMALL[i % 5], 0.6); });
+  [...ROW_TEXT].forEach((ch, i) => { if (ch !== ' ') toyBlock(ch, 0.74, 0.74, 0.74, BLOCK_X + (i - ROW_MID) * 0.8, 0.37, ROW_Z, SMALL[i % 5], 0.6); });
+
+  /* ── 길 왼쪽 나무 표지판 "상호왕국" ── */
+  {
+    const g = new THREE.Group();
+    const wood = new THREE.MeshStandardMaterial({ color: 0x5a3a22, roughness: .85 });
+    for (const sx of [-1.15, 1.15]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 2.9, 8), wood);
+      post.position.set(sx, 1.45, 0); post.castShadow = true; g.add(post);
+    }
+    const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 420;
+    const c = cv.getContext('2d');
+    const grd = c.createLinearGradient(0, 0, 0, 420); grd.addColorStop(0, '#b07a45'); grd.addColorStop(1, '#8a5a2e');
+    c.fillStyle = grd; c.fillRect(0, 0, 1024, 420);
+    c.strokeStyle = 'rgba(60,32,14,.35)'; c.lineWidth = 3;                       // 나뭇결
+    for (let y = 18; y < 420; y += 26) { c.beginPath(); c.moveTo(0, y); c.bezierCurveTo(300, y + 8, 700, y - 8, 1024, y + 4); c.stroke(); }
+    c.strokeStyle = '#4a2a14'; c.lineWidth = 18; c.strokeRect(9, 9, 1006, 402);
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.font = '900 168px Pretendard, system-ui, sans-serif';
+    c.fillStyle = 'rgba(40,20,8,.55)'; c.fillText('상호왕국', 518, 172);
+    c.fillStyle = '#ffe2a8'; c.fillText('상호왕국', 512, 164);
+    c.font = '700 50px Pretendard, system-ui, sans-serif'; c.fillStyle = '#fff1d0';
+    c.fillText('♔ 임금님 최상호의 나라에 오신 걸 환영합니다', 512, 318);
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    const board = new THREE.Mesh(new THREE.BoxGeometry(2.9, 1.2, 0.12),
+      [wood, wood, wood, wood, new THREE.MeshStandardMaterial({ map: tex, roughness: .8 }), new THREE.MeshStandardMaterial({ map: tex, roughness: .8 })]);
+    board.position.y = 2.15; board.castShadow = true; g.add(board);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.1, 0.42), wood);   // 작은 처마
+    roof.position.y = 2.82; roof.castShadow = true; g.add(roof);
+    g.position.set(KINGDOM_SIGN.x, Math.max(0, heightAt(KINGDOM_SIGN.x, KINGDOM_SIGN.z)), KINGDOM_SIGN.z);
+    g.rotation.y = 0.35;                                                          // 출발점에서 오는 사람을 비스듬히 본다
+    scene.add(g);
+    const sb = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(1.35, 1.4, 0.15)) });
+    sb.position.set(g.position.x, g.position.y + 1.4, g.position.z);
+    sb.quaternion.setFromEuler(0, g.rotation.y, 0);
+    world.addBody(sb);
+  }
 
   function restackBlocks() {
     /* 차나 캐릭터가 블록 자리에 서 있으면 다시 쌓는 순간 블록이 튕겨 나간다. 출발점으로 옮긴다 */
@@ -1412,13 +1452,18 @@ async function initDrive() {
         isMusicOn: () => document.getElementById('g-music-btn')?.getAttribute('aria-pressed') === 'true',
         isVisible: () => driveActive,
         onPlayerCaught: () => {
-          /* 붙잡히면 출발점으로 끌려간다 */
-          if (player.mode === 'driving') toggleVehicle();
-          if (tavern && tavern.seated) tavern.standUp();
+          /* 붙잡히면 그 자리에서 꾸중만 듣는다 (무기는 압수 = 집어넣기) */
           if (weapons) weapons.holster();
-          person.position.set(pathX(START_Z) + 2.2, 0, START_Z - 3);
-          pHeading = camYaw = Math.PI; pSpeed = 0;
-          toast('경비병에게 붙잡혔습니다! 임금님 앞에서 반성하세요', 2600);
+          pSpeed = 0;
+          const SCOLD = ['이번만 봐주겠다! 임금님 마을에서 소란은 금물이다!', '어허! 무기를 함부로 쓰면 못쓴다!', '한 번만 더 그러면 성 감옥행이다!', '임금님께서 슬퍼하신다. 착하게 지내거라!'];
+          /* 꾸중 끝에 임금님(최상호) 연락처를 하나 알려 준다 */
+          const CONTACT = [
+            '할 말이 있으면 임금님께 직접 서신을 보내라 ✉ maeguming0000@gmail.com',
+            '임금님의 업적이 궁금하면 왕실 기록소로 가 보거라 → github.com/aabyess',
+            '억울하면 임금님께 전갈을 넣어라 ☎ 010-3322-7250',
+          ];
+          const pick = a => a[Math.floor(Math.random() * a.length)];
+          toast(`🛡️ 근위병: "${pick(SCOLD)}"<div style="font:500 14px system-ui;opacity:.85;margin-top:6px">${pick(CONTACT)}</div>`, 4200);
         },
         onEvent: text => toast(text, 2400),
         stallNames: stations.map(s => s.name),
@@ -1432,7 +1477,7 @@ async function initDrive() {
         isMusicOn: () => document.getElementById('g-music-btn')?.getAttribute('aria-pressed') === 'true',
         isVisible: () => driveActive,
         onEvent: text => toast(text, 2400),
-        onAggro: () => { if (events) events.setStars(Math.max(events.stars, 3)); },
+        onAggro: () => toast('🛡️ 근위병: "감히 임금님께! 다음엔 정말 혼난다!"', 2400),   // 임금님을 쳐도 꾸중만
         bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
       });
     }).catch(e => console.warn('[npcs]', e));
@@ -1756,8 +1801,8 @@ async function initDrive() {
   const MOVES = [
     { name: '왼손 잽',      clip: 'punch_left',  speed: 1.9, upper: true },
     { name: '오른손 스트레이트', clip: 'punch_right', speed: 1.8, upper: true },
-    { name: '발차기',       clip: 'kick_right',  speed: 1.45, hitAt: 0.42, reach: 2.0, power: 6.5, up: 3 },
-    { name: '드롭킥',       clip: 'kick_right',  drop: true, dur: 1.15, hitAt: 0.3, reach: 2.4, power: 10, up: 4 },
+    { name: '발차기',       clip: 'kick_right',  speed: 1.45, hitAt: 0.42, reach: 2.0, power: 6.5, up: 3, dmg: 40 },
+    { name: '드롭킥',       clip: 'kick_right',  drop: true, dur: 1.15, hitAt: 0.3, reach: 2.4, power: 10, up: 4, dmg: 70 },
   ];
   const moveActs = {};
   const atk = { move: null, t: 0, dur: 0, hit: false, step: 0, win: 0, act: null, timer: 0 };
@@ -1807,7 +1852,7 @@ async function initDrive() {
       const dx = n.x - px, dz = n.z - pz, d = Math.hypot(dx, dz);
       if (!(d < m.reach) || d < 1e-3 || (dx * fx + dz * fz) / d < 0.3) continue;
       _imp.set((dx / d * 0.4 + fx * 0.6) * m.power, m.up, (dz / d * 0.4 + fz * 0.6) * m.power);
-      npcs.knockDown(n, _imp, 'punch');
+      npcs.knockDown(n, _imp, 'punch', m.dmg);   // 맷집을 깎는다 (다 닳으면 넘어진다)
     }
   }
   function attackStep(dt) {
@@ -2181,14 +2226,26 @@ async function initDrive() {
     });
   }
 
+  /* 오른쪽 마우스를 누르고 있는 동안 어깨 너머로 살짝 줌 (떼면 돌아온다) */
+  let zoomHeld = false, zoomK = 0;
+  const baseFov = camera.fov;
+  renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+  renderer.domElement.addEventListener('pointerdown', e => { if (e.button === 2 && driveActive) zoomHeld = true; });
+  window.addEventListener('pointerup', e => { if (e.button === 2) zoomHeld = false; });
+  window.addEventListener('blur', () => { zoomHeld = false; });
+
   function updateCamera(dt) {
     const onFoot = player.mode === 'onfoot';
     const c = onFoot ? CAM.onfoot : CAM.driving;
     const p = onFoot ? person.position : car.position;
     const h = onFoot ? camYaw : heading;
     const k = 1 - Math.pow(c.ease, dt);
+    zoomK += ((zoomHeld ? 1 : 0) - zoomK) * Math.min(1, dt * 9);
+    const fov = baseFov - 14 * zoomK;
+    if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+    const back = c.back * (1 - 0.45 * zoomK), side = (onFoot ? 0.75 : 0) * zoomK;   // 오른쪽 어깨 너머 = (-cos h, sin h)
 
-    camTarget.set(p.x - Math.sin(h) * c.back, p.y + c.up, p.z - Math.cos(h) * c.back);
+    camTarget.set(p.x - Math.sin(h) * back - Math.cos(h) * side, p.y + c.up * (1 - 0.3 * zoomK), p.z - Math.cos(h) * back + Math.sin(h) * side);
     camPos.lerp(camTarget, k);
     camera.position.copy(camPos);
 
@@ -2207,8 +2264,8 @@ async function initDrive() {
     else if (!tavern.seated && !fishing.active) {
       if (dialogue.active) keys.fwd = keys.back = keys.left = keys.right = keys.boost = false;
       if (!legMove()) walk(dt);   // 발차기·드롭킥 중엔 제자리 (애니메이션은 attackStep 이 돌린다)
-    }
-    attackStep(dt);   // 의자에 앉아 있으면 걷기를 멈춘다
+    }   // 의자에 앉아 있거나 낚시 중이면 걷기를 멈춘다
+    attackStep(dt);
     tavernIn.onFoot = player.mode === 'onfoot'; tavernIn.keys = keys;
     tavern.update(dt, tavernIn);
     fishIn.onFoot = player.mode === 'onfoot'; fishIn.keys = keys;

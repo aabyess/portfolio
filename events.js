@@ -40,7 +40,8 @@
       콘솔: __events.stars, __events.setStars(3), __events.fight(), __events.bard()
    ════════════════════════════════════════════════════════════════════ */
 
-const AGG = { punch: 1, knockdown: 2, weapon: 2, shot: 1, explosion: 3, car: 2, throw: 2 };
+/* 주먹·부딪힘·차로 치기·던지기는 별이 안 뜬다. 총에 맞히기·폭발(폭탄·바주카·박격포·탱크) 같은 큰 사건만 경비병을 부른다 (★2부터 출동) */
+const AGG = { punch: 0, knockdown: 0, car: 0, throw: 0, shot: 1, weapon: 2, explosion: 4 };
 const STAR_AT = [1, 4, 8, 13, 20];       // 점수 → 별 1~5
 const GUARDS_BY_STAR = [0, 0, 2, 3, 4, 4];
 const HIDE_R = 30, DECAY_T = 20;         // 경비병 모두에게서 30 m 밖에 20초 있으면 별 하나 내려간다
