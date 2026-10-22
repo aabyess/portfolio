@@ -1,7 +1,11 @@
 /* ════════════════════════════════════════════════════════════
-   무기 10종 — 칼 · 도끼 · 망치 · 총 · 활 · 석궁 · 철퇴 · 투창 · 폭탄 · 프라이팬
+   무기 12종 — 칼 · 도끼 · 망치 · 총 · 활 · 석궁 · 철퇴 · 투창 · 폭탄 · 프라이팬 · 바주카(-) · 박격포(=)
    ────────────────────────────────────────────────────────────
-   걸어 다닐 때만 쓴다. 1~9, 0 으로 고르고(같은 키 다시 = 집어넣기), 휠로 바꾸고,
+   걸어 다닐 때만 쓴다(운전 중엔 단축 바도 숨는다). 1~9, 0, -, = 로 고르고(같은 키 다시 = 집어넣기), 휠로 바꾸고,
+   바주카: 클릭 = 조준 방향으로 로켓 → 닿으면 explode(5, 14). 박격포: 멈춰 서면 땅에 내려놓고(쪼그려 앉기),
+   땅 위 목표 고리(8~35 m)로 클릭 = 높은 포물선 포탄 → 휘파람 소리 → explode(7, 16).
+   손 쥐기: grip() 이 손목을 돌려 손바닥이 자루를 감싸게 하고 손가락 뼈(Index1~4R 등)를 말아 주먹을 쥔다.
+   디버그(debug=true): __weapons.inspect(각도, 거리, 높이) = 사람 주위 고정 카메라 + 조준점 고정, inspect(null) = 끄기.
    G = 집어넣기/다시 꺼내기, 왼쪽 클릭 = 공격. 맨손(none)일 땐 npcs.js 의 잡기/때리기가 그대로 동작한다.
    피·상처 표현은 없다 — 맞으면 하얀 '퍽' 연기와 노란 불꽃, 넘어짐, 별 빙글빙글.
 
@@ -37,7 +41,7 @@
    ③ npcs 잡기(attachGrab)의 isBlocked 에 무기를 더한다:
         isBlocked: () => !driveActive || panel.classList.contains('open') || weapons.armed,
 
-   ④ 안내 문구: WEAPON_HINT = "1~9·0 무기 · 휠 바꾸기 · 클릭 공격 · G 집어넣기"
+   ④ 안내 문구: WEAPON_HINT = "1~0·-·= 무기 · 휠 바꾸기 · 클릭 공격 · G 집어넣기"
 
    ── npcs.js API (있으면 쓰고, 없으면 대체 동작) ──
      npcs.npcs                 : 배열, 각 n 에 x, y, z (발 위치), rot, off
@@ -60,7 +64,7 @@
 import { createPoser } from './tavern.js';
 
 const D2R = Math.PI / 180;
-export const HUD_HINT = '1~9·0 무기 · 휠 바꾸기 · 클릭 공격 · G 집어넣기';
+export const HUD_HINT = '1~0·-·= 무기 · 휠 바꾸기 · 클릭 공격 · G 집어넣기';
 
 export const WEAPONS = [
   { id: 'sword',    key: '1', name: '칼' },
@@ -73,22 +77,35 @@ export const WEAPONS = [
   { id: 'javelin',  key: '8', name: '투창' },
   { id: 'bomb',     key: '9', name: '폭탄' },
   { id: 'pan',      key: '0', name: '프라이팬' },
+  { id: 'bazooka',  key: '-', name: '바주카' },
+  { id: 'mortar',   key: '=', name: '박격포' },
 ];
+const KEY_CODE = { Minus: '-', NumpadSubtract: '-', Equal: '=', NumpadAdd: '=' };
 const BY_ID = Object.fromEntries(WEAPONS.map(w => [w.id, w]));
-const RANGED = { pistol: 1, bow: 1, crossbow: 1 };          // 늘 조준 방향을 본다
+const RANGED = { pistol: 1, bow: 1, crossbow: 1, bazooka: 1 };   // 늘 조준 방향을 본다
+/* 바주카: 모델 원점 = 오른손 권총 손잡이, 통 축은 원점 위 tubeY, +Z 앞 */
+const BAZ = { reload: 1.4, speed: 30, range: 70, radius: 5, force: 14, tubeY: 0.11, len: 1.15 };
+/* 박격포: 모델 원점 = 바닥판 가운데, 통은 앞으로 30° 기울어 있다 */
+const MORTAR = { reload: 3.2, min: 8, max: 35, radius: 7, force: 16, tilt: 30, tube: 0.95, drop: 0.32 };
 /* glb 가 대체 모델과 규칙이 다를 때 고칠 곳 (라디안·미터) */
+/* tools/blender/weapons 의 glb 는 Blender 에서 '자루 = +Y, 앞 = +Z' 로 만들었는데 glTF 내보내기(Y-up)가
+   Blender +Y → glTF -Z, Blender +Z → glTF +Y 로 바꾼다. 그래서 X 축으로 +90° 돌려 규칙(+Y 자루, +Z 앞)에 맞춘다.
+   화살(arrow.glb)은 처음부터 glTF +Z 로 만들어서 그대로. */
+const R90 = [Math.PI / 2, 0, 0];
 const GLB_FIX = {
-  // sword: { rot: [0, 0, 0], pos: [0, 0, 0], scale: 1 },
+  sword: { rot: R90 }, axe: { rot: R90 }, hammer: { rot: R90 }, pistol: { rot: R90 }, bow: { rot: R90 },
+  arrow: {},
 };
+const HAS_GLB = new Set(Object.keys(GLB_FIX));   // 파일이 있는 것만 불러온다 (없는 파일 404 를 콘솔에 남기지 않게)
 
 /* 근접 공격 키프레임 (사람 공간: 앞 +Z, 위 +Y, 캐릭터 왼쪽 +X → 오른쪽은 x 음수)
    hand = 오른손 목표, blade = 자루→날 방향, tw = 가슴 비틀기(+왼쪽), pt = 가슴 숙이기(+앞) */
 const K = (t, hand, blade, tw = 0, pt = 0) => ({ t, hand, blade, tw, pt });
 const MELEE = {
   sword: { dur: 0.36, hitAt: 0.5, trail: [0.3, 0.72], len: 0.84, two: false, range: 1.9, cone: 100, sound: 'whoosh',
-    keys: [K(0, [-0.28, 1.02, 0.30], [0.05, 0.6, 0.8]), K(0.25, [-0.46, 1.5, 0.02], [-0.45, 0.8, -0.4], -25, -4),
+    keys: [K(0, [-0.28, 1.0, 0.30], [-0.12, 0.72, 0.68]), K(0.25, [-0.46, 1.5, 0.02], [-0.45, 0.8, -0.4], -25, -4),
       K(0.55, [0.22, 1.08, 0.55], [0.9, 0.05, 0.45], 25, 8), K(0.8, [0.32, 0.95, 0.32], [0.8, -0.35, -0.1], 30, 6),
-      K(1, [-0.28, 1.02, 0.30], [0.05, 0.6, 0.8])] },
+      K(1, [-0.28, 1.0, 0.30], [-0.12, 0.72, 0.68])] },
   axe: { dur: 1.0, hitAt: 0.86, trail: [0.72, 0.92], len: 0.66, two: true, range: 1.8, cone: 70, sound: 'whooshHeavy',
     keys: [K(0, [-0.26, 1.0, 0.3], [0, 0.85, 0.5]), K(0.55, [-0.12, 1.95, -0.04], [0, 0.35, -0.95], 0, -12),
       K(0.72, [-0.12, 2.0, -0.1], [0, 0.2, -1], 0, -14), K(0.86, [-0.1, 0.82, 0.62], [0, -0.55, 0.85], 0, 20),
@@ -137,10 +154,20 @@ export function createWeapons({
     white: new THREE.MeshStandardMaterial({ color: 0xf2ece0, roughness: 0.8, side: THREE.DoubleSide }),
     bomb: new THREE.MeshStandardMaterial({ color: 0x24262a, roughness: 0.45, metalness: 0.35 }),
     rope: new THREE.MeshStandardMaterial({ color: 0xcdb48a, roughness: 0.9 }),
+    olive: new THREE.MeshStandardMaterial({ color: 0x5d6b3a, roughness: 0.62, metalness: 0.15 }),
+    oliveD: new THREE.MeshStandardMaterial({ color: 0x3e4826, roughness: 0.6, metalness: 0.2 }),
+    black: new THREE.MeshStandardMaterial({ color: 0x24221f, roughness: 0.55, metalness: 0.3 }),
+    yellow: new THREE.MeshStandardMaterial({ color: 0xe8b43a, roughness: 0.6 }),
+    redP: new THREE.MeshStandardMaterial({ color: 0xc8402e, roughness: 0.55 }),
   };
   const box = (w, h, d, m, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); return o; };
   const cyl = (r1, r2, h, m, x = 0, y = 0, z = 0, seg = 10) => { const o = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, h, seg), m); o.position.set(x, y, z); return o; };
   const alongZ = o => { o.rotation.x = Math.PI / 2; return o; };
+  /* p0 → p1 막대 */
+  const rod = (p0, p1, r, m, seg = 8) => {
+    const a = new V(...p0), b = new V(...p1), o = cyl(r, r, a.distanceTo(b), m, 0, 0, 0, seg);
+    o.position.copy(a).add(b).multiplyScalar(0.5); o.quaternion.setFromUnitVectors(new V(0, 1, 0), b.sub(a).normalize()); return o;
+  };
   const tube = (pts, r, m) => new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(p => new V(...p))), 24, r, 6), m);
 
   function makeArrow(len = 0.75, bolt = false) {
@@ -196,6 +223,7 @@ export function createWeapons({
       guard.rotation.set(0, Math.PI / 2, Math.PI); guard.position.set(0, 0.008, 0.02); g.add(guard);
       g.add(alongZ(cyl(0.004, 0.004, 0.24, M.woodL, 0, 0.004, 0.17, 5)));
       g.userData.muzzle = new V(0, 0.05, 0.33);
+      g.userData.gripAxis = new V(0, 0.9, 0.43).normalize();   // 손잡이는 아래-뒤로 기운다
       return g;
     },
     bow() {
@@ -245,6 +273,53 @@ export function createWeapons({
       g.userData.fuse = new V(0.03, 0.155, 0);
       return g;
     },
+    bazooka() {   // 만화풍 바주카 — 원점 = 오른손 권총 손잡이
+      const g = new THREE.Group(), T = BAZ.tubeY;
+      g.add(alongZ(cyl(0.064, 0.064, BAZ.len, M.olive, 0, T, 0.08, 16)));
+      g.add(alongZ(cyl(0.08, 0.072, 0.09, M.oliveD, 0, T, 0.08 + BAZ.len / 2 - 0.02, 16)));      // 앞 테
+      g.add(alongZ(cyl(0.066, 0.092, 0.16, M.oliveD, 0, T, 0.08 - BAZ.len / 2 - 0.05, 16)));    // 뒤 나팔
+      g.add(alongZ(cyl(0.067, 0.067, 0.05, M.yellow, 0, T, 0.45, 16)));                          // 노란 띠
+      g.add(alongZ(cyl(0.067, 0.067, 0.03, M.redP, 0, T, 0.5, 16)));
+      g.add(box(0.1, 0.04, 0.2, M.leather, 0, T - 0.07, -0.22));                                 // 어깨 받침
+      const grip = box(0.036, 0.12, 0.052, M.black, 0, -0.005, -0.01); grip.rotation.x = 0.22; g.add(grip);
+      g.add(box(0.03, 0.03, 0.12, M.black, 0, T - 0.07, 0.02));
+      const guard = new THREE.Mesh(new THREE.TorusGeometry(0.026, 0.005, 5, 10, Math.PI), M.black);
+      guard.rotation.set(0, Math.PI / 2, Math.PI); guard.position.set(0, 0.03, 0.04); g.add(guard);
+      g.add(cyl(0.02, 0.022, 0.12, M.black, 0, -0.005, 0.3));                                    // 앞 손잡이
+      g.add(box(0.03, 0.03, 0.05, M.black, 0, T - 0.07, 0.3));
+      g.add(box(0.02, 0.06, 0.03, M.black, 0.075, T + 0.03, 0.22));                              // 조준기 (왼쪽)
+      g.add(box(0.012, 0.02, 0.02, M.black, 0.075, T + 0.07, 0.22));
+      const rocket = new THREE.Group();                                                          // 장전된 탄두 (앞에 살짝 보인다)
+      const nose = alongZ(new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.16, 14), M.redP)); nose.position.z = 0.08; rocket.add(nose);
+      rocket.add(alongZ(cyl(0.055, 0.055, 0.04, M.oliveD, 0, 0, -0.01, 14)));
+      rocket.position.set(0, T, 0.08 + BAZ.len / 2 + 0.02); g.add(rocket);
+      g.userData.rocket = rocket;
+      g.userData.muzzle = new V(0, T, 0.08 + BAZ.len / 2 + 0.03);
+      g.userData.rear = new V(0, T, 0.08 - BAZ.len / 2 - 0.12);
+      g.userData.front = new V(0, 0.0, 0.3);
+      return g;
+    },
+    mortar() {   // 만화풍 박격포 — 원점 = 바닥판 가운데, +Y = 통(앞으로 30° 기운 상태에서), +Z = 앞
+      const g = new THREE.Group(), tl = MORTAR.tilt * D2R, L = MORTAR.tube;
+      const plate = cyl(0.21, 0.23, 0.035, M.oliveD, 0, 0, 0, 18); plate.rotation.x = -tl; g.add(plate);
+      const rib = box(0.4, 0.03, 0.05, M.olive, 0, 0.02, 0); rib.rotation.x = -tl; g.add(rib);
+      g.add(cyl(0.05, 0.058, L, M.olive, 0, L / 2 + 0.02, 0, 16));
+      g.add(cyl(0.068, 0.068, 0.06, M.oliveD, 0, L - 0.0, 0, 16));                                // 포구 테
+      g.add(cyl(0.062, 0.062, 0.05, M.yellow, 0, L * 0.72, 0, 16));
+      const blk = new THREE.Mesh(new THREE.CircleGeometry(0.05, 14), M.black); blk.rotation.x = -Math.PI / 2; blk.position.y = L + 0.031; g.add(blk);
+      g.add(box(0.12, 0.05, 0.08, M.oliveD, 0, L * 0.6, 0.03));                                   // 받침 고리
+      // 두 다리 (바닥 앞쪽으로 — 30° 기울기에 맞춘 로컬 좌표)
+      const fy = 0.45 * Math.sin(tl), fz = 0.45 * Math.cos(tl);
+      for (const sx of [-1, 1]) {
+        g.add(rod([sx * 0.03, L * 0.6, 0.05], [sx * 0.22, fy, fz], 0.013, M.iron));
+        const foot = box(0.05, 0.015, 0.06, M.iron, sx * 0.22, fy, fz); foot.rotation.x = -tl; g.add(foot);
+      }
+      g.add(rod([-0.03, L * 0.6 - 0.1, 0.07], [0.03, L * 0.6 - 0.1, 0.07], 0.01, M.iron));
+      g.add(rod([0, L * 0.6 - 0.1, 0.07], [0, L * 0.6 - 0.02, 0.18], 0.008, M.iron));             // 높이 조절 손잡이
+      g.userData.muzzle = new V(0, L + 0.04, 0);
+      g.userData.hold = new V(0, L * 0.78, 0);           // 왼손이 잡는 곳
+      return g;
+    },
     pan() {
       const g = new THREE.Group();
       g.add(cyl(0.013, 0.016, 0.3, M.iron, 0, 0.08, 0));
@@ -259,22 +334,41 @@ export function createWeapons({
   const holder = new THREE.Group(); holder.name = 'weapon-in-hand'; scene.add(holder);
   function prepModel(g) { g.traverse(o => { if (o.isMesh) { o.castShadow = true; } }); g.visible = false; holder.add(g); return g; }
   for (const w of WEAPONS) models[w.id] = prepModel(MAKERS[w.id]());
-  const nocked = prepModel(makeArrow()); // 활에 걸린 화살
+  let nocked = prepModel(makeArrow()); // 활에 걸린 화살 (arrow.glb 가 오면 바뀐다)
   const loader = GLTFLoader ? new GLTFLoader() : null;
   if (loader && dracoLoader) loader.setDRACOLoader(dracoLoader);
   const tried = {};
   function tryGlb(id) {
-    if (!loader || tried[id]) return;
+    if (!loader || tried[id] || !HAS_GLB.has(id)) return;
     tried[id] = true;
     loader.load(baseUrl + id + '.glb', gltf => {
       const fix = GLB_FIX[id] || {};
       const g = new THREE.Group(), m = gltf.scene;
       if (fix.rot) m.rotation.set(...fix.rot); if (fix.pos) m.position.set(...fix.pos); if (fix.scale) m.scale.setScalar(fix.scale);
       g.add(m);
+      if (id === 'arrow') {   // 활에 거는 화살 + 날아가는 화살(복제) 모양
+        g.userData.len = nocked.userData.len;
+        const vis = nocked.visible; holder.remove(nocked); nocked = prepModel(g); nocked.visible = vis;
+        return;
+      }
+      // 활 glb 의 시위(뼈대로 당기는 메시)는 숨기고 코드 시위(선)를 쓴다 — 당김 정도를 코드가 그린다
+      if (id === 'bow') m.traverse(o => { if (o.isMesh && /string/i.test(o.name)) o.visible = false; });
       const old = models[id];
       for (const k of ['muzzle', 'anchor', 'fuse', 'len', 'tips']) if (old.userData[k] !== undefined) g.userData[k] = old.userData[k];
+      if (id === 'pistol') {   // glb 총은 '손잡이 = +Y' 라 총열이 기울어 있다 → 총열(muzzle 빈 객체의 +Z)이 +Z 가 되게 X 축으로 돌린다
+        const mz = m.getObjectByName('muzzle');
+        g.userData.gripAxis = new V(0, 1, 0);
+        if (mz) {
+          g.updateMatrixWorld(true);
+          const mp = mz.getWorldPosition(new V()), fw = new V(0, 0, 1).applyQuaternion(mz.getWorldQuaternion(new Q()));
+          const corr = new Q().setFromAxisAngle(new V(1, 0, 0), Math.atan2(fw.y, fw.z));
+          g.remove(m); const c = new THREE.Group(); c.quaternion.copy(corr); c.add(m); g.add(c);
+          g.userData.muzzle = mp.applyQuaternion(corr);
+          g.userData.gripAxis.applyQuaternion(corr);
+        }
+      }
       // 활·석궁 시위와 석궁 볼트는 대체 모델 것을 계속 쓴다 (glb 에 없으면)
-      if (old.userData.string && !m.getObjectByName('string')) { g.add(old.userData.string); g.userData.string = old.userData.string; }
+      if (old.userData.string) { g.add(old.userData.string); g.userData.string = old.userData.string; }
       if (old.userData.bolt) { g.add(old.userData.bolt); g.userData.bolt = old.userData.bolt; }
       holder.remove(old); models[id] = prepModel(g);
     }, undefined, () => { /* 없으면 대체 모델 */ });
@@ -437,6 +531,21 @@ export function createWeapons({
       for (const [f, p, d] of [[523, 0.35, 1.4], [1311, 0.18, 1.0], [2093, 0.12, 0.8], [2967, 0.08, 0.6], [784, 0.12, 1.2]]) tone(t, 'sine', f, f * 0.995, d, p, 0.002);
       noise(t, 0.04, 'highpass', 6000, 4000, 0.25, 0.001);
     },
+    rocket() {   // 바주카 '푸슝'
+      const a = audio(); if (!a) return; const t = a.currentTime;
+      noise(t, 0.08, 'highpass', 3000, 1500, 0.7, 0.001);
+      noise(t, 0.9, 'bandpass', 900, 2600, 0.6, 0.01, 1.2, true);
+      tone(t, 'sine', 110, 40, 0.3, 0.8, 0.002);
+    },
+    thump() {    // 박격포 '퉁'
+      const a = audio(); if (!a) return; const t = a.currentTime;
+      tone(t, 'sine', 95, 38, 0.35, 1.0, 0.002); noise(t, 0.4, 'lowpass', 1200, 120, 0.8, 0.002, 0.7, true);
+      tone(t, 'triangle', 300, 160, 0.08, 0.2, 0.001);
+    },
+    whistle(dur = 1.2) {   // 떨어지는 포탄 '휘이이~'
+      const a = audio(); if (!a) return; const t = a.currentTime;
+      tone(t, 'sine', 2100, 650, dur, 0.13, 0.15); tone(t, 'sine', 2160, 670, dur, 0.05, 0.15);
+    },
     hiss: null,
   };
   function startHiss() {
@@ -452,7 +561,8 @@ export function createWeapons({
   const EMPTY = [];
   const api = () => (getNpcs ? getNpcs() : null);
   const npcList = () => { const a = api(); return (a && a.npcs) || EMPTY; };
-  function noise(kind, pos) {   // 총소리·폭발 → 손님들이 도망 (npcs.alarm), 수배 등은 onNoise 로
+  /* (소리 합성 함수 noise 와 이름이 겹쳐 소리가 다 안 나던 문제 → alarmNoise 로 분리) */
+  function alarmNoise(kind, pos) {   // 총소리·폭발 → 손님들이 도망 (npcs.alarm), 수배 등은 onNoise 로
     const a = api(); if (a && a.alarm) a.alarm(pos, 0, kind);
     if (onNoise) onNoise(kind, pos);
   }
@@ -495,7 +605,7 @@ export function createWeapons({
   const hitCount = new Map();
 
   /* ════ 조준 ════ */
-  const raycaster = new THREE.Raycaster();
+  const raycaster = new THREE.Raycaster(); raycaster.camera = camera;   // 물체 목록에 Sprite(간판 글씨 등)가 있으면 camera 가 필요하다
   const ndc = new THREE.Vector2(0, 0);
   let mouseX = innerWidth / 2, mouseY = innerHeight / 2, mouseIn = false;
   const aim = { point: new V(), npc: null, block: null, dist: 0, normal: new V(0, 1, 0), kind: 'none' };
@@ -546,7 +656,9 @@ export function createWeapons({
     out.dist = t; out.point.copy(o).addScaledVector(d, t);
     return out;
   }
+  let inspectAim = null;
   function updateAim() {
+    if (inspectAim) { aim.point.copy(inspectAim); aim.kind = 'ground'; aim.npc = null; aim.dist = inspectAim.distanceTo(camera.position); return; }
     if (domElement) { const r = domElement.getBoundingClientRect(); ndc.set((mouseX - r.left) / r.width * 2 - 1, -((mouseY - r.top) / r.height) * 2 + 1); }
     raycaster.setFromCamera(ndc, camera);
     _v6.copy(raycaster.ray.direction); _v5.copy(raycaster.ray.origin);
@@ -707,9 +819,11 @@ export function createWeapons({
   }
 
   /* ════ 폭발 ════ */
+  let lastBoom = null;
   function explode(pos, radius = 5, force = 12) {
     if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.z)) return;   // NaN 위치면 모든 사람이 맞는다
     const x = pos.x, y = Number.isFinite(pos.y) ? pos.y : groundY(pos.x, pos.z), z = pos.z;
+    lastBoom = { x, y, z, t: clock, r: radius };
     for (const n of npcList()) {
       if (n.off) continue;
       const dx = n.x - x, dz = n.z - z, d = Math.hypot(dx, dz);
@@ -737,7 +851,7 @@ export function createWeapons({
     const pd = person.position.distanceTo(_v.set(x, y, z));
     shake(Math.max(0.12, 0.6 * (1 - pd / 25)));
     SND.boom();
-    noise('explosion', pos);
+    alarmNoise('explosion', pos);
     if (onExplode) onExplode(pos, radius, force);
   }
 
@@ -776,6 +890,7 @@ export function createWeapons({
   function resetActions() {
     S.attackT = -1; S.queued = false; S.drawing = false; S.draw = 0; S.charging = false; S.charge = 0;
     S.spinT = -1; S.slamT = -1; S.throwT = -1; S.pendingShot = -1;
+    mortarS.fireT = -1; S.thrown = false;
   }
   function select(id) {
     if (id !== 'none' && !BY_ID[id]) return;
@@ -785,6 +900,7 @@ export function createWeapons({
     S.cur = id;
     for (const k in models) models[k].visible = false;
     nocked.visible = false; flailBall.visible = false; chain.visible = false; ball.init = false;
+    shellHand.visible = false; mortarS.dep = 0; mortarS.moveT = 0.3; mortarS.lastX = NaN;
     if (id !== 'none') { tryGlb(id); if (id === 'bow') tryGlb('arrow'); SND.click(); }
     S.loaded = true; S.reload = 0; S.cool = 0;
     if (domElement) domElement.classList.toggle('wp-armed', id !== 'none');
@@ -809,6 +925,11 @@ export function createWeapons({
     else if (w === 'flail') { if (S.slamT < 0) { S.spinT = 0; S.spinAng = S.yaw; } }
     else if (w === 'javelin') { if (S.cool <= 0 && S.throwT < 0) { S.charging = true; S.charge = 0; } }
     else if (w === 'bomb') { if (S.cool <= 0 && S.throwT < 0) { S.throwT = 0; S.thrown = false; S.attackYaw = aimYaw(); SND.whoosh(0.8); } }
+    else if (w === 'bazooka') { if (S.loaded) fireRocket(); else SND.click(); }
+    else if (w === 'mortar') {   // 내려놓은 상태 + 장전돼 있을 때만. 클릭한 순간의 목표를 기억한다
+      if (S.loaded && mortarS.fireT < 0 && mortarS.dep > 0.9) { mortarS.fireT = 0; S.thrown = false; mLock.copy(mortarTarget(mTarget)); SND.click(); }
+      else SND.click();
+    }
   }
   function onUp() {
     const w = S.cur;
@@ -831,8 +952,9 @@ export function createWeapons({
     if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
     const t = e.target; if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
     if (!active()) return;
-    const m = /^(?:Digit|Numpad)(\d)$/.exec(e.code);
-    if (m) { const w = WEAPONS.find(x => x.key === m[1]); if (w) { e.preventDefault(); select(w.id); } return; }
+    const m = /^(?:Digit|Numpad)(\d)$/.exec(e.code), k = m ? m[1] : KEY_CODE[e.code];
+    if (k) { const w = WEAPONS.find(x => x.key === k); if (w) { e.preventDefault(); select(w.id); } return; }
+
     if (e.code === 'KeyG') { e.preventDefault(); if (S.cur === 'none') select(S.last); else holster(); }
   };
   if (domElement) {
@@ -871,7 +993,7 @@ export function createWeapons({
       0xe6e2da, 0.1, rand(0.5, 0.9), rand(1.2, 2.2), 0.55, false, -0.2, 2.5);
     flash(_v4.x, _v4.y, _v4.z, 40);
     SND.bang(); shake(0.14);
-    noise('shot', _v4);
+    alarmNoise('shot', _v4);
     hitEffect(segHit, _v2, 'shot', 9);
   }
   function hitEffect(h, dir, cause, power) {
@@ -906,6 +1028,231 @@ export function createWeapons({
     S.loaded = false; S.reload = 1.5; S.recoil = 0.7; SND.thunk(); shake(0.05);
   }
 
+  /* ════ 바주카 · 박격포 (탄은 따로 굴린다 — 맞으면 바로 폭발) ════ */
+  const ROCKET = (() => {
+    const g = new THREE.Group();
+    g.add(alongZ(cyl(0.04, 0.04, 0.32, M.olive, 0, 0, -0.04, 12)));
+    const nose = alongZ(new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.16, 12), M.redP)); nose.position.z = 0.2; g.add(nose);
+    for (let i = 0; i < 4; i++) { const f = box(0.006, 0.07, 0.08, M.oliveD, 0, 0.045, -0.18); const pv = new THREE.Group(); pv.rotation.z = i * Math.PI / 2; pv.add(f); g.add(pv); }
+    return g;
+  })();
+  const SHELL = (() => {   // 박격포탄: 머리 = +Y
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), M.olive); body.scale.set(1, 2.1, 1); g.add(body);
+    g.add(cyl(0.051, 0.051, 0.025, M.yellow, 0, 0.03, 0, 12));
+    g.add(cyl(0.012, 0.02, 0.09, M.oliveD, 0, -0.13, 0, 8));
+    for (let i = 0; i < 4; i++) { const f = box(0.005, 0.06, 0.05, M.oliveD, 0, -0.15, 0.025); const pv = new THREE.Group(); pv.rotation.y = i * Math.PI / 2; pv.add(f); g.add(pv); }
+    return g;
+  })();
+  const shellHand = prepModel(SHELL.clone(true));   // 박격포 쏘기 전 오른손에 든 포탄
+  const ord = [];   // 날아가는 로켓·포탄 { obj, kind, vel, g, t, max, dist, whistled, T, prev }
+  const _yAx = new V(0, 1, 0);
+  function spawnOrd(kind, pos, vel, opt = {}) {
+    if (!Number.isFinite(pos.x + pos.y + pos.z + vel.x + vel.y + vel.z)) return null;
+    const obj = (kind === 'rocket' ? ROCKET : SHELL).clone(true);
+    obj.position.copy(pos); obj.traverse(o => { if (o.isMesh) o.castShadow = true; }); scene.add(obj);
+    const o = { obj, kind, vel: vel.clone(), g: opt.g ?? 9.8, t: 0, max: opt.max ?? 8, dist: 0, whistled: false, T: opt.T ?? 2, prev: pos.clone() };
+    orientOrd(o); ord.push(o); return o;
+  }
+  const _od = new V();
+  function orientOrd(o) {
+    _od.copy(o.vel); if (_od.lengthSq() < 1e-6) return; _od.normalize();
+    if (o.kind === 'rocket') o.obj.lookAt(_v.copy(o.obj.position).add(_od));
+    else o.obj.quaternion.setFromUnitVectors(_yAx, _od);
+  }
+  function killOrd(i) { const o = ord[i]; if (o.obj.parent) o.obj.parent.remove(o.obj); ord.splice(i, 1); }
+  function boomOrd(i, at) {
+    const o = ord[i];
+    const R_ = o.kind === 'rocket' ? BAZ.radius : MORTAR.radius, F = o.kind === 'rocket' ? BAZ.force : MORTAR.force;
+    if (Number.isFinite(at.x + at.y + at.z)) {
+      explode(at, R_, F);
+      if (o.kind === 'shell') {   // 큰 폭발: 흙먼지 한 겹 더
+        for (let k = 0; k < 18; k++) { const a = k / 18 * Math.PI * 2; puff(at.x + Math.cos(a), at.y + 0.3, at.z + Math.sin(a), Math.cos(a) * 9, rand(2, 5), Math.sin(a) * 9, 0x8a6d4a, 0.6, 2.4, 1.4, 0.6, false, 2, 2); }
+        shockRing(at.x, at.y, at.z, R_ * 1.5, 0.8, 0xffe2b0);
+      }
+    }
+    killOrd(i);
+  }
+  const _sp = new V(), _sd = new V();
+  function stepOrd(dt) {
+    for (let i = ord.length - 1; i >= 0; i--) {
+      const o = ord[i];
+      o.t += dt;
+      o.prev.copy(o.obj.position);
+      o.vel.y -= o.g * dt;
+      o.obj.position.addScaledVector(o.vel, dt);
+      orientOrd(o);
+      const P = o.obj.position;
+      if (!Number.isFinite(P.x + P.y + P.z)) { killOrd(i); continue; }
+      if (o.kind === 'rocket') {   // 연기 꼬리 + 불꽃
+        _v.copy(o.vel).normalize();
+        puff(P.x - _v.x * 0.3, P.y - _v.y * 0.3, P.z - _v.z * 0.3, rand(-0.3, 0.3), rand(0, 0.4), rand(-0.3, 0.3), 0xd8d4cc, 0.12, rand(0.5, 0.8), rand(0.8, 1.3), 0.55, false, -0.2, 2);
+        puff(P.x - _v.x * 0.25, P.y - _v.y * 0.25, P.z - _v.z * 0.25, 0, 0, 0, 0xffa040, 0.14, 0.05, 0.1, 1, true);
+        o.dist += o.vel.length() * dt;
+      } else if (!o.whistled && o.vel.y < 0) { o.whistled = true; SND.whistle(Math.max(0.4, o.T - o.t)); }
+      // 충돌: 사람 · 블록 · 물체 → 땅
+      _sd.subVectors(P, o.prev); const segLen = _sd.length();
+      if (segLen > 1e-5) {
+        let hitT = 2;
+        for (const n of npcList()) {
+          if (n.off) continue;
+          for (let k = 0; k < 3; k++) { const t = segSphere(o.prev, P, n.x, n.y + 0.45 + k * 0.52, n.z, 0.45); if (t >= 0 && t < hitT) hitT = t; }
+        }
+        _sd.divideScalar(segLen);
+        raycaster.set(o.prev, _sd); raycaster.near = 0; raycaster.far = segLen;
+        _hits.length = 0; raycaster.intersectObjects(blockMeshes, false, _hits);
+        if (colliders) { const list = typeof colliders === 'function' ? colliders() : colliders; raycaster.intersectObjects(list, true, _hits); }
+        for (const h of _hits) { const t = h.distance / segLen; if (t < hitT) hitT = t; }
+        if (hitT <= 1) { _sp.copy(o.prev).lerp(P, hitT); boomOrd(i, _sp); continue; }
+      }
+      if (P.y <= groundY(P.x, P.z)) {
+        let lo = 0, hi = 1;
+        for (let k = 0; k < 8; k++) { const m = (lo + hi) / 2; _sp.copy(o.prev).lerp(P, m); if (_sp.y < groundY(_sp.x, _sp.z)) hi = m; else lo = m; }
+        _sp.copy(o.prev).lerp(P, hi); _sp.y = groundY(_sp.x, _sp.z) + 0.1;
+        boomOrd(i, _sp); continue;
+      }
+      if ((o.kind === 'rocket' && o.dist > BAZ.range) || o.t > o.max) { _sp.copy(P); boomOrd(i, _sp); continue; }
+    }
+  }
+  function fireRocket() {
+    const m = models.bazooka;
+    muzzleWorld('bazooka', _o1);
+    _o2.set(0, 0, 1).applyQuaternion(m.quaternion);              // 통이 향한 방향
+    _o3.subVectors(aim.point, _o1);
+    if (aim.dist < 2.5 || _o3.lengthSq() < 0.5) _o3.copy(_o2); else _o3.normalize();
+    if (_o3.dot(_o2) < 0.7) _o3.copy(_o2);                        // 통이 가리키는 쪽에서 크게 벗어나지 않게
+    if (!Number.isFinite(_o3.x + _o3.y + _o3.z)) return;
+    spawnOrd('rocket', _o1.addScaledVector(_o3, 0.1), _v.copy(_o3).multiplyScalar(BAZ.speed), { g: 1.2, max: 5 });
+    // 뒤 폭풍(연기)·섬광 — 피 없이 연기만
+    _o4.copy(m.userData.rear).applyMatrix4(m.matrixWorld);
+    for (let k = 0; k < 10; k++) puff(_o4.x, _o4.y, _o4.z, -_o2.x * rand(2, 6) + rand(-0.6, 0.6), rand(0, 1.2), -_o2.z * rand(2, 6) + rand(-0.6, 0.6), 0xe6e2da, 0.2, rand(0.8, 1.4), rand(1.2, 2.2), 0.6, false, -0.2, 2.2);
+    puff(_o4.x, _o4.y, _o4.z, -_o2.x * 2, 0, -_o2.z * 2, 0xffb060, 0.2, 0.7, 0.12, 1, true);
+    _v.copy(m.userData.muzzle).applyMatrix4(m.matrixWorld);
+    puff(_v.x, _v.y, _v.z, 0, 0, 0, 0xffe1a0, 0.15, 0.6, 0.08, 1, true);
+    flash(_v.x, _v.y, _v.z, 50);
+    S.loaded = false; S.reload = BAZ.reload; S.recoil = 1;
+    SND.rocket(); shake(0.16);
+    alarmNoise('shot', _v);
+  }
+  /* 박격포 목표: 조준점을 땅 위 8~35 m 로 자른다. 하늘을 보면 같은 방향 최대 거리. 언제나 유한한 값 */
+  const mortarS = { moveT: 0.3, dep: 0, lastX: NaN, lastZ: NaN, fireT: -1, inRange: true };
+  const mTarget = new V(), mLock = new V();
+  function mortarTarget(out) {
+    const p = person.position, fy = person.rotation.y;
+    let x = aim.point.x, z = aim.point.z;
+    if (aim.kind === 'none' || !Number.isFinite(x) || !Number.isFinite(z)) {
+      raycaster.setFromCamera(ndc, camera);
+      const d = raycaster.ray.direction, h = Math.hypot(d.x, d.z);
+      if (h > 1e-4 && Number.isFinite(h)) { x = p.x + d.x / h * MORTAR.max; z = p.z + d.z / h * MORTAR.max; }
+      else { x = p.x + Math.sin(fy) * MORTAR.max; z = p.z + Math.cos(fy) * MORTAR.max; }
+    }
+    let dx = x - p.x, dz = z - p.z, d = Math.hypot(dx, dz);
+    if (!(d > 0.05) || !Number.isFinite(d)) { dx = Math.sin(fy); dz = Math.cos(fy); d = 1; }
+    mortarS.inRange = d >= MORTAR.min && d <= MORTAR.max;
+    const c = Math.min(MORTAR.max, Math.max(MORTAR.min, d));
+    x = p.x + dx / d * c; z = p.z + dz / d * c;
+    out.set(x, groundY(x, z), z);
+    if (!Number.isFinite(out.x + out.y + out.z)) out.set(p.x + Math.sin(fy) * 15, p.y, p.z + Math.cos(fy) * 15);
+    return out;
+  }
+  const tgtRing = (() => {
+    const g = new THREE.Group();
+    const mat = new THREE.MeshBasicMaterial({ color: 0xff7a2a, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide });
+    const mat2 = new THREE.MeshBasicMaterial({ color: 0xff7a2a, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide });
+    const a = new THREE.Mesh(new THREE.RingGeometry(0.75, 0.95, 40), mat); a.rotation.x = -Math.PI / 2; g.add(a);
+    const b = new THREE.Mesh(new THREE.CircleGeometry(0.16, 16), mat); b.rotation.x = -Math.PI / 2; g.add(b);
+    const c = new THREE.Mesh(new THREE.RingGeometry(MORTAR.radius - 0.12, MORTAR.radius, 64), mat2); c.rotation.x = -Math.PI / 2; g.add(c);
+    for (let k = 0; k < 4; k++) {
+      const t = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.5), mat); t.rotation.x = -Math.PI / 2; t.rotation.z = k * Math.PI / 2;
+      t.position.set(Math.sin(k * Math.PI / 2) * 1.25, 0, Math.cos(k * Math.PI / 2) * 1.25); g.add(t);
+    }
+    g.traverse(o => { o.renderOrder = 6; });
+    g.visible = false; g.userData.mat = mat; g.userData.mat2 = mat2; scene.add(g); return g;
+  })();
+  function fireShell() {
+    const m = models.mortar;
+    _o1.copy(m.userData.muzzle).applyMatrix4(m.matrixWorld);
+    const tg = mLock, dx = tg.x - _o1.x, dz = tg.z - _o1.z, d = Math.hypot(dx, dz);
+    const T = 1.4 + d * 0.045, g = 9.8;
+    _o2.set(dx / T, (tg.y - _o1.y + 0.5 * g * T * T) / T, dz / T);
+    spawnOrd('shell', _o1, _o2, { g, T, max: T + 3 });
+    smoke(_o1.x, _o1.y, _o1.z, 8, 0xe0dcd4, 0.4, 0.5, 1.4, 1.8);
+    puff(_o1.x, _o1.y + 0.1, _o1.z, 0, 1, 0, 0xffd27a, 0.15, 0.6, 0.1, 1, true);
+    flash(_o1.x, _o1.y, _o1.z, 35);
+    S.loaded = false; S.reload = MORTAR.reload;
+    SND.thump(); shake(0.12);
+    alarmNoise('shot', _o1);
+  }
+  const legLen = () => {
+    const r = poser.rig; if (!r || !r.legL[2]) return [0.42, 0.42];
+    if (!r._legLen) {
+      const a = r.legL[0].getWorldPosition(new V()), b = r.legL[1].getWorldPosition(new V()), c = r.legL[2].getWorldPosition(new V());
+      r._legLen = [a.distanceTo(b), b.distanceTo(c)];
+    }
+    return r._legLen;
+  };
+  /* 쪼그려 앉기 높이 h (m) 만큼 사람 모델(뼈대 묶음)만 내린다. 매 프레임 crouch(0) 으로 되돌린 뒤 다시 건다 */
+  function crouch(h) {
+    const r = poser.rig; if (!r || !r.model) return;
+    const md = r.model; if (md.userData.baseY === undefined) { if (!h) return; md.userData.baseY = md.position.y; }
+    md.position.y = md.userData.baseY - h / (person.scale.y || 1);
+  }
+  function poseMortar(dt) {
+    const r = poser.rig, m = models.mortar, p = person.position;
+    // 움직이면 들고 다니고, 멈추면 땅에 내려놓는다
+    const sp = Number.isFinite(mortarS.lastX) ? Math.hypot(p.x - mortarS.lastX, p.z - mortarS.lastZ) / Math.max(dt, 1e-3) : 0;
+    mortarS.lastX = p.x; mortarS.lastZ = p.z;
+    if (sp > 0.5 && mortarS.fireT < 0) mortarS.moveT = 0.25; else mortarS.moveT -= dt;
+    const want = mortarS.moveT <= 0;
+    mortarS.dep = Math.max(0, Math.min(1, mortarS.dep + (want ? dt / 0.4 : -dt / 0.25)));
+    const e = smooth(mortarS.dep);
+    mortarTarget(mTarget);
+    const fy = person.rotation.y; _o1.set(Math.sin(fy), 0, Math.cos(fy));   // 몸이 바라보는 쪽
+    // 쪼그려 앉기: 엉덩이를 낮추고 무릎을 굽힌다 (발은 땅에)
+    const th = 52 * e, kn = 100 * e;
+    if (r && e > 0.001) {
+      const [lt, ls] = legLen();
+      crouch(lt * (1 - Math.cos(th * D2R)) + ls * (1 - Math.cos((kn - th) * D2R)));   // person 위치는 물리 몸체와 묶여 있어 건드리지 않고 모델만 내린다
+      person.updateMatrixWorld(true);
+      poser.leg(1, -th - 6 * e, 6, kn + 4 * e); poser.leg(-1, -th + 6 * e, 6, kn - 10 * e);
+      if (r.chest) poser.rotXYZ(r.chest, 32 * e, 0, 0);
+      person.updateMatrixWorld(true); poser.placeFeet();
+    }
+    // 박격포 놓기: 내려놓은 자리(앞 0.5 m 땅) ↔ 든 자세(허리 앞) 사이를 섞는다
+    const tl = MORTAR.tilt * D2R;
+    _o2.set(p.x + _o1.x * 0.42 + _o1.z * 0.22, 0, p.z + _o1.z * 0.42 - _o1.x * 0.22); _o2.y = groundY(_o2.x, _o2.z) + 0.02;   // 앞 0.42 m, 왼쪽 0.22 m
+    _o3.copy(_o1).multiplyScalar(Math.sin(tl)).addScaledVector(UP, Math.cos(tl));                 // 내려놓은 통 방향
+    poser.pt(_v, -0.08, 0.78, 0.3);                                                                // 든 자리
+    _v2.copy(_o1).multiplyScalar(0.85).addScaledVector(UP, 0.5).normalize();
+    _v.lerp(_o2, e); _v3.copy(_v2).lerp(_o3, e).normalize();
+    _o4.copy(_o1).addScaledVector(UP, -0.3 * e);
+    placeModel(m, _v, _v3, _o4);
+    _o3.copy(_v3);   // 통 축 (월드)
+    // 왼손: 통 윗부분을 쥔다
+    _tgt2.copy(m.userData.hold).applyMatrix4(m.matrixWorld);
+    if (r) { poser.rel(_pole, r.armL[0], 0.6, -0.8, -0.2); ikGrip(1, _tgt2, _pole, _o3, _o1, _v6); }
+    // 오른손: 장전돼 있고 내려놓았으면 포탄을 포구 위에 들고 있다가, 클릭하면 떨어뜨린다
+    _o2.copy(m.userData.muzzle).applyMatrix4(m.matrixWorld);
+    let drop = 0;
+    if (mortarS.fireT >= 0) {
+      mortarS.fireT += dt;
+      drop = Math.min(1, mortarS.fireT / MORTAR.drop);
+      if (!S.thrown && drop >= 1) { S.thrown = true; fireShell(); }
+      if (mortarS.fireT > MORTAR.drop + 0.45) mortarS.fireT = -1;
+    }
+    const holding = (S.loaded && e > 0.6 && mortarS.fireT < 0) || (mortarS.fireT >= 0 && !S.thrown);
+    if (holding) {
+      _tgt.copy(_o2).addScaledVector(UP, 0.26 - 0.2 * smooth(drop)).addScaledVector(_o1, -0.1);
+      if (r) { poser.rel(_pole, r.armR[0], -0.7, -0.8, -0.3); ikGrip(-1, _tgt, _pole, UP, _o1, _hand, 0.75); }
+      placeModel(shellHand, _hand, UP, _o1);
+    } else {
+      shellHand.visible = false;
+      _tgt.copy(_v).addScaledVector(_o3, 0.25 + 0.15 * (1 - e));
+      if (r) { poser.rel(_pole, r.armR[0], -0.7, -0.8, -0.3); ikGrip(-1, _tgt, _pole, _o3, _o1, _hand); }
+    }
+    if (mortarS.fireT < 0) S.thrown = false;
+  }
+
   /* ════ 자세·무기 배치 ════ */
   function keyPose(keys, u, outHand, outBlade, out) {
     let i = 0; while (i < keys.length - 2 && u > keys[i + 1].t) i++;
@@ -924,17 +1271,18 @@ export function createWeapons({
       poser.rel(_pole, r.armR[0], -0.8, -0.7, -0.4);
       poser.ik(-1, _tgt, _pole);
       poser.dir(_blade, bladeP.x, bladeP.y, bladeP.z);
-      if (two) {
-        _tgt2.copy(_tgt).addScaledVector(_blade, -0.2);
-        poser.rel(_pole, r.armL[0], 0.8, -0.7, -0.4);
-        poser.ik(1, _tgt2, _pole);
-      }
     } else { poser.pt(_tgt, handP.x, handP.y, handP.z); poser.dir(_blade, bladeP.x, bladeP.y, bladeP.z); }
-    handWorld(_hand);
     // 공격면 방향 = 사람 앞쪽을 날에 수직으로
     poser.dir(_edge, 0, 0, 1); _edge.addScaledVector(_blade, -_edge.dot(_blade));
     if (_edge.lengthSq() < 1e-4) poser.dir(_edge, 0, 1, 0);
-    placeModel(model, _hand, _blade, _edge.normalize());
+    _edge.normalize();
+    grip(-1, _blade, _edge, _hand, model === models.bomb ? 0.55 : 1);
+    placeModel(model, _hand, _blade, _edge);
+    if (two && r) {   // 왼손은 오른손 바로 아래 자루를 같이 쥔다
+      _tgt2.copy(_hand).addScaledVector(_blade, -0.1);
+      poser.rel(_pole, r.armL[0], 0.8, -0.7, -0.4);
+      ikGrip(1, _tgt2, _pole, _blade, _edge, _v3);
+    }
     if (len && S.attackT >= 0) {
       const M_ = MELEE[S.cur];
       const u = S.attackT / M_.dur;
@@ -956,6 +1304,93 @@ export function createWeapons({
     _hw.subVectors(out, _hw).normalize();
     return out.addScaledVector(_hw, 0.075);
   }
+  /* ════ 손으로 쥐기 ════
+     IK 는 손목 '위치'만 맞춘다. 여기서 손목을 돌려 손바닥이 자루를 감싸게 하고 손가락을 말아 주먹을 쥔다.
+     axis  = 자루 방향(새끼손가락 → 검지 쪽으로 빠져나가는 쪽, 칼이면 날 쪽)
+     front = 손가락 뼈(손등 마디)가 향할 방향 (칼·도끼면 날의 앞, 총이면 총구 쪽)
+     → 손바닥 가운데(자루가 지나는 점)를 out 에 돌려준다. 손가락 뼈 이름은 person.glb(Quaternius) 그대로. */
+  const FINGERS = ['Index', 'Middle', 'Ring', 'Pinky'];
+  let hands = null;
+  function handRig() {
+    if (hands) return hands;
+    const r = poser.rig; if (!r) return null;
+    const b = n => r.model.getObjectByName(n) || r.model.getObjectByName(n.replace(/([LR])$/, '.$1'));
+    const mk = (side, wrist) => {
+      const S_ = side > 0 ? 'L' : 'R';
+      const f = FINGERS.map(n => [1, 2, 3, 4].map(k => b(n + k + S_)).filter(Boolean));   // 1 = 손바닥 뼈(손목에서 시작), 2~4 = 마디
+      const th = [1, 2, 3].map(k => b('Thumb' + k + S_)).filter(Boolean);
+      if (!wrist || f.some(c => c.length < 4)) return null;
+      const all = [wrist, ...f.flat(), ...th];
+      return { side, wrist, f, th, rest: all.map(o => [o, o.quaternion.clone()]), nSign: 0 };
+    };
+    hands = { R: mk(-1, r.armR[2]), L: mk(1, r.armL[2]) };
+    return hands;
+  }
+  const _g = new V(), _f = new V(), _n = new V(), _a = new V(), _k = new V(), _w = new V(), _t1 = new V();
+  const _mA = new THREE.Matrix4(), _mB = new THREE.Matrix4(), _qA = new Q(), _qB = new Q(), _qP = new Q();
+  const wp = (o, out) => o.getWorldPosition(out);
+  function handFrame(H) {   // 지금 손의 축: _g(새끼→검지), _f(손목→가운데 손가락), _n(손바닥 쪽)
+    wp(H.f[0][1], _g); wp(H.f[3][1], _t1); _g.sub(_t1);   // 검지·새끼 첫 마디(손가락 뿌리)
+    wp(H.f[1][1], _f); wp(H.wrist, _w); _f.sub(_w);
+    _g.addScaledVector(_f, -_g.dot(_f) / Math.max(1e-8, _f.lengthSq())).normalize(); _f.normalize();
+    _n.crossVectors(_g, _f);
+    if (!H.nSign) {   // 손바닥 쪽 부호: 엄지 끝이 있는 쪽 (한 번만 정한다 — 쉬는 자세에서)
+      wp(H.th[H.th.length - 1], _t1).sub(_w);
+      H.nSign = _t1.dot(_n) >= 0 ? 1 : -1;
+    }
+    _n.multiplyScalar(H.nSign);
+  }
+  /* 손목을 world 회전 R 만큼 더 돌린다 */
+  function rotWorld(bone, q) {
+    if (!(Math.abs(q.lengthSq() - 1) < 1e-3)) { gripBad++; return; }   // 망가진 회전은 버린다 (한 번 0 이 되면 계속 0)
+    bone.parent.getWorldQuaternion(_qP);
+    _qB.copy(_qP).invert().multiply(q).multiply(_qP);
+    bone.quaternion.premultiply(_qB); bone.updateMatrixWorld(true);
+  }
+  /* palm = true 이면 front 대신 '손바닥이 향할 방향'으로 받는다 (석궁 앞 손: 손바닥 위로 등) */
+  function grip(side, axis, front, out, curl = 1, palm = false) {
+    const thumb = curl;
+    const hr = handRig(); const H = hr && (side > 0 ? hr.L : hr.R);
+    if (!H) return side > 0 ? handWorldL(out) : handWorld(out);
+    for (const [o, q] of H.rest) o.quaternion.copy(q);           // 손가락은 매번 쉬는 자세에서 시작
+    H.wrist.updateMatrixWorld(true);
+    handFrame(H);
+    // 지금 (g, f, n) → 목표 (axis, front⊥, n') 로 손목 회전
+    _a.copy(axis).normalize();
+    if (palm) _k.crossVectors(front, _a).multiplyScalar(H.nSign);   // 손바닥 n = nSign·(axis × f) → f = nSign·(palm × axis)
+    else _k.copy(front);
+    _k.addScaledVector(_a, -_k.dot(_a)); if (_k.lengthSq() < 1e-6) _k.set(0, 1, 0); _k.normalize();
+    _mA.makeBasis(_g, _f, _t1.crossVectors(_g, _f));
+    _mB.makeBasis(_a, _k, _w.crossVectors(_a, _k));
+    _qA.setFromRotationMatrix(_mB.multiply(_mA.transpose()));      // R = B · Aᵀ
+    rotWorld(H.wrist, _qA);
+    handFrame(H);
+    // 손가락 말기: 손가락 방향을 손바닥 쪽으로 (축 = f × n)
+    if (curl > 0) {
+      _t1.crossVectors(_f, _n).normalize();
+      const ang = [62, 88, 58];
+      for (const chain of H.f) for (let j = 0; j < 3; j++) { _qA.setFromAxisAngle(_t1, ang[j] * D2R * curl); rotWorld(chain[j + 1], _qA); }
+      if (thumb > 0 && H.th.length >= 2) {   // 엄지는 자루 위로 덮는다
+        _qA.setFromAxisAngle(_t1, 25 * D2R * thumb); rotWorld(H.th[0], _qA);
+        for (let j = 1; j < H.th.length; j++) { _qA.setFromAxisAngle(_t1, 35 * D2R * thumb); rotWorld(H.th[j], _qA); }
+      }
+    }
+    // 손바닥 가운데 = 손가락 첫 마디 줄과 손목 사이, 손바닥 쪽으로 조금
+    wp(H.f[1][1], _k); wp(H.f[2][1], _t1); _k.add(_t1).multiplyScalar(0.5);
+    const hl = _k.distanceTo(_w);
+    return out.copy(_w).lerp(_k, 0.86).addScaledVector(_n, hl * GRIP_PALM);
+  }
+  let GRIP_PALM = 0.38, gripBad = 0;
+  /* 손바닥 점(grip)이 target 에 오도록 손목 IK 를 한 번 보정 */
+  function ikGrip(side, target, pole, axis, front, out, curl = 1, palm = false) {
+    poser.ik(side, target, pole);
+    grip(side, axis, front, out, curl, palm);
+    _tgt2b.copy(target).multiplyScalar(2).sub(out);   // 손목 목표를 (target - grip) 만큼 옮긴다
+    poser.ik(side, _tgt2b, pole);
+    return grip(side, axis, front, out, curl, palm);
+  }
+  const _tgt2b = new V();
+
   /* y = 주축(자루→날 / 위), z = 앞(공격면 / 총구) */
   function placeModel(model, pos, yAxis, zAxis) {
     _by.copy(yAxis).normalize();
@@ -968,6 +1403,13 @@ export function createWeapons({
     model.updateMatrixWorld(true);
   }
 
+  /* 모델 로컬 방향 v 가 (yAxis, zAxis) 로 놓였을 때의 월드 방향 */
+  const _bq = new Q(), _o1 = new V(), _o2 = new V(), _o3 = new V(), _o4 = new V();
+  function basisDir(yAxis, zAxis, v, out) {
+    _by.copy(yAxis).normalize(); _bz.copy(zAxis).addScaledVector(_by, -zAxis.dot(_by)).normalize(); _bx.crossVectors(_by, _bz);
+    _m.makeBasis(_bx, _by, _bz); _bq.setFromRotationMatrix(_m);
+    return out.copy(v).applyQuaternion(_bq);
+  }
   function poseAim(dt) {
     const r = poser.rig, id = S.cur, m = models[id];
     _v6.subVectors(aim.point, person.position); _v6.y = 0;
@@ -978,46 +1420,64 @@ export function createWeapons({
     _v4.normalize();
     const reach = r ? (r.lenUp + r.lenLo) : 0.6;
     S.recoil = Math.max(0, S.recoil - dt * 6);
-    if (id === 'pistol') {
+    if (id === 'pistol') {   // 팔을 쭉 뻗어 조준, 손잡이를 주먹으로 감싼다 (검지 쪽이 총구)
       const reloadK = S.loaded ? 0 : Math.sin(Math.min(1, 1 - S.reload / 1.2) * Math.PI);   // 장전 중엔 총을 내린다
-      _tgt.copy(sh).addScaledVector(_v4, reach * (0.95 - reloadK * 0.3));
+      _tgt.copy(sh).addScaledVector(_v4, reach * (0.9 - reloadK * 0.3));
       _tgt.y += S.recoil * 0.08 - reloadK * 0.35;
       if (r) { poser.rel(_pole, r.armR[0], -0.4, -1, -0.2); poser.ik(-1, _tgt, _pole); }
-      handWorld(_hand);
       _v.copy(_v4); _v.y += S.recoil * 0.5 - reloadK * 0.9; _v.normalize();
       _v2.copy(UP).addScaledVector(_v, -UP.dot(_v));
+      basisDir(_v2, _v, m.userData.gripAxis || UP, _o1);
+      grip(-1, _o1, _v, _hand);
       placeModel(m, _hand, _v2, _v);
-    } else if (id === 'bow') {
+    } else if (id === 'bow') {   // 왼손이 활 손잡이를 쥐고 팔을 뻗는다, 오른손은 시위를 당긴다
       const shL = r ? r.armL[0].getWorldPosition(_v3) : poser.pt(_v3, 0.2, 1.5, 0);
       _v4.subVectors(aim.point, shL).normalize();
-      _tgt2.copy(shL).addScaledVector(_v4, reach * 0.97);
-      if (r) { poser.rel(_pole, r.armL[0], 0.3, -1, -0.3); poser.ik(1, _tgt2, _pole); }
-      handWorldL(_v);   // 활 손잡이
+      _tgt2.copy(shL).addScaledVector(_v4, reach * 0.93);
       _v2.copy(UP).addScaledVector(_v4, -UP.dot(_v4)).normalize();
-      _v2.addScaledVector(_v3.crossVectors(_v4, _v2), 0.18).normalize();   // 살짝 눕힌다
+      _v2.addScaledVector(_o1.crossVectors(_v4, _v2), 0.18).normalize();   // 살짝 눕힌다
+      if (r) poser.rel(_pole, r.armL[0], 0.3, -1, -0.3);
+      if (r) poser.ik(1, _tgt2, _pole);
+      grip(1, _v2, _v4, _v);   // 활 손잡이 = 왼손 손바닥
       placeModel(m, _v, _v2, _v4);
       // 시위·화살
       const pull = 0.14 + 0.5 * S.draw;
-      _tgt.copy(_v).addScaledVector(_v4, -pull - 0.05);
+      _tgt.copy(_v).addScaledVector(_v4, -pull - 0.12);
       if (r) { poser.rel(_pole, r.armR[0], -0.9, -0.3, -0.6); poser.ik(-1, _tgt, _pole); }
+      grip(-1, _v2, _v4, _o2, 0.55);   // 시위를 손가락으로 건다
       updateString(m, -0.17 - (S.drawing ? 0.5 * S.draw : 0));
       if (S.cool <= 0) {
         _v5.copy(_v).addScaledVector(_v4, -0.17 - (S.drawing ? 0.5 * S.draw : 0));
         placeModel(nocked, _v5, _v2, _v4);
       } else nocked.visible = false;
-    } else if (id === 'crossbow') {
+    } else if (id === 'crossbow') {   // 개머리를 어깨에, 오른손은 방아쇠 손목, 왼손은 앞 몸통 아래를 받친다
       const reloadK = S.loaded ? 0 : Math.sin(Math.min(1, 1 - S.reload / 1.5) * Math.PI);
-      _tgt.copy(sh).addScaledVector(_v4, 0.28); _tgt.y -= 0.04 + reloadK * 0.3;
-      poser.dir(_v, -0.06, 0, 0); _tgt.add(_v);
+      _tgt.copy(sh).addScaledVector(_v4, 0.22); _tgt.y -= 0.0 + reloadK * 0.3;
+      poser.dir(_v, -0.05, 0, 0); _tgt.add(_v);
       if (r) { poser.rel(_pole, r.armR[0], -0.6, -1, -0.6); poser.ik(-1, _tgt, _pole); }
-      handWorld(_hand);
       _v.copy(_v4); _v.y += S.recoil * 0.4 - reloadK * 0.8; _v.normalize();
       _v2.copy(UP).addScaledVector(_v, -UP.dot(_v));
-      placeModel(m, _hand, _v2, _v);
-      _tgt2.set(0, -0.02, 0.32).applyMatrix4(m.matrixWorld);
-      if (r) { poser.rel(_pole, r.armL[0], 0.5, -1, -0.2); poser.ik(1, _tgt2, _pole); }
+      _o1.copy(_v2).addScaledVector(_v, 0.35).normalize();
+      grip(-1, _o1, _v, _hand);
+      placeModel(m, _o2.copy(_hand).addScaledVector(_v2, 0.035), _v2, _v);
+      _tgt2.set(0, -0.045, 0.3).applyMatrix4(m.matrixWorld);
+      if (r) { poser.rel(_pole, r.armL[0], 0.5, -1, -0.2); ikGrip(1, _tgt2, _pole, _v, _v2, _o3, 0.8, true); }
       updateString(m, S.loaded ? 0.0 : 0.3 + 0.05 * reloadK);
       if (m.userData.bolt) m.userData.bolt.visible = S.loaded;
+    } else if (id === 'bazooka') {   // 오른 어깨에 통을 얹고, 오른손 권총 손잡이·왼손 앞 손잡이
+      const reloadK = S.loaded ? 0 : Math.sin(Math.min(1, 1 - S.reload / BAZ.reload) * Math.PI);
+      _v.copy(_v4); _v.y += S.recoil * 0.25 - reloadK * 0.25; _v.normalize();
+      _v2.copy(UP).addScaledVector(_v, -UP.dot(_v)).normalize();
+      // 통의 어깨 받침(로컬 z=-0.22)이 어깨 위에 오게
+      poser.dir(_o1, -0.05, 0, 0);
+      _o2.copy(sh).add(_o1).addScaledVector(_v2, 0.085 + BAZ.tubeY * 0).addScaledVector(_v, -S.recoil * 0.06);
+      _o3.copy(_o2).addScaledVector(_v, 0.22).addScaledVector(_v2, -BAZ.tubeY);   // 모델 원점 = 오른손 손잡이
+      placeModel(m, _o3, _v2, _v);
+      _tgt.copy(_o3);
+      if (r) { poser.rel(_pole, r.armR[0], -0.5, -1, -0.3); ikGrip(-1, _tgt, _pole, _o4.copy(_v2).addScaledVector(_v, 0.25).normalize(), _v, _hand); }
+      _tgt2.copy(m.userData.front).applyMatrix4(m.matrixWorld);
+      if (r) { poser.rel(_pole, r.armL[0], 0.4, -1, -0.1); ikGrip(1, _tgt2, _pole, _o4.copy(_v2).addScaledVector(_v, 0.2).normalize(), _v, _o1); }
+      if (m.userData.rocket) m.userData.rocket.visible = S.loaded || reloadK > 0.6;
     }
   }
   function updateString(m, nockZ) {
@@ -1053,9 +1513,11 @@ export function createWeapons({
       } else { hp = _v.fromArray(HOLD.javelin.hand); bl = _v2.fromArray(HOLD.javelin.blade).normalize(); }
       // 투창은 +Z 가 촉 → '날 방향'을 +Z 로 쓴다
       poseHandOnly(hp);
-      handWorld(_hand);
       poser.dir(_blade, bl.x, bl.y, bl.z);
       _edge.copy(UP).addScaledVector(_blade, -UP.dot(_blade));
+      // 던질 땐 머리 위에서 손바닥을 위로(창대가 손바닥에 얹힌다), 들고 다닐 땐 지팡이처럼 손등이 앞
+      if (S.charging || S.throwT >= 0) grip(-1, _blade, UP, _hand, 1, true);
+      else grip(-1, _blade, poser.dir(_o1, 0, 0, 1), _hand);
       if (S.cool > 0 && S.throwT < 0) m.visible = false;
       else placeModel(m, _hand, _edge, _blade);
       if (S.thrown && S.throwT >= 0) m.visible = false;
@@ -1065,15 +1527,14 @@ export function createWeapons({
         keyPose(BOMB_THROW.keys, u, _v, _v2, kp);
         poseMelee(_v, _v2, kp.tw, kp.pt, false, m, 0);
         if (!S.thrown && u >= BOMB_THROW.rel) {
-          S.thrown = true;
-          handWorld(_hand);
+          S.thrown = true;   // _hand = poseMelee 가 잡은 손바닥 점
           const d = Math.min(18, Math.hypot(aim.point.x - _hand.x, aim.point.z - _hand.z));
           const T = Math.max(0.55, Math.min(1.3, d / 11));
           _v3.subVectors(aim.point, _hand);
           if (d >= 17.9) { const s = 18 / Math.hypot(_v3.x, _v3.z); _v3.x *= s; _v3.z *= s; }
           _v3.set(_v3.x / T, (_v3.y + 0.5 * 9.8 * T * T) / T, _v3.z / T);
           spawnProj('bomb', m, _hand, _v3, { g: 9.8, fuse: 2.5, spin: rand(4, 8) });
-          noise('bomb', aim.point);   // 도화선 보고 도망
+          alarmNoise('bomb', aim.point);   // 도화선 보고 도망
           S.cool = 1.2;
         }
         if (u >= 1) S.throwT = -1;
@@ -1112,8 +1573,9 @@ export function createWeapons({
       const prevA = S.spinAng; S.spinAng += w * dt;
       if (Math.floor(prevA / (Math.PI * 2)) !== Math.floor(S.spinAng / (Math.PI * 2))) SND.whoosh(0.7 + Math.min(1, S.spinT));
       _v.set(-0.12 + Math.cos(S.spinAng) * 0.06, 1.92, 0.08 + Math.sin(S.spinAng) * 0.06); hp = _v;
-      poseHandOnly(hp); handWorld(_hand);
+      poseHandOnly(hp);
       _blade.copy(UP); poser.dir(_edge, 0, 0, 1);
+      grip(-1, _blade, _edge, _hand);
       placeModel(m, _hand, _blade, _edge);
       _v2.copy(m.userData.anchor).applyMatrix4(m.matrixWorld);
       ball.pos.set(_v2.x + Math.cos(S.spinAng) * 0.85, _v2.y + 0.12, _v2.z + Math.sin(S.spinAng) * 0.85);
@@ -1122,8 +1584,10 @@ export function createWeapons({
       S.slamT += dt;
       const u = Math.min(1, S.slamT / 0.45);
       _v.set(-0.15, 1.9 - 1.0 * smooth(u), 0.1 + 0.5 * smooth(u)); hp = _v;
-      poseHandOnly(hp); handWorld(_hand);
+      poseHandOnly(hp);
       poser.dir(_blade, 0, 1 - 1.4 * smooth(u), 0.4 + 0.6 * u); poser.dir(_edge, 0, 0, 1);
+      _blade.normalize(); grip(-1, _blade, _edge, _hand);
+
       placeModel(m, _hand, _blade, _edge);
       // 공은 머리 위 → 앞 땅으로 포물선
       const yaw = S.attackYaw, px = person.position.x + Math.sin(yaw) * 1.9, pz = person.position.z + Math.cos(yaw) * 1.9;
@@ -1255,6 +1719,8 @@ export function createWeapons({
     javelin: '<path d="M3 21 18 6"/><path d="M15 3h6v6l-3-1-2-2z"/><path d="M5 17l2 2"/>',
     bomb: '<circle cx="10" cy="14" r="7"/><path d="M14.5 9.5 17 7"/><path d="M17 7c1-1 2-1 3 0M19 3v2M22 5h-2"/>',
     pan: '<circle cx="9" cy="10" r="6"/><path d="M13.5 14 21 21.5"/>',
+    bazooka: '<path d="M2 10.5h17l3-1.5v6l-3-1.5H2z"/><path d="M8 13.5v4h2.5l1-4M14 13.5v3"/><path d="M12 7.5h2v3"/>',
+    mortar: '<path d="M9 4l5 1.5-4 12-4-1.4z"/><path d="M5 20h10"/><path d="M8.5 17.5 6 20M12 11l5 9"/><circle cx="18.5" cy="4.5" r="1.6"/>',
   };
   const CSS = `
 .wp-armed{cursor:none!important}
@@ -1273,6 +1739,7 @@ export function createWeapons({
 .wp-cross svg{overflow:visible}
 .wp-cross .rg{transition:stroke .1s}
 .wp-cross.hot .rg,.wp-cross.hot .tk{stroke:#ff5a3c}
+.wp-bar[hidden]{display:none!important}
 body.intro-on .wp-bar,body[data-view="doc"] .wp-bar,body.intro-on .wp-cross,body[data-view="doc"] .wp-cross{display:none!important}
 @media (max-width:820px){.wp-bar .n{display:none}.wp-bar button{width:34px;height:38px}.wp-bar{bottom:auto;top:64px;right:8px;flex-direction:column}}
 `;
@@ -1307,6 +1774,8 @@ body.intro-on .wp-bar,body[data-view="doc"] .wp-bar,body.intro-on .wp-cross,body
     else if (w === 'javelin') prog = S.charging ? S.charge : S.cool > 0 ? 0 : 1;
     else if (w === 'flail') prog = S.spinT >= 0 ? Math.min(1, S.spinT / 0.8) : 1;
     else if (w === 'bomb') prog = S.cool > 0 ? 1 - S.cool / 1.2 : 1;
+    else if (w === 'bazooka') prog = S.loaded ? 1 : 1 - S.reload / BAZ.reload;
+    else if (w === 'mortar') prog = S.loaded ? mortarS.dep : 1 - S.reload / MORTAR.reload;
     ringEl.style.strokeDashoffset = (94.25 * (1 - prog)).toFixed(1);
     cross.classList.toggle('hot', aim.kind === 'npc');
     const cur = btns.find(b => b.dataset.id === w);
@@ -1319,7 +1788,10 @@ body.intro-on .wp-bar,body[data-view="doc"] .wp-bar,body.intro-on .wp-cross,body
     const onFoot = !inp || inp.onFoot !== false;
     const ok = onFoot && active() && person.visible;
     poser.ensure(dt);
-    stepParts(dt); stepProj(dt); stepDizzy(dt);
+    crouch(0);
+    stepParts(dt); stepProj(dt); stepOrd(dt); stepDizzy(dt);
+    tgtRing.visible = false;
+    if (bar.hidden !== !onFoot) bar.hidden = !onFoot;   // 운전 중엔 단축 바를 숨긴다
     flashI *= Math.exp(-dt * 18); flashLight.intensity = flashI < 0.05 ? 0 : flashI;
     for (const R of rings) {
       if (!R.r.visible) continue;
@@ -1331,7 +1803,7 @@ body.intro-on .wp-bar,body[data-view="doc"] .wp-bar,body.intro-on .wp-cross,body
 
     const showWeapon = onFoot && person.visible && S.cur !== 'none';
     holder.visible = showWeapon; flailBall.visible = showWeapon && S.cur === 'flail'; chain.visible = flailBall.visible;
-    if (!showWeapon) { if (S.wasActive) resetActions(); S.wasActive = false; S.yawActive = false; hudFrame(false); applyShake(dt); return; }
+    if (!showWeapon) { if (S.wasActive) resetActions(); S.wasActive = false; S.yawActive = false; hudFrame(false); applyShake(dt); debugCam(); return; }
     S.wasActive = true;
     if (!ok) resetActions();
 
@@ -1349,11 +1821,14 @@ body.intro-on .wp-bar,body[data-view="doc"] .wp-bar,body.intro-on .wp-cross,body
 
     // 몸 방향
     const w = S.cur;
-    const facingAim = RANGED[w] || S.attackT >= 0 || S.charging || S.throwT >= 0 || S.spinT >= 0 || S.slamT >= 0;
+    const mortarAim = w === 'mortar' && (mortarS.moveT <= 0 || mortarS.fireT >= 0);
+    const facingAim = RANGED[w] || mortarAim || S.attackT >= 0 || S.charging || S.throwT >= 0 || S.spinT >= 0 || S.slamT >= 0;
     if (facingAim) {
       let target = (S.attackT >= 0 || S.slamT >= 0 || (S.throwT >= 0 && w === 'bomb')) ? S.attackYaw : aimYaw();
       if (w === 'bow') target -= 55 * D2R;           // 왼쪽 어깨를 과녁 쪽으로
       else if (w === 'crossbow') target -= 15 * D2R;
+      else if (w === 'bazooka') target -= 22 * D2R;   // 왼쪽 어깨를 앞으로 — 왼손이 앞 손잡이에 닿게
+      else if (w === 'mortar') { const p = person.position, t = mortarS.fireT >= 0 ? mLock : mTarget; target = Math.atan2(t.x - p.x, t.z - p.z); }
       if (!S.yawActive) { S.yaw = person.rotation.y; S.yawActive = true; }
       S.yaw = angLerp(S.yaw, target, dt * 14);
       person.rotation.y = S.yaw;
@@ -1373,13 +1848,36 @@ body.intro-on .wp-bar,body[data-view="doc"] .wp-bar,body.intro-on .wp-cross,body
       poseMelee(_v, _v2, kp.tw, kp.pt, def.two, models[w], def.len);
     } else if (RANGED[w]) poseAim(dt);
     else if (w === 'flail') poseFlail(dt);
+    else if (w === 'mortar') {
+      poseMortar(dt);
+      if (ok && mortarS.dep > 0.5) {   // 땅 위 목표 고리 (사거리 밖이면 붉게, 끝에 붙는다)
+        const t = mortarS.fireT >= 0 ? mLock : mTarget;
+        tgtRing.position.set(t.x, t.y + 0.06, t.z);
+        const far = Math.max(1, Math.hypot(t.x - person.position.x, t.z - person.position.z) / 14);   // 멀면 크게 (비스듬히 보여서 얇아진다)
+        tgtRing.children.forEach((c, k) => { if (k === 2) return; c.userData.p0 ??= c.position.clone(); c.scale.setScalar(far); c.position.copy(c.userData.p0).multiplyScalar(far); });
+        tgtRing.scale.setScalar(1 + Math.sin(clock * 6) * 0.06);
+        tgtRing.userData.mat.color.setHex(mortarS.inRange ? 0xffa02a : 0xff3a2a);
+        tgtRing.userData.mat.opacity = S.loaded ? 0.9 : 0.4;
+        tgtRing.visible = true;
+      }
+    }
     else poseThrowables(dt);
     if (S.throwT >= 0 && w === 'javelin') S.throwT += dt;
     if (S.throwT >= 0 && w === 'bomb') S.throwT += dt;
     if (w !== 'bow') nocked.visible = false;
+    if (w !== 'mortar') shellHand.visible = false;
 
     hudFrame(ok);
     applyShake(dt);
+    debugCam();
+  }
+  /* 디버그: __weapons.inspect(yawDeg, dist, height) — 카메라를 사람 주위 고정 위치로 (자세 확인용). inspect(null) = 끄기 */
+  let inspectCam = null;
+  function debugCam() {
+    if (!inspectCam) return;
+    const [yd, dist, h] = inspectCam, p = person.position, a = person.rotation.y + yd * D2R;
+    camera.position.set(p.x + Math.sin(a) * dist, p.y + h, p.z + Math.cos(a) * dist);
+    camera.lookAt(p.x, p.y + 1.15, p.z);
   }
   function applyShake(dt) {
     if (S.shake < 0.002) return;
@@ -1398,6 +1896,13 @@ body.intro-on .wp-bar,body[data-view="doc"] .wp-bar,body.intro-on .wp-cross,body
     list: WEAPONS,
     select, holster, cycle, update, explode, refreshBlocks,
     isBlocked: () => S.cur !== 'none',
+    inspect(yawDeg = 0, dist = 2.2, h = 1.4, aimDist = 12) {   // 디버그: 조준점을 사람 앞 aimDist m 땅에 고정
+      inspectCam = yawDeg === null ? null : [yawDeg, dist, h];
+      if (!inspectCam) { inspectAim = null; return; }
+      const p = person.position, a = person.rotation.y;
+      if (inspectAim) return;   // 한 번 정한 조준점은 끌 때까지 그대로
+      inspectAim = new V(p.x + Math.sin(a) * aimDist, 0, p.z + Math.cos(a) * aimDist); inspectAim.y = groundY(inspectAim.x, inspectAim.z);
+    },
     dispose() {
       if (domElement) {
         domElement.removeEventListener('pointerdown', onPointerDown); domElement.removeEventListener('pointermove', onMove);
@@ -1411,6 +1916,6 @@ body.intro-on .wp-bar,body[data-view="doc"] .wp-bar,body.intro-on .wp-cross,body
       bar.remove(); cross.remove();
     },
   };
-  if (debug) globalThis.__weapons = out;
+  if (debug) { globalThis.__weapons = out; out._dbg = { poser, person, models, S, camera, handRig: () => handRig(), get gripBad() { return gripBad; }, setAim: (x, z) => { inspectAim = x === null ? null : new V(x, groundY(x, z), z); }, get ordCount() { return ord.length; }, get lastBoom() { return lastBoom; }, fire: () => { const w = S.cur; if (w === "bazooka" || w === "mortar") onDown(); }, tune: o => { if (o.palm !== undefined) GRIP_PALM = o.palm; } }; }
   return out;
 }

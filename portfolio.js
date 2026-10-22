@@ -1801,7 +1801,7 @@ async function initDrive() {
       <div class="keys"><span class="key">F</span></div><span>${driving ? '내리기' : '타기'}</span>
       ${driving
         ? '<div class="keys"><span class="key">V</span></div><span>탈것 바꾸기</span><span>· 탱크는 클릭 포격</span>'
-        : '<div class="keys"><span class="key">1~0</span></div><span>무기</span><div class="keys"><span class="key">E</span></div><span>앉기</span><div class="keys"><span class="key">F</span></div><span>대화</span><span>· 클릭 공격(맨손: 주먹·꾹 눌러 잡기)</span>'}`;
+        : '<div class="keys"><span class="key">1~0 - =</span></div><span>무기</span><div class="keys"><span class="key">E</span></div><span>앉기</span><div class="keys"><span class="key">F</span></div><span>대화</span><span>· 클릭 공격(맨손: 주먹·꾹 눌러 잡기)</span>'}`;
   }
   updateHint();
 
