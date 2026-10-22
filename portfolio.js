@@ -1396,7 +1396,7 @@ async function initDrive() {
       attachGrab(n, {
         THREE, camera, domElement: renderer.domElement,
         getPlayerPos: () => activePos(), groundY,
-        isBlocked: () => !driveActive || panel.classList.contains('open') || !!(weapons && weapons.armed) || !!(tavern && tavern.seated),   // 무기를 들면 클릭은 공격
+        isBlocked: () => !driveActive || panel.classList.contains('open') || !!(weapons && weapons.armed) || !!(tavern && tavern.seated) || !!(dialogue && dialogue.active),   // 무기를 들면 클릭은 공격
         isOnFoot: () => player.mode === 'onfoot',
         getPlayerFacing: () => person.rotation.y,
         playPunch: () => playerPunch(),
@@ -1797,7 +1797,7 @@ async function initDrive() {
       <div class="keys"><span class="key">F</span></div><span>${driving ? '내리기' : '타기'}</span>
       ${driving
         ? '<div class="keys"><span class="key">V</span></div><span>탈것 바꾸기</span><span>· 탱크는 클릭 포격</span>'
-        : '<div class="keys"><span class="key">1~0</span></div><span>무기</span><div class="keys"><span class="key">E</span></div><span>앉기</span><span>· 클릭 공격(맨손: 주먹·꾹 눌러 잡기)</span>'}`;
+        : '<div class="keys"><span class="key">1~0</span></div><span>무기</span><div class="keys"><span class="key">E</span></div><span>앉기</span><div class="keys"><span class="key">F</span></div><span>대화</span><span>· 클릭 공격(맨손: 주먹·꾹 눌러 잡기)</span>'}`;
   }
   updateHint();
 
@@ -1995,7 +1995,7 @@ async function initDrive() {
      차 루트 안에서 겉모습만 갈아 끼우고, 속도·회전·카메라·충돌 상자 값만 여기로 넘겨받는다.
      위쪽 바의 버튼이나 V 키로 고른다. 모델은 처음 고를 때 내려받는다. */
   const { createVehicleSwitcher, mountVehicleButton, applyBodyShape } = await import('./vehicles.js');
-  let weapons = null, tavern = null;   // 아래에서 만든다. 탈것(탱크 폭발)·물리·잡기가 먼저 참조하므로 미리 선언
+  let weapons = null, tavern = null, dialogue = null;   // 아래에서 만든다. 탈것(탱크 폭발)·물리·잡기가 먼저 참조하므로 미리 선언
   const rides = await createVehicleSwitcher({
     THREE, GLTFLoader, dracoLoader: draco,
     carGroup: car, person, scene,
@@ -2035,7 +2035,7 @@ async function initDrive() {
       personClips: () => charClips,
       getNpcs: () => npcs,
       stalls: stallsFromStations(stations, { THREE, toyBlocks }),
-      isBlocked: () => !driveActive || panelOpen(),
+      isBlocked: () => !driveActive || panelOpen() || !!(dialogue && dialogue.active),
       onSit() { pSpeed = 0; if (weapons) weapons.holster(); },
       onStand(h) { pHeading = camYaw = h; pSpeed = 0; },
     });
@@ -2052,11 +2052,25 @@ async function initDrive() {
       getNpcs: () => npcs,
       toyBlocks, groundY,
       colliders: () => stations.map(s => s.group),
-      isBlocked: () => !driveActive || panelOpen(),
+      isBlocked: () => !driveActive || panelOpen() || !!(dialogue && dialogue.active),
       canUse: () => player.mode === 'onfoot' && !tavern.seated,
     });
   }
   const weaponsIn = { onFoot: false };   // 매 프레임 재사용
+
+  /* ── 마을 사람과 대화 — 가까이 가면 "F 대화하기", 동물의 숲처럼 아래 말풍선 (dialogue.js) ── */
+  {
+    const { createDialogue } = await import('./dialogue.js');
+    dialogue = createDialogue({
+      THREE, camera, person,
+      getNpcs: () => npcs,
+      isOnFoot: () => player.mode === 'onfoot' && !tavern.seated,
+      isBlocked: () => !driveActive || panelOpen(),
+      onStart() { for (const k in keys) keys[k] = false; pSpeed = 0; if (weapons) weapons.holster(); },
+      faceTo(h) { pHeading = h; pSpeed = 0; },
+      onEnd() { camYaw = pHeading; },
+    });
+  }
 
   function updateCamera(dt) {
     const onFoot = player.mode === 'onfoot';
@@ -2081,7 +2095,10 @@ async function initDrive() {
   function step(dt) {
     t += dt;
     if (player.mode === 'driving') drive(dt);
-    else if (!tavern.seated) walk(dt);   // 의자에 앉아 있으면 걷기를 멈춘다
+    else if (!tavern.seated) {
+      if (dialogue.active) keys.fwd = keys.back = keys.left = keys.right = keys.boost = false;
+      walk(dt);
+    }   // 의자에 앉아 있으면 걷기를 멈춘다
     tavernIn.onFoot = player.mode === 'onfoot'; tavernIn.keys = keys;
     tavern.update(dt, tavernIn);
     rideIn.speed = speed; rideIn.steer = steer; rideIn.boosting = !!keys.boost;
@@ -2107,12 +2124,14 @@ async function initDrive() {
     dust(dt);
     fallingLeaves(dt, t, activePos().x, activePos().z);
     followSun(activePos().x, activePos().z);
-    tavern.cameraStep(camera, dt, updateCamera);   // 앉으면 어깨 너머 카메라, 취하면 살짝 흔들림
+    tavern.cameraStep(camera, dt, d => dialogue.cameraStep(camera, d, updateCamera));   // 앉으면 어깨 너머 카메라, 취하면 살짝 흔들림
     weaponsIn.onFoot = player.mode === 'onfoot';
     weapons.update(dt, weaponsIn);                 // 무기 자세·투사체·효과·카메라 흔들림 (카메라 갱신 다음)
     proximity();
     if (npcs) npcs.update(dt, t);
     if (events) events.update(dt, t);
+    if (dialogue) dialogue.update(dt);   // npcs.update 다음 (말 상대를 세워 둔다)
+    if (dialogue && document.body.classList.contains('talking') !== dialogue.active) document.body.classList.toggle('talking', dialogue.active);   // 대화 중엔 단축 바·안내를 숨긴다
     trackIn.mode = player.mode; trackIn.ride = rides.current; trackIn.heading = heading; trackIn.speed = speed;
     tracks.update(dt, trackIn, npcs && npcs.npcs);   // 눈 위 자국 — 사람·탈것·마을 사람
 
