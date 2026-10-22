@@ -215,7 +215,7 @@ const PROJECTS = [
       { src: 'images/gurandi-title_menu.jpg', cap: '타이틀 · 혼자 하기 / 같이 하기' }
     ],
     repo: 'https://github.com/aabyess/GuRandi-AI-Dev',
-    pos: [-4.6, -21]   // 월드를 길 방향으로 2배 늘리면서 같이 옮김 (예전 -10.5)
+    pos: [-10.5, 54]   // AI 구역을 맨 앞으로: 출발점 바로 다음, 첫 가판대보다 앞 (길 왼쪽 — 오른쪽은 연락처 표지판 자리)
   }
 ];
 
@@ -1386,6 +1386,24 @@ async function initDrive() {
     }
   }
 
+  /* ── 중세 손님들 — 숲길을 거닐다 포장마차 의자에 앉아 술을 마신다 (npcs.js) ──
+     로딩을 막지 않게 기다리지 않는다. 의자 수치를 바꾸면 npcs.js의 STOOL_* 도 같이 바꿀 것 */
+  let npcs = null;
+  {
+    const { createNPCs, stallsFromStations } = await import('./npcs.js');
+    createNPCs({
+      THREE, scene, GLTFLoader,
+      dracoLoader: draco,
+      groundY, pathX,
+      stalls: stallsFromStations(stations, { THREE, toyBlocks }),
+      bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
+      roadHalf: WORLD.path.half,
+      bridge: WORLD.bridge,
+      getPlayerPos: () => activePos(),
+      getNight: () => night,
+    }).then(n => { npcs = n; }).catch(e => console.warn('[npcs]', e));
+  }
+
   /* ── 반딧불 — 선술집 근처에 많이, 숲에는 드문드문 ── */
   const fireflies = (() => {
     const N = 150, pts = [];
@@ -1971,6 +1989,7 @@ async function initDrive() {
     followSun(activePos().x, activePos().z);
     updateCamera(dt);
     proximity();
+    if (npcs) npcs.update(dt, t);
 
     const me = activePos();
     for (const s of stations) {
