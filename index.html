@@ -230,6 +230,9 @@ body[data-view="drive"] #doc-root{display:none}
 #g-found{position:fixed;left:18px;bottom:18px;z-index:40;display:flex;flex-direction:column;gap:7px;
   background:var(--panel);backdrop-filter:blur(12px);border:1px solid var(--line);border-radius:13px;
   padding:13px 15px;box-shadow:0 4px 18px rgba(29,42,51,.10);max-width:230px}
+#g-found .boost{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink);font-weight:600;
+  padding-bottom:9px;margin-bottom:2px;border-bottom:1px solid var(--line)}
+body.is-touch #g-found .boost{display:none}
 #g-found .t{font-family:var(--mono);font-size:10.5px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase}
 #g-found .l{display:flex;flex-direction:column;gap:4px}
 .g-fi{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);transition:.2s}
@@ -631,6 +634,7 @@ body.is-touch #g-prompt .space{display:none}
   </div>
 
   <div id="g-found">
+    <div class="boost"><span class="key">Shift</span>누른 채로 달리면 가속</div>
     <div class="t">Projects <span id="g-found-n">0 / 6</span></div>
     <div class="l" id="g-found-l"></div>
   </div>
