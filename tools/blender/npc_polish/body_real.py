@@ -55,8 +55,10 @@ def head_mb(o):
 def C_skin(o):
     skin = o["skin"]
     lip = o.get("lip", mix(skin, (0.50, 0.24, 0.17), 0.40))
-    blush = mix(skin, (0.72, 0.36, 0.22), 0.5)
+    blush = o.get("blush_col") or mix(skin, (0.72, 0.36, 0.22), 0.5)
+    shadow = o.get("eyeshadow")   # optional (colour, amount): soft tint on the upper lids (barmaid)
     stub = o.get("stubble")
+    es = o.get("eye_scale", 1.0); lw = 0.0022 * o.get("lash", 1.0); mw = o.get("mouth_w", 1.0)
     def c(p, n):
         col = skin
         g = gauss(p, (0.046, -0.072, 1.646), 0.022) + gauss(p, (-0.046, -0.072, 1.646), 0.022)
@@ -64,16 +66,19 @@ def C_skin(o):
         g += 0.7 * (gauss(p, (0.08, 0.008, 1.668), 0.025) + gauss(p, (-0.08, 0.008, 1.668), 0.025))
         col = mix(col, blush, clamp(g) * o.get("blush", 0.25))
         # lips
-        dx = p.x / 0.022; dz = (p.z - 1.6062) / 0.0118
+        dx = p.x / (0.022 * mw); dz = (p.z - 1.6062) / 0.0118
         if p.y < -0.088 and dx * dx + dz * dz < 1.0:
             col = mix(col, lip, clamp((1 - (dx * dx + dz * dz)) * 3))
             ml = math.exp(-((p.z - 1.6060) / 0.0016) ** 2) * clamp((1 - dx * dx) * 2)
             col = mix(col, mul(lip, 0.45), ml * 0.8)
         # lash line along the upper lid
         for kk in (1, -1):
-            a0 = Vector((kk * (EYE_X - 0.0118), EYE_Y - 0.0098, EYE_Z + 0.0022)); a1 = Vector((kk * (EYE_X + 0.0112), EYE_Y - 0.0078, EYE_Z + 0.0030))
+            a0 = Vector((kk * (EYE_X - 0.0118 * es), EYE_Y - 0.0098 * es, EYE_Z + 0.0022 * es)); a1 = Vector((kk * (EYE_X + 0.0112 * es), EYE_Y - 0.0078 * es, EYE_Z + 0.0030 * es))
             d = (p - a0) - (a1 - a0) * clamp((p - a0).dot(a1 - a0) / (a1 - a0).length_squared)
-            if d.length < 0.0022: col = mix(col, (0.05, 0.03, 0.02), (1 - d.length / 0.0022) * 0.85)
+            if d.length < lw: col = mix(col, (0.05, 0.03, 0.02), (1 - d.length / lw) * 0.85)
+        if shadow:
+            g2 = gauss(p, (EYE_X, EYE_Y - 0.010 * es, EYE_Z + 0.008 * es), 0.010 * es) + gauss(p, (-EYE_X, EYE_Y - 0.010 * es, EYE_Z + 0.008 * es), 0.010 * es)
+            col = mix(col, shadow[0], clamp(g2) * shadow[1])
         # eye surroundings darker
         e = gauss(p, (EYE_X, -0.085, EYE_Z), 0.02) + gauss(p, (-EYE_X, -0.085, EYE_Z), 0.02)
         col = mix(col, mul(col, 0.8), clamp(e) * 0.5)
@@ -90,7 +95,8 @@ def eyes(o):
     iris = o.get("iris", (0.12, 0.06, 0.025))
     for k in (1, -1):
         ctr = Vector((EYE_X * k, EYE_Y, EYE_Z))
-        geo = sphere(ctr, (EYE_R, EYE_R, EYE_R), 12, 8)
+        er = EYE_R * o.get("eye_scale", 1.0)
+        geo = sphere(ctr, (er, er, er), 12, 8)
         fwd = Vector((0.06 * k, -1, -0.03)).normalized()
         def col(p, n, ctr=ctr, fwd=fwd):
             d = (p - ctr).normalized().dot(fwd)
@@ -252,16 +258,21 @@ def head_sdf(o):
     s.add('cap', (0.030, -0.071, 1.664), (0.062, -0.035, 1.660), 0.0105, k=0.02, mirror=True)        # zygomatic arch
     s.add('ell', (0.040, -0.058, 1.642), (0.018 * full, 0.014 * full, 0.018), k=0.03, mirror=True)  # cheek pad
     s.add('ell', (0, -0.036, 1.604), (0.046 * jaw, 0.050, 0.034), k=0.024)
-    s.add('cap', (0.052 * jaw, -0.002, 1.632), (0.020, -0.068, 1.575), 0.0085 if not fem else 0.0072, k=0.02, mirror=True)
+    mw = o.get("mouth_w", 1.0); sm = o.get("smile", 0.0); mz = o.get("muzzle", 1.0); jl = o.get("jawline", 1.0)   # (barmaid) defaults = villagers
+    s.add('cap', (0.052 * jaw, -0.002, 1.632), (0.020, -0.068, 1.575), (0.0085 if not fem else 0.0072) * jl, k=0.02, mirror=True)
     ch = o.get("chin", 1.0)
     s.add('ell', (0, -0.079 - 0.003 * (ch - 1), 1.578 if not fem else 1.582), ((0.020 if not fem else 0.016) * ch, 0.013, 0.016 if not fem else 0.013), k=0.012)
-    s.add('ell', (0, -0.062, 1.624), (0.035, 0.020, 0.023), k=0.020)                                 # maxilla fill (v5: less muzzle)
+    s.add('ell', (0, -0.062 + 0.006 * (1 - mz), 1.624), (0.035, 0.020 * mz, 0.023), k=0.020)                                 # maxilla fill (v5: less muzzle)
     lp = (1.0 if not fem else 1.12) * o.get("lips", 1.0)
-    s.add('ell', (0, -0.0868, 1.6115), (0.0160, 0.0044, 0.0040 * lp), k=0.006)
-    s.add('ell', (0, -0.0858, 1.6005), (0.0140, 0.0046, 0.0046 * lp), k=0.006)
+    s.add('ell', (0, -0.0868, 1.6115), (0.0160 * mw, 0.0044, 0.0040 * lp), k=0.006)
+    s.add('ell', (0, -0.0858, 1.6005), (0.0140 * mw, 0.0046, 0.0046 * lp), k=0.006)
     s.sub('cap', (0, -0.0960, 1.6262), (0, -0.0953, 1.6168), 0.0011, k=0.003)                       # philtrum
-    s.sub('cap', (-0.0165, -0.0925, 1.6062), (0.0165, -0.0925, 1.6062), 0.0009, k=0.0012)           # lip line
-    s.sub('ell', (0.0185, -0.0885, 1.6062), (0.0022, 0.0030, 0.0022), k=0.003, mirror=True)        # corners
+    if sm:   # gentle smile: the lip line curves up towards the corners
+        s.sub('cap', (-0.008 * mw, -0.0925, 1.6062), (0.008 * mw, -0.0925, 1.6062), 0.0009, k=0.0012)
+        s.sub('cap', (0.008 * mw, -0.0925, 1.6062), (0.0165 * mw, -0.0915, 1.6062 + 0.0022 * sm), 0.0009, k=0.0012, mirror=True)
+    else:
+        s.sub('cap', (-0.0165 * mw, -0.0925, 1.6062), (0.0165 * mw, -0.0925, 1.6062), 0.0009, k=0.0012)           # lip line
+    s.sub('ell', (0.0185 * mw, -0.0885, 1.6062 + 0.0030 * sm), (0.0022, 0.0030, 0.0022), k=0.003, mirror=True)        # corners
     s.sub('cap', (0.0160, -0.0935, 1.6370), (0.0255, -0.0865, 1.6060), 0.0005 + 0.0008 * age, k=0.010, mirror=True)  # nasolabial
     ns = (1.0 if not fem else 0.88) * o.get("nose", 1.0); nl = o.get("nose_len", 1.0)
     s.add('cap', (0, -0.0870, 1.692), (0, -0.0870 - 0.0165 * nl, 1.650), 0.0068 * ns, k=0.010)
@@ -270,10 +281,11 @@ def head_sdf(o):
     s.sub('ell', (0.0080 * ns, -0.0995, 1.6332), (0.0024, 0.0030, 0.0014), k=0.0015, mirror=True)
     s.add('cap', (0.0, -0.0838, 1.7045), (0.038, -0.0800, 1.7035), 0.0095 if not fem else 0.0068, k=0.010, mirror=True)
     # eyes: almond opening, lids, crease
-    s.sub('ell', (EYE_X, EYE_Y - 0.0085, EYE_Z - 0.0004), (0.0146, 0.0120, 0.0071), k=0.0025, mirror=True)
-    s.add('cap', (EYE_X - 0.0118, EYE_Y - 0.0090, EYE_Z + 0.0036), (EYE_X + 0.0112, EYE_Y - 0.0070, EYE_Z + 0.0044), 0.0024, k=0.003, mirror=True)
-    s.sub('cap', (EYE_X - 0.0110, EYE_Y - 0.0098, EYE_Z + 0.0088), (EYE_X + 0.0110, EYE_Y - 0.0082, EYE_Z + 0.0095), 0.0011, k=0.003, mirror=True)
-    s.add('cap', (EYE_X - 0.0100, EYE_Y - 0.0082, EYE_Z - 0.0058), (EYE_X + 0.0100, EYE_Y - 0.0074, EYE_Z - 0.0062), 0.0016, k=0.003, mirror=True)
+    e = o.get("eye_scale", 1.0)   # (king/barmaid) eye opening + lids scaled about the eye centre; 1.0 = v5 villagers
+    s.sub('ell', (EYE_X, EYE_Y - 0.0085 * e, EYE_Z - 0.0004 * e), (0.0146 * e, 0.0120 * e, 0.0071 * e), k=0.0025, mirror=True)
+    s.add('cap', (EYE_X - 0.0118 * e, EYE_Y - 0.0090 * e, EYE_Z + 0.0036 * e), (EYE_X + 0.0112 * e, EYE_Y - 0.0070 * e, EYE_Z + 0.0044 * e), 0.0024 * e, k=0.003, mirror=True)
+    s.sub('cap', (EYE_X - 0.0110 * e, EYE_Y - 0.0098 * e, EYE_Z + 0.0088 * e), (EYE_X + 0.0110 * e, EYE_Y - 0.0082 * e, EYE_Z + 0.0095 * e), 0.0011, k=0.003, mirror=True)
+    s.add('cap', (EYE_X - 0.0100 * e, EYE_Y - 0.0082 * e, EYE_Z - 0.0058 * e), (EYE_X + 0.0100 * e, EYE_Y - 0.0074 * e, EYE_Z - 0.0062 * e), 0.0016 * e, k=0.003, mirror=True)
     if age > 0:
         s.add('ell', (0.036, -0.056, 1.600), (0.012, 0.011, 0.010), k=0.022, mirror=True)            # jowls
         s.add('cap', (EYE_X - 0.008, EYE_Y - 0.0065, EYE_Z - 0.0105), (EYE_X + 0.009, EYE_Y - 0.0050, EYE_Z - 0.0110), 0.0022 * age, k=0.004, mirror=True)
