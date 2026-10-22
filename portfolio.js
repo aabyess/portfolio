@@ -711,7 +711,7 @@ async function initDrive() {
   const KINGDOM_SIGN = { x: pathX(WORLD.start.z - 6) - 3.6, z: WORLD.start.z - 6 };
   const { PONDS } = await import('./fishing.js');   // 연못 자리의 나무는 치운다
   const { CASTLE_CLEAR } = await import('./castle.js');   // 성문·성벽 자리의 나무도
-  let castle = null, animals = null, quests = null;   // 아래에서 만든다 (걷기·운전 충돌, 행차가 먼저 참조)
+  let castle = null, animals = null, quests = null, kids = null;   // 아래에서 만든다 (걷기·운전 충돌, 행차가 먼저 참조)
   /* 개울 위 돌다리 (bridge.js) — 월드의 옛 나무다리(EX_Bridge)는 숨긴다. 높이 곡선은 bridgeY 그대로 */
   const { createBridge } = await import('./bridge.js');
   const bridge = createBridge({ THREE, scene, GLTFLoader, dracoLoader: draco, pathX, bridgeData: WORLD.bridge });
@@ -1454,7 +1454,7 @@ async function initDrive() {
         isBlocked: () => !driveActive || panel.classList.contains('open') || !!(weapons && weapons.armed) || !!(tavern && tavern.seated) || !!(dialogue && dialogue.active) || !!(fishing && fishing.active) || !!(quests && quests.open) || attackBusy(),   // 무기를 들면 클릭은 공격
         isOnFoot: () => player.mode === 'onfoot',
         getPlayerFacing: () => person.rotation.y,
-        playPunch: () => { playerPunch(); if (animals) animals.punchFrom(person.position, person.rotation.y); },
+        playPunch: () => { playerPunch(); if (animals) animals.punchFrom(person.position, person.rotation.y); if (kids) kids.punch(); },
       });
       /* 수배 ★·경비병·술집 싸움·음유시인 (events.js) */
       events = createEvents({
@@ -1510,6 +1510,18 @@ async function initDrive() {
       onEvent: text => toast(text, 2200),
       getRide: () => rideInfo,   // 차로 치면 데굴데굴 (npcs 의 getRide 가 매 프레임 채운다)
     });
+  }
+
+  /* ── 아이들 7명: 술래잡기·오리 줄 따라오기·동물 쫓기·겨울 눈싸움, 밤엔 집으로 (kids.js). 맞지 않고 피한다 ── */
+  {
+    const { createKids } = await import('./kids.js');
+    createKids({ THREE, scene, GLTFLoader, dracoLoader: draco, groundY, pathX,
+      bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
+      stalls: stations.map(s => ({ x: s.group.position.x, z: s.group.position.z })),
+      getPlayerPos: () => activePos(), isOnFoot: () => player.mode === 'onfoot',
+      getNight: () => night, getSeason: () => seasons.season, getNpcs: () => npcs,
+      getAnimals: () => animals, onEvent: text => toast(text, 2200),
+    }).then(k => { kids = k; }).catch(e => console.warn('[kids]', e));
   }
 
   /* ── 반딧불 — 선술집 근처에 많이, 숲에는 드문드문 ── */
@@ -1875,7 +1887,7 @@ async function initDrive() {
     atk.act = a; atk.move = m; atk.t = 0; atk.hit = false;
     atk.dur = m.drop ? m.dur : a.getClip().duration / m.speed;
     atk.win = atk.dur + 0.6;
-    if (m.drop) atk.dropH = pHeading;
+    if (m.drop) { atk.dropH = pHeading; if (kids) kids.cheer(person.position); }   // 드롭킥엔 아이들이 환호
     if (!m.drop) atk.timer = setTimeout(() => a.fadeOut(0.12), Math.max(0, atk.dur - 0.12) * 1000);
     if (!m.upper) pSpeed = m.drop ? pSpeed : 0;
   }
@@ -2361,6 +2373,7 @@ async function initDrive() {
     if (castle) castle.update(dt, t);
     if (animals) animals.update(dt, t);
     if (quests) quests.update(dt, t);
+    if (kids) kids.update(dt, t);
     bridge.setLampGlow(night);
     if (dialogue) dialogue.update(dt);   // npcs.update 다음 (말 상대를 세워 둔다)
     {
