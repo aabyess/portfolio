@@ -514,7 +514,7 @@ const WHEEL_SPEC = [
 
 /* 캐릭터 모델. null이면 박스로 조립한 기본 캐릭터를 쓴다.
    리깅된 .glb를 넣으면 애니메이션(idle/run)을 자동으로 찾아 쓴다. */
-const CHAR_MODEL_URL = 'models/person.glb';   // Quaternius Casual Character (CC0)
+const CHAR_MODEL_URL = 'models/player.glb';   // 상호랜드 왕자 (tools/blender/player, 뼈·동작은 Quaternius person.glb 그대로)
 const CHAR_HEIGHT = 1.95;   // 월드 기준 키. glb도 여기에 맞춰 크기를 맞춘다.
 
 let driveReady = false;
@@ -706,6 +706,7 @@ async function initDrive() {
   draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/');
   const worldLoader = new GLTFLoader(worldManager);
   worldLoader.setDRACOLoader(draco);
+  const { PONDS } = await import('./fishing.js');   // 연못 자리의 나무는 치운다
   worldLoader.load('models/autumn-world.glb', gltf => {
     gltf.scene.traverse(o => {
       if (!o.isMesh) return;
@@ -728,6 +729,7 @@ async function initDrive() {
     seasons.attachWorld(gltf.scene);   // 계절: 잎·땅·길 색과 눈 쌓임 (addWind 다음에 붙여야 둘 다 산다)
     scene.add(gltf.scene);
     clearTrees(gltf.scene, PROJECTS.filter(p => p.ai).map(p => p.pos), 7.5);
+    clearTrees(gltf.scene, PONDS.map(p => [p.x, p.z]), 6.2);
   });
 
   /* ── 풀 — 브루노 시몽 숲처럼 짧고 뾰족한 풀을 촘촘히 ──
@@ -1396,7 +1398,7 @@ async function initDrive() {
       attachGrab(n, {
         THREE, camera, domElement: renderer.domElement,
         getPlayerPos: () => activePos(), groundY,
-        isBlocked: () => !driveActive || panel.classList.contains('open') || !!(weapons && weapons.armed) || !!(tavern && tavern.seated) || !!(dialogue && dialogue.active),   // 무기를 들면 클릭은 공격
+        isBlocked: () => !driveActive || panel.classList.contains('open') || !!(weapons && weapons.armed) || !!(tavern && tavern.seated) || !!(dialogue && dialogue.active) || !!(fishing && fishing.active),   // 무기를 들면 클릭은 공격
         isOnFoot: () => player.mode === 'onfoot',
         getPlayerFacing: () => person.rotation.y,
         playPunch: () => playerPunch(),
@@ -1585,7 +1587,7 @@ async function initDrive() {
     if (e.code === 'KeyH' && !e.repeat) { e.preventDefault(); honk(); return; }
     const k = KEYMAP[e.code];
     if (k) { keys[k] = true; e.preventDefault(); hideHint(); }
-    if (e.code === 'KeyF') { e.preventDefault(); toggleVehicle(); hideHint(); }
+    if (e.code === 'KeyF') { e.preventDefault(); if (player.mode === 'onfoot' && fishing && fishing.onF()) return; toggleVehicle(); hideHint(); }
     if (e.code === 'Escape') closePanel();
   });
   addEventListener('keyup', e => { const k = KEYMAP[e.code]; if (k) keys[k] = false; });
@@ -1635,6 +1637,7 @@ async function initDrive() {
     car.position.z += Math.cos(heading) * speed * dt;
 
     if (clampToBounds(car.position)) speed *= 0.3;
+    if (fishing && fishing.pushOut(car.position, 1.4)) speed *= 0.5;   // 연못에 빠지지 않게
     car.position.y += (groundY(car.position.x, car.position.z) - car.position.y) * Math.min(1, dt * 12);
     car.rotation.order = 'YXZ';
     car.rotation.y = heading;
@@ -1693,6 +1696,7 @@ async function initDrive() {
     person.position.z += Math.cos(pHeading) * pSpeed * dt;
 
     if (clampToBounds(person.position)) pSpeed = 0;
+    if (fishing && fishing.pushOut(person.position, 0.35)) pSpeed *= 0.5;
     person.rotation.y = pHeading;
 
     /* 달리는 동안만 카메라가 진행 방향으로 따라 돈다 */
@@ -1995,7 +1999,7 @@ async function initDrive() {
      차 루트 안에서 겉모습만 갈아 끼우고, 속도·회전·카메라·충돌 상자 값만 여기로 넘겨받는다.
      위쪽 바의 버튼이나 V 키로 고른다. 모델은 처음 고를 때 내려받는다. */
   const { createVehicleSwitcher, mountVehicleButton, applyBodyShape } = await import('./vehicles.js');
-  let weapons = null, tavern = null, dialogue = null;   // 아래에서 만든다. 탈것(탱크 폭발)·물리·잡기가 먼저 참조하므로 미리 선언
+  let weapons = null, tavern = null, dialogue = null, fishing = null;   // 아래에서 만든다. 탈것(탱크 폭발)·물리·잡기가 먼저 참조하므로 미리 선언
   const rides = await createVehicleSwitcher({
     THREE, GLTFLoader, dracoLoader: draco,
     carGroup: car, person, scene,
@@ -2035,12 +2039,28 @@ async function initDrive() {
       personClips: () => charClips,
       getNpcs: () => npcs,
       stalls: stallsFromStations(stations, { THREE, toyBlocks }),
-      isBlocked: () => !driveActive || panelOpen() || !!(dialogue && dialogue.active),
+      isBlocked: () => !driveActive || panelOpen() || !!(dialogue && dialogue.active) || !!(fishing && fishing.active),
       onSit() { pSpeed = 0; if (weapons) weapons.holster(); },
       onStand(h) { pHeading = camYaw = h; pSpeed = 0; },
     });
   }
   const tavernIn = { onFoot: false, keys: null };   // 매 프레임 재사용
+
+  /* ── 연못 낚시 — 물가·선착장에서 "F 낚시하기", 겨울엔 얼음낚시 (fishing.js) ── */
+  {
+    const { createFishing } = await import('./fishing.js');
+    fishing = createFishing({
+      THREE, scene, camera, person, groundY,
+      personClips: () => charClips,
+      domElement: renderer.domElement,
+      getSeason: () => seasons.season,
+      isBlocked: () => !driveActive || panelOpen() || tavern.seated || !!(dialogue && dialogue.active),
+      onStart() { pSpeed = 0; if (weapons) weapons.holster(); },
+      onStop(h) { pHeading = camYaw = h; pSpeed = 0; },
+    });
+    if (new URLSearchParams(location.search).has('test')) window.__fishing = fishing;
+  }
+  const fishIn = { onFoot: false, keys: null };
 
   /* ── 무기 10종 — 걸을 때 1~9·0으로 고르고 클릭으로 공격 (weapons.js). 피 없이 넘어지기만 한다 ── */
   {
@@ -2053,7 +2073,7 @@ async function initDrive() {
       toyBlocks, groundY,
       colliders: () => stations.map(s => s.group),
       isBlocked: () => !driveActive || panelOpen() || !!(dialogue && dialogue.active),
-      canUse: () => player.mode === 'onfoot' && !tavern.seated,
+      canUse: () => player.mode === 'onfoot' && !tavern.seated && !(fishing && fishing.active),
     });
   }
   const weaponsIn = { onFoot: false };   // 매 프레임 재사용
@@ -2064,7 +2084,7 @@ async function initDrive() {
     dialogue = createDialogue({
       THREE, camera, person,
       getNpcs: () => npcs,
-      isOnFoot: () => player.mode === 'onfoot' && !tavern.seated,
+      isOnFoot: () => player.mode === 'onfoot' && !tavern.seated && !fishing.active,
       isBlocked: () => !driveActive || panelOpen(),
       onStart() { for (const k in keys) keys[k] = false; pSpeed = 0; if (weapons) weapons.holster(); },
       faceTo(h) { pHeading = h; pSpeed = 0; },
@@ -2095,12 +2115,14 @@ async function initDrive() {
   function step(dt) {
     t += dt;
     if (player.mode === 'driving') drive(dt);
-    else if (!tavern.seated) {
+    else if (!tavern.seated && !fishing.active) {
       if (dialogue.active) keys.fwd = keys.back = keys.left = keys.right = keys.boost = false;
       walk(dt);
     }   // 의자에 앉아 있으면 걷기를 멈춘다
     tavernIn.onFoot = player.mode === 'onfoot'; tavernIn.keys = keys;
     tavern.update(dt, tavernIn);
+    fishIn.onFoot = player.mode === 'onfoot'; fishIn.keys = keys;
+    fishing.update(dt, fishIn);
     rideIn.speed = speed; rideIn.steer = steer; rideIn.boosting = !!keys.boost;
     rideIn.moving = !!(keys.fwd || keys.back); rideIn.driving = player.mode === 'driving';
     rides.update(dt, rideIn);   // 말 걸음·바퀴·핸들·탄 사람 자세
@@ -2124,14 +2146,17 @@ async function initDrive() {
     dust(dt);
     fallingLeaves(dt, t, activePos().x, activePos().z);
     followSun(activePos().x, activePos().z);
-    tavern.cameraStep(camera, dt, d => dialogue.cameraStep(camera, d, updateCamera));   // 앉으면 어깨 너머 카메라, 취하면 살짝 흔들림
+    tavern.cameraStep(camera, dt, d => dialogue.cameraStep(camera, d, d2 => fishing.cameraStep(camera, d2, updateCamera)));   // 앉으면 어깨 너머 카메라, 취하면 살짝 흔들림
     weaponsIn.onFoot = player.mode === 'onfoot';
     weapons.update(dt, weaponsIn);                 // 무기 자세·투사체·효과·카메라 흔들림 (카메라 갱신 다음)
     proximity();
     if (npcs) npcs.update(dt, t);
     if (events) events.update(dt, t);
     if (dialogue) dialogue.update(dt);   // npcs.update 다음 (말 상대를 세워 둔다)
-    if (dialogue && document.body.classList.contains('talking') !== dialogue.active) document.body.classList.toggle('talking', dialogue.active);   // 대화 중엔 단축 바·안내를 숨긴다
+    {
+      const busy = !!((dialogue && dialogue.active) || (fishing && fishing.active));   // 대화·낚시 중엔 단축 바·안내를 숨긴다
+      if (document.body.classList.contains('talking') !== busy) document.body.classList.toggle('talking', busy);
+    }
     trackIn.mode = player.mode; trackIn.ride = rides.current; trackIn.heading = heading; trackIn.speed = speed;
     tracks.update(dt, trackIn, npcs && npcs.npcs);   // 눈 위 자국 — 사람·탈것·마을 사람
 
