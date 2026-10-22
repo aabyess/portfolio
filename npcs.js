@@ -179,6 +179,7 @@ const MIX_FAR = 35;              // 이보다 먼 손님은 애니메이션을 0
 const SHADOW_FAR = 30;           // 이보다 먼 손님은 그림자를 끈다
 const SCREAMS = ['으악!', '살려줘!', '도망쳐!', '꺄악!'];
 const LAUGHS = ['하하!', '푸하하!', '꼴좋다!', '어이쿠~'];
+const RIDE_LAUGHS = ['하하하하!', '나이스!', '푸하하하!', '크하하 날아갔다!', '나이스 샷!', '스트라이크!', '배꼽 빠지겠네!', '저거 봐 저거!', '와하하하!', '10점 만점!'];   // 탈것에 치이면 구경꾼이 박장대소
 const PROTESTS = ['이봐!', '괜찮아?', '그만해!', '무슨 짓이야!'];
 const CHATS = ['그래서 말이야', '정말?', '하하', '음…', '그렇지!', '들었어?'];
 /* 옷 색 바꾸기에서 빼는 재질 (피부·눈·머리·수염·잔·금속) */
@@ -894,7 +895,7 @@ export async function createNPCs({
     if (cause !== 'fight') emit(cause === 'punch' ? 'knockdown' : cause === 'shot' ? 'weapon' : cause, n);
     setAnger(n, false);
     n.state = ST.FLYING;
-    bystanders(n);
+    bystanders(n, cause);
   }
 
   /* 휘청: 한 대 맞고 뒤로 젖혀졌다 돌아온 뒤 화낸다 */
@@ -1182,7 +1183,8 @@ export async function createNPCs({
   }
 
   /* ── 구경꾼: 누가 맞거나 넘어지면 근처 사람이 멈춰서 웃거나 항의한다 ── */
-  function bystanders(victim) {
+  function bystanders(victim, cause) {
+    if (cause === 'car') { rideLaugh(victim); return; }
     let k = 0;
     for (const n of npcs) {
       if (k >= 3) break;
@@ -1192,6 +1194,26 @@ export async function createNPCs({
       n.watchKind = rnd() < 0.55 ? 0 : 1;
       play(n, n.watchKind === 0 ? 'Cheers' : (n.actions.Stomp ? 'Stomp' : 'Idle'), 0.25);
       if (k < 2) say(n, pickOne(n.watchKind === 0 ? LAUGHS : PROTESTS), 1.8);
+      k++;
+    }
+  }
+
+  /* ── 박장대소: 탈것에 치이면 16 m 안 사람들이 배를 잡고 웃는다 (걷던 사람은 멈춰서, 앉은 사람은 말풍선만) ── */
+  function rideLaugh(victim) {
+    let k = 0, b = 0;
+    for (const n of npcs) {
+      if (k >= 5) break;
+      if (n === victim || n.off || n.guard || n.actor || n.bar >= 0) continue;
+      if (!(Math.hypot(n.x - victim.x, n.z - victim.z) <= 16)) continue;
+      if (n.state === ST.WANDER || n.state === ST.PAUSE || n.state === ST.CHAT || n.state === ST.WATCH) {
+        if (rnd() > 0.85) continue;
+        n.state = ST.WATCH; n.timer = rr(2.2, 3.2); n.watchV = victim; n.yielding = false; n.watchKind = 2;
+        n.laughPh = rnd() * 6;
+        play(n, 'Cheers', 0.2);
+      } else if (n.state === ST.SEATED) {
+        if (rnd() > 0.6) continue;
+      } else continue;
+      if (b < 3) { setTimeout(() => { if (!n.off && !isLying(n.state)) say(n, pickOne(RIDE_LAUGHS), 1.9, '#b8860b'); }, 120 + b * 260); b++; }
       k++;
     }
   }
@@ -1613,6 +1635,12 @@ export async function createNPCs({
       const v = n.watchV;
       if (v) turnTo(n, Math.atan2(v.x - n.x, v.z - n.z), dt);
       n.y += (groundY(n.x, n.z) - n.y) * Math.min(1, dt * 12);
+      if (n.watchKind === 2) {
+        /* 박장대소: 배를 잡고 앞뒤로 들썩, 가끔 뒤로 젖힌다 */
+        n.laughPh += dt * 15;
+        n.body.rotation.x = 0.16 + Math.sin(n.laughPh) * 0.1 - Math.max(0, Math.sin(n.laughPh * 0.23)) * 0.28;
+        n.body.rotation.z = Math.sin(n.laughPh * 0.5) * 0.04;
+      }
       if (n.timer <= 0) { n.watchV = null; toIdle(n); }
     } else if (n.state === ST.CHAT) {
       const g = n.chatG;
