@@ -427,7 +427,7 @@ export function createTavern({
   }
 
   function sit(seat) {
-    if (!seat || S.phase !== 'none' || !reserve(seat)) return false;
+    if (!seat || S.phase !== 'none' || (!seat.external && !reserve(seat))) return false;
     poser.ensure();
     S.seat = seat; S.phase = 'sitting'; S.t = 0;
     S.from.copy(person.position); S.fromYaw = person.rotation.y;
@@ -435,10 +435,17 @@ export function createTavern({
     if (poser.rig) { poser.save(); measureHip(); }
     promptEl.hidden = true;
     if (onSit) onSit(seat);
+    if (seat.external) return true;   // sitAt: 다른 모듈의 자리 — 주문판·서빙 없이 앉기만
     renderPanel();
     panel.hidden = false;
     maidToStall();      // 서빙 아가씨가 이 가판대 카운터로 (안 보이면 나타나고, 가까우면 걸어온다)
     return true;
+  }
+  /* 아무 자리에나 앉히기 (pageant.js 연회 벤치 등): spot = { x, z, y(바닥 높이, 앉는 면 = y + 0.42), rotY(앉아서 보는 방향) }.
+     같은 앉기 자세·어깨 너머 카메라·E/WASD/Esc 로 일어나기를 쓰고, 주문판·서빙 아가씨·의자 예약은 없다. */
+  function sitAt(spot) {
+    if (!spot || !Number.isFinite(spot.x) || !Number.isFinite(spot.z)) return false;
+    return sit({ x: spot.x, z: spot.z, y: Number.isFinite(spot.y) ? spot.y : 0, rotY: Number.isFinite(spot.rotY) ? spot.rotY : 0, external: true, owner: PLAYER_OWNER });
   }
   const hipLocal = new V(0, 0.95, 0);
   function measureHip() {
@@ -464,7 +471,7 @@ export function createTavern({
     seatXZ(seat, _seatPos);
     person.position.set(_seatPos.x - Math.sin(yaw) * 0.6, S.from.y, _seatPos.z - Math.cos(yaw) * 0.6);
     person.rotation.set(0, yaw, 0);
-    release(seat);
+    if (!seat.external) release(seat);
     S.seat = null; S.phase = 'none';
     mug.visible = false;
     if (S.drink && S.drink.phase === 'wait') S.drink = null;   // 아직 안 나온 술은 취소
@@ -473,6 +480,7 @@ export function createTavern({
 
   function order(id) {
     if (S.phase !== 'seated' && S.phase !== 'sitting') return false;
+    if (S.seat && S.seat.external) return false;   // sitAt 자리에선 주문하지 않는다
     if (S.drink) { say('먼저 잔부터 비우세요~'); return false; }
     const d = DRINKS.find(x => x.id === id); if (!d) return false;
     let line;
@@ -952,7 +960,7 @@ export function createTavern({
     addCoins(n) { S.coins += n; renderPanel(); },   // 퀘스트 보상 (quests.js)
     get holding() { return !!(S.drink && S.drink.phase === 'hold'); },
     get candidate() { return S.candidate; },
-    update, cameraStep, order, sip, standUp, poser,
+    update, cameraStep, order, sip, standUp, poser, sitAt,
     sitNearest() { const s = findSeat(person.position); return s ? sit(s) : false; },
     setSway(on) { sway = !!on; },
     setDrunk(v) { S.drunk = Math.max(0, v); renderPanel(); },

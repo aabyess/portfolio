@@ -171,6 +171,9 @@ const FRONT_STEP = 0.22;         // 앉기 직전 의자 앞(테이블 쪽)에 �
 const SIT_TIME = 0.6;            // 앉기/일어서기 보간 시간
 const PLAYER_R = 1.6, PLAYER_R_OUT = 2.2;   // 부딪힐 만큼 가까울 때만 비켜 간다 (멈추거나 쳐다보지 않음)
 const CLIP_LEN = { Idle: 3, Walk: 1, Sit: 4, Drink: 3, Cheers: 1.5 };
+/* 서서 하는 몸짓 (play 가 Cheers/Drink 를 서 있는 사람에게 틀 때, 또는 cheerStanding) */
+const STAND = { cheer: 1, drink: 2, offer: 3, laugh: 4, toast: 5 };
+const STAND_FADE = 0.3;
 
 const ST = { WANDER: 0, PAUSE: 1, TO_SEAT: 2, SIT_DOWN: 3, SEATED: 4, STAND_UP: 5, LEAVE: 6,
   HELD: 7, FLYING: 8, LYING: 9, GETUP: 10, STOMP: 11, ROLL: 12, CHASE: 13, STAGGER: 14,
@@ -427,6 +430,7 @@ export async function createNPCs({
       anger, react: 0, rolled: false, knockClip: false, hitCD: 0, close: false,
       hist: Array.from({ length: HIST }, () => ({ x: 0, y: 0, z: 0, t: -1 })),
       sc, meshes, mats, shadow: true, bubble: null, boneRest, procDirty: false,
+      standK: 0, standOn: false, standS: -9, standUntil: 0, standHop: 1, actSit: false,   // 서서 환호·마시기 덧씌우기 (standLayer)
       hi, lod, lodOn: false, lodMats: hi.map(m => m.material),
       guard: false, off: false, fight: null, foe: null, punchAnim: 0, gatherC: null, gx: 0, gz: 0, fx: 0, fz: 0,
       bar: -1, panicT: 0, panicX: 0, panicZ: 0, watchKind: 0, watchV: null, chatG: null, arrived: false, wiping: false, talkT: 0,
@@ -443,16 +447,51 @@ export async function createNPCs({
   const api = {};   // 돌려줄 객체 (콜백 onAggression / onGuardCatch / onNpcEvent 를 events.js 가 단다)
 
   /* ── 헬퍼 (update 에서 할당 없이 쓰도록 클로저 밖 스크래치 없이 숫자만 다룬다) ── */
-  function play(n, name, fade = FADE) {
+  let now = 0;   // 내부 시계 (주먹 연타 판정 · 서서 하는 몸짓 섞기)
+  const smooth = k => k * k * (3 - 2 * k);
+  /* Cheers·Drink 클립은 '앉아서' 잔을 드는 동작이다. 서 있는 사람에게 그대로 틀면 허공에 앉은 것처럼 보이므로
+     앉아 있지 않으면 Idle 을 틀고 standLayer 가 팔을 덧씌운다 (curName 은 요청한 이름 그대로 둔다).
+     kind 를 주면 그 몸짓으로 (STAND.cheer/drink/offer/laugh/toast) */
+  function play(n, name, fade = FADE, kind = 0) {
+    const req = name;
+    let sk = 0;
+    if (name === 'Cheers' || name === 'Drink') {
+      if (!sitsNow(n)) { sk = kind || (name === 'Cheers' ? STAND.cheer : STAND.drink); name = 'Idle'; }
+    } else if (n.actor && name !== 'Fall' && name !== 'GetUp') n.actSit = name === 'Sit';
+    setStand(n, sk, name);
     const a = n.actions[name];
-    if (!a || n.cur === a) return;
+    if (!a) return;
+    n.curName = req;
+    if (n.cur === a) return;
     a.reset();
     a.setEffectiveTimeScale(1);
     a.setEffectiveWeight(1);
     a.fadeIn(fade);
     a.play();
     if (n.cur) n.cur.fadeOut(fade);
-    n.cur = a; n.curName = name;
+    n.cur = a;
+  }
+  /* 지금 앉아 있나: 의자(SIT_DOWN·SEATED·팔씨름) 또는 배우가 Sit 을 튼 뒤 (actorSeated 로 덮어쓸 수 있다) */
+  function sitsNow(n) {
+    return n.state === ST.SEATED || n.state === ST.SIT_DOWN || n.state === ST.ARM || (n.state === ST.STAND_UP && !!n.seat)
+      || (n.state === ST.ACTOR && n.actSit);
+  }
+  /* 서서 하는 몸짓 켜기/끄기 (0.3초에 걸쳐 섞는다). 다른 클립(걷기·넘어짐)을 틀면 강제 시간(cheerStanding)도 끝난다 */
+  function standW(n) {
+    const k = Math.min(1, Math.max(0, (now - n.standS) / STAND_FADE));
+    return smooth(n.standOn ? k : 1 - k);
+  }
+  function setStand(n, kind, clip) {
+    if (!kind) {
+      if (now < n.standUntil && clip === 'Idle') return;   // cheerStanding 시간 동안은 Idle 요청이 와도 유지
+      n.standUntil = 0;
+      if (n.standOn) { const w = standW(n); n.standOn = false; n.standS = now - (1 - w) * STAND_FADE; }
+      return;
+    }
+    if (n.standOn && n.standK === kind) return;
+    const w = n.standK === kind ? standW(n) : 0;
+    n.standK = kind; n.standOn = true; n.standS = now - w * STAND_FADE;
+    n.standPh = rnd() * 6;
   }
   const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
   function turnTo(n, target, dt) {
@@ -727,6 +766,7 @@ export async function createNPCs({
           else if (n.state === ST.GATHER && n.arrived && n.gatherC === bard && bard.phase === 1) dancePose(n, t, 0.45);
           else if (n.state === ST.WATCH && n.watchKind === 3) actorPose(n);                  // 임금님께 절
           else if (n.state === ST.HUG && n.arrived) hugPose(n);
+          if (n.standK) standLayer(n, t);
           if (n.propBone && n.propShow !== null) n.propBone.scale.setScalar(n.propShow && n.state === ST.ACTOR ? 1 : 0.001);
         }
         if (n.anger.visible) {
@@ -907,6 +947,7 @@ export async function createNPCs({
       if (n.curName === 'Walk' && n.cur) n.cur.setEffectiveTimeScale((n.lead ? n.lead.speed : n.speed) / WALK_SPEED);
       stepMixer(n, dt);
       if (n.mixed && (n.sleeping || n.yawnT > 0 || n.nodT > 0)) socialPose(n, t);
+      if (n.mixed && n.standK) standLayer(n, t);
     }
     chatScheduler(dt, px, pz);
     socialUpdate(dt, night);
@@ -940,8 +981,6 @@ export async function createNPCs({
 
   /* ════ 잡기 · 던지기 ════ */
   let ctrl = null;
-  let now = 0;   // 내부 시계 (주먹 연타 판정)
-  const smooth = k => k * k * (3 - 2 * k);
   const nearAngle = (from, target) => target + Math.PI * 2 * Math.round((from - target) / (Math.PI * 2));
 
   /* Struggle 클립이 없을 때: Idle 위에 팔다리를 휘젓는다 (믹서가 매 프레임 뼈를 덮어쓰므로 누적되지 않는다) */
@@ -1352,7 +1391,7 @@ export async function createNPCs({
         if (rnd() > 0.85) continue;
         n.state = ST.WATCH; n.timer = rr(2.2, 3.2); n.watchV = victim; n.yielding = false; n.watchKind = 2;
         n.laughPh = rnd() * 6;
-        play(n, 'Cheers', 0.2);
+        play(n, 'Cheers', 0.2, STAND.laugh);   // 서 있으니 배를 잡고 웃는 몸짓
       } else if (n.state === ST.SEATED) {
         if (rnd() > 0.6) continue;
       } else continue;
@@ -1464,7 +1503,7 @@ export async function createNPCs({
       if (n.bar !== si) continue;
       if (n.state !== ST.BAR && n.state !== ST.BAR_RETURN && n.state !== ST.SERVE) return false;
       n.state = ST.SERVE; n.timer = 1.6; n.serveTo = null;
-      play(n, 'Cheers', 0.2);                    // 잔을 들어 내미는 동작
+      play(n, 'Cheers', 0.2, STAND.offer);       // 잔을 들어 내미는 동작 (서 있으니 앞으로 내민다)
       say(n, '여기 있어요!', 1.8);
       return true;
     }
@@ -1736,7 +1775,7 @@ export async function createNPCs({
         play(n, 'Walk', 0.3);
         if (walkToward(n, c.x, c.z, dt, 1.05)) {
           n.arrived = true; n.timer = 1.8;
-          play(n, 'Cheers', 0.2); say(n, pickOne(SERVE_LINES), 1.6);
+          play(n, 'Cheers', 0.2, STAND.offer); say(n, pickOne(SERVE_LINES), 1.6);
           sayLater(c, '고맙소!', 0.9); c.cups = 0;
         }
         pushFromTables(n);
@@ -2053,7 +2092,7 @@ export async function createNPCs({
         if (!o || o.state !== ST.HUG || o.hugO !== n) { n.hugO = null; toIdle(n); break; }
         const dx = o.x - n.x, dz = o.z - n.z, d = Math.hypot(dx, dz);
         if (!n.arrived) {
-          if (d < 0.85) { n.arrived = true; play(n, 'Cheers', 0.3); }
+          if (d < 0.85) { n.arrived = true; play(n, 'Idle', 0.3); }   // 팔은 hugPose 가 감싼다
           else { play(n, 'Walk', 0.3); walkToward(n, o.x, o.z, dt, 0.8); }
           n.timer -= dt * 0.25;   // 너무 오래 못 만나면 포기
           if (n.timer <= 0) { n.hugO = null; o.hugO = null; startWanderLeg(n); play(n, 'Walk', 0.4); }
@@ -2119,7 +2158,6 @@ export async function createNPCs({
   function hugPose(n) {
     n.procDirty = true;
     const b = n.bones;
-    if (n.curName === 'Cheers') return;
     if (b.armL) { b.armL.rotation.x -= 1.1; b.armL.rotation.z -= 0.3; }
     if (b.armR) { b.armR.rotation.x -= 1.1; b.armR.rotation.z += 0.3; }
   }
@@ -2136,6 +2174,64 @@ export async function createNPCs({
       if (b.armR) b.armR.rotation.z -= 2.2 * Math.max(0, k);
       if (b.head) b.head.rotation.x -= 0.3 * Math.max(0, k);
     } else if (n.nodT > 0 && b.head) b.head.rotation.x += Math.sin((0.9 - n.nodT) / 0.9 * Math.PI) * 0.35;
+  }
+
+  /* 서서 하는 몸짓 (Idle 위에 덧씌운다, 섞임 w 0..1) — Cheers/Drink 클립이 앉은 자세라서.
+     cheer 두 팔 번쩍 흔들며 콩콩 · drink 오른손 잔을 입으로 · offer 잔을 앞으로 내민다 · laugh 배를 잡고 · toast 오른손 잔을 높이
+     뼈 축이 모델마다 제각각이라 몸(body) 공간 축으로 돌린다 (pageant.js·festival.js 의 pose 와 같은 방식, 같은 각도 표기):
+     팔 [위팔(음수=앞으로 듦), 아래팔(음수=굽힘), 안쪽(음수=옆으로)], spine [앞숙임], head [끄덕(음수=올려다봄)] — 단위 도 */
+  const SAX = new THREE.Vector3(1, 0, 0), SAZ = new THREE.Vector3(0, 0, 1);
+  const _sq = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  function rotBody(n, bone, R) {
+    if (!bone || !bone.parent) return;
+    const qc = _sq[2], qp = _sq[3], qd = _sq[4], qi = _sq[5];
+    n.body.getWorldQuaternion(qc);
+    bone.parent.getWorldQuaternion(qp);
+    qd.copy(qc).multiply(R).multiply(qi.copy(qc).invert());
+    qi.copy(qp).invert().multiply(qd).multiply(qp);
+    bone.quaternion.premultiply(qi);
+  }
+  const D2R_ = Math.PI / 180;
+  function armBody(n, side, up, fore, inward, w) {
+    const b = n.bones, ua = side > 0 ? b.armL : b.armR, la = side > 0 ? b.foreL : b.foreR;
+    const qa = _sq[0], qb = _sq[1];
+    qa.setFromAxisAngle(SAZ, -side * inward * w * D2R_).multiply(qb.setFromAxisAngle(SAX, up * w * D2R_));
+    rotBody(n, ua, qa);
+    rotBody(n, la, qa.setFromAxisAngle(SAX, fore * w * D2R_));
+  }
+  function bendBody(n, bone, deg) { if (bone && deg) rotBody(n, bone, _sq[0].setFromAxisAngle(SAX, deg * D2R_)); }
+  function standLayer(n, t) {
+    if (n.standUntil && now >= n.standUntil) { n.standUntil = 0; setStand(n, 0, ''); }
+    const w = standW(n);
+    if (w <= 0) {
+      if (!n.standOn) { n.standK = 0; n.body.position.y = COM; }
+      return;
+    }
+    n.procDirty = true;
+    const b = n.bones, ph = n.standPh, k = n.standK;
+    n.root.updateMatrixWorld(true);
+    let hop = 0;
+    if (k === STAND.cheer) {
+      const wa = Math.sin(t * 9 + ph) * 16;
+      bendBody(n, b.chest, -5 * w); bendBody(n, b.head, -12 * w);
+      armBody(n, 1, -150 + wa, -25 - wa * 0.6, 14, w);
+      armBody(n, -1, -150 - wa, -25 + wa * 0.6, 14, w);
+      hop = Math.max(0, Math.sin(t * 7 + ph)) * 0.07 * n.standHop;
+    } else if (k === STAND.drink) {
+      const u = ((t + ph) % 3.4) / 3.4, sip = u < 0.15 ? 0 : u < 0.3 ? smooth((u - 0.15) / 0.15) : u < 0.55 ? 1 : u < 0.7 ? smooth(1 - (u - 0.55) / 0.15) : 0;
+      bendBody(n, b.head, -16 * sip * w);
+      armBody(n, -1, -25 - sip * 30, -95 - sip * 35, 8 + sip * 22, w);
+    } else if (k === STAND.offer) {
+      armBody(n, -1, -70, -20, 6, w);
+      bendBody(n, b.head, 6 * w);
+    } else if (k === STAND.laugh) {
+      armBody(n, 1, -20, -85, 28, w); armBody(n, -1, -20, -85, 28, w);
+      bendBody(n, b.head, -10 * w);
+    } else if (k === STAND.toast) {
+      armBody(n, -1, -150, -25, 6, w);
+      bendBody(n, b.head, -8 * w);
+    }
+    n.body.position.y = COM + hop * w;
   }
 
   /* ── 매 프레임 (update 끝에서 한 번) ── */
@@ -2696,6 +2792,7 @@ export async function createNPCs({
     n.x = x; n.z = z; n.y = groundY(x, z); n.rot = rot;
     n.body.rotation.set(0, 0, 0); n.react = 0; n.panicT = 0; setAnger(n, false);
     n.root.position.set(n.x, n.y, n.z); n.root.rotation.y = rot;
+    n.actSit = false; n.standOn = false; n.standK = 0; n.standUntil = 0; n.standHop = 1; n.body.position.y = COM;
     play(n, 'Idle', 0);
   }
   function actorOff(n) {
@@ -2707,6 +2804,26 @@ export async function createNPCs({
   }
   function actorPlay(n, name, fade = FADE, ts = 1) { play(n, name, fade); if (n.cur && n.curName === name) n.cur.setEffectiveTimeScale(ts); }
   const isActing = n => !!n && n.state === ST.ACTOR;
+  /* 서서 하는 몸짓 API.
+     standPlay(n, kind = 'cheer', fade) : 매 프레임 불러도 되는 actorPlay 대용 (kind: cheer|drink|offer|laugh|toast). 앉아 있으면 원래 클립.
+     cheerStanding(n, dur = 2, kind = 'cheer') : dur 초 동안만. 걷던 손님은 멈춰 서서(WATCH), 배우는 그 사이 Idle 요청이 와도 유지.
+     actorSeated(n, on) : 배우가 앉아 있다/서 있다를 직접 알려 준다 (Sit 클립을 틀면 자동으로 앉은 것으로 본다) */
+  function standPlay(n, kind = 'cheer', fade = 0.25) {
+    if (!n) return;
+    const k = STAND[kind] || STAND.cheer;
+    play(n, k === STAND.drink ? 'Drink' : 'Cheers', fade, k);
+  }
+  function cheerStanding(n, dur = 2, kind = 'cheer') {
+    if (!n || n.off) return false;
+    if (n.state === ST.WANDER || n.state === ST.PAUSE) { if (!watch(n, null, dur, true)) return false; }
+    else if (n.state !== ST.ACTOR && n.state !== ST.WATCH && n.state !== ST.GATHER) return false;
+    if (sitsNow(n)) { play(n, 'Cheers', 0.25); return true; }
+    play(n, 'Idle', 0.25);
+    n.standUntil = 0; setStand(n, STAND[kind] || STAND.cheer, 'Idle');
+    n.standUntil = now + dur;
+    return true;
+  }
+  function actorSeated(n, on) { if (n) n.actSit = !!on; }
   function watch(n, target, dur = 2, cheer = true) {
     if (!n || n.off || n.actor || n.guard || n.bar >= 0 || (n.state !== ST.WANDER && n.state !== ST.PAUSE)) return false;
     n.state = ST.WATCH; n.timer = dur; n.watchV = target; n.yielding = false; n.watchKind = cheer ? 0 : 1;
@@ -2802,6 +2919,7 @@ export async function createNPCs({
     pick: pickRay, knockDown, list, freeSeatNear, reserveSeat: reserveSeatAPI, releaseSeat: releaseSeatAPI,
     alarm, barkeeperServe, say,
     addActor, actorOn, actorOff, actorPlay, isActing, watch,   // [village]
+    standPlay, cheerStanding, actorSeated,                     // 서서 환호·마시기 (Cheers/Drink 클립은 앉은 자세)
     social,                                                    // [social] toast/brawl/argue/armwrestle/dance/drunk/trip/couple/status
     onPlayerPunch: null,
     _grab: { pick, grab, setTarget, release, punch, setCtrl: c => { ctrl = c; } } });

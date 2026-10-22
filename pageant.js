@@ -49,7 +49,9 @@
      camera, getPlayerPos() {x,z}, isOnFoot(), getNight() 0..1, getSeason(), isMusicOn(), isMuted(), isVisible(),
      isBusy()  true 면 새 행사를 시작하지 않고, 진행 중인 건 마무리     isKingBusy()  true 면 연회를 열지 않는다
      onEvent(text), getTavern() → { addCoins(n) }, getKids() → { cheer(pos) }, castle (안 써도 됨), CANNON/world (안 씀)
-     sitPlayer(seat) / standPlayer()  (선택) 연회 자리에 플레이어를 진짜로 앉히는 훅. seat = {x, y, z, rotY}. 없으면 서서 합석.
+     sitPlayer(seat) / standPlayer()  (선택) 연회 자리에 플레이어를 진짜로 앉히는 훅. seat = {x, y(바닥), z, rotY}. 없으면 서서 합석.
+       tavern.js 의 sitAt/standUp 을 그대로 넘기면 된다:  sitPlayer: s => tavern.sitAt(s), standPlayer: () => tavern.standUp(),
+       sitPlayer 가 false 를 돌려주면 앉지 않은 것으로 본다. 일어났는지는 getTavern().seated 로 안다(E·WASD·Esc 로 일어나면 자리를 비운다).
      bounds {minX,maxX,minZ,maxZ}   debug (기본 ?test 일 때 window.__pageant)
    ── 반환 ──
      update(dt, t), nearAction() → {kind, label} | null, onF(repeat) → bool, dispose(), state(), trigger(name)
@@ -486,8 +488,10 @@ export function createPageant({
     }
     for (const b of _list) layerDone(b);
   }
-  /* 서서 환호: Cheers 클립은 앉아서 잔을 드는 동작이라, 선 사람은 Idle + 두 팔 흔들기(또는 잔 든 팔 하나)를 덧씌운다 */
+  /* 서서 환호: Cheers 클립은 앉아서 잔을 드는 동작이라, 선 사람은 Idle + 두 팔 흔들기(또는 잔 든 팔 하나)를 덧씌운다.
+     npcs.standPlay 가 있으면 그걸 쓴다 (npcs.js 의 서서 하는 몸짓: cheer = 두 팔, toast = 잔 든 오른팔) */
   function cheerUp(n, oneArm = false) {
+    if (npcs.standPlay) { npcs.standPlay(n, oneArm ? 'toast' : 'cheer', 0.25); return; }
     npcs.actorPlay(n, 'Idle', 0.25);
     const w = Math.sin(lastT * 9 + (n.x + n.z) * 3) * 18;
     pose(n, oneArm ? { armR: [-150, -25, 6, 0] } : { armL: [-150 + w, -25, 12, 0], armR: [-150 - w, -25, 12, 0] });
@@ -668,6 +672,7 @@ body.intro-on .pg-prompt,body[data-view="doc"] .pg-prompt,body.talking .pg-promp
           turn(n, s.rotY, dt, 6);
           d.drinkT -= dt;
           if (d.drinkT <= 0) { d.drinkT = rr(3, 7); d.drink = !d.drink; }
+          if (npcs.actorSeated) npcs.actorSeated(n, true);   // 앉은 채 Drink 클립 (서 있는 몸짓으로 바뀌지 않게)
           npcs.actorPlay(n, d.drink ? 'Drink' : 'Sit', 0.4);
         } else {
           n.x += (sx - n.x) * Math.min(1, dt * 4); n.z += (outZ - n.z) * Math.min(1, dt * 4);
@@ -681,6 +686,7 @@ body.intro-on .pg-prompt,body[data-view="doc"] .pg-prompt,body.talking .pg-promp
         if (P.phase === 'feast' || P.phase === 'feast2') {
           k.x += (throne.x - k.x) * Math.min(1, dt * 5); k.z += (throne.z - k.z) * Math.min(1, dt * 5);
           turn(k, -Math.PI / 2, dt, 6);
+          if (npcs.actorSeated) npcs.actorSeated(k, true);
           npcs.actorPlay(k, (t % 9) < 3 ? 'Drink' : 'Sit', 0.4);
         } else {
           k.x += (throne.x - 0.55 - k.x) * Math.min(1, dt * 4); k.z += (throne.z - k.z) * Math.min(1, dt * 4);
@@ -703,10 +709,12 @@ body.intro-on .pg-prompt,body[data-view="doc"] .pg-prompt,body.talking .pg-promp
         for (const c of candleTips) if (Math.random() < dt * 8) fx(3, c.x + rr(-0.01, 0.01), c.y, c.z + rr(-0.01, 0.01), 0, rr(0.12, 0.25), 0, rr(0.25, 0.4), 0.09, 0.03, 0);
         if (getNight() > 0.35) wantLight(FS.x, groundY(FS.x, FS.z) + 1.6, FS.z, 7 * getNight(), 0xffb060, 10, 2);
       }
-      /* 플레이어 자리: 2.5 m 넘게 떠나면 비운다 */
+      /* 플레이어 자리: 진짜로 앉혔으면(sitPlayer) 일어나는 순간(getTavern().seated 가 false), 아니면 2.5 m 넘게 떠나면 비운다 */
       if (P.playerSeat) {
         const s = P.playerSeat;
-        if (!sitPlayer && distP(s.x, s.z) > 2.5) { s.player = false; P.playerSeat = null; }
+        let tv = null; try { tv = getTavern && getTavern(); } catch { /* */ }
+        const up = sitPlayer && tv && 'seated' in tv ? !tv.seated : distP(s.x, s.z) > 2.5;
+        if (up) { s.player = false; P.playerSeat = null; }
       }
       return true;
     },
@@ -719,7 +727,7 @@ body.intro-on .pg-prompt,body[data-view="doc"] .pg-prompt,body.talking .pg-promp
       feastG.visible = false;
     },
     nearSeat() {
-      if (cur !== feast || FE.phase === 'outro') return null;
+      if (cur !== feast || FE.phase === 'outro' || FE.playerSeat) return null;
       const p = playerPos(); if (!p) return null;
       let best = null, bd = 1.5;
       for (const s of seats) {
@@ -731,7 +739,11 @@ body.intro-on .pg-prompt,body[data-view="doc"] .pg-prompt,body.talking .pg-promp
     },
     sit(s) {
       s.player = true; FE.playerSeat = s;
-      if (sitPlayer) { try { sitPlayer({ x: s.x, y: groundY(s.x, s.z), z: s.z, rotY: s.rotY }); } catch (e) { console.warn('[pageant] sitPlayer', e); } }
+      if (sitPlayer) {
+        let ok = true;
+        try { ok = sitPlayer({ x: s.x, y: groundY(s.x, s.z), z: s.z, rotY: s.rotY }) !== false; } catch (e) { console.warn('[pageant] sitPlayer', e); }
+        if (!ok) { s.player = false; FE.playerSeat = null; return false; }   // 앉지 못했다 (운전 중 등)
+      }
       if (!FE.joined) {
         FE.joined = true;
         const got = addCoins(5);
@@ -1383,7 +1395,7 @@ body.intro-on .pg-prompt,body[data-view="doc"] .pg-prompt,body.talking .pg-promp
         const face = m.side ? -Math.PI / 2 : Math.PI / 2;
         if (T.phase === 'gather') { if (walkIn(n, dt)) { turn(n, face, dt, 4); npcs.actorPlay(n, 'Idle', 0.3); } continue; }
         if (T.phase === 'end') {
-          if (m.side === T.winner) { n.x += (GS.x + m.off + s - n.x) * Math.min(1, dt * 3); syncRoot(n, Math.max(0, Math.sin(t * 7 + m.off)) * 0.12); cheerUp(n); }
+          if (m.side === T.winner) { n.x += (GS.x + m.off + s - n.x) * Math.min(1, dt * 3); syncRoot(n, Math.max(0, Math.sin(t * 7 + m.off)) * 0.12); n.standHop = 0; cheerUp(n); }
           else npcs.actorPlay(n, 'Idle', 0.3);
           continue;
         }

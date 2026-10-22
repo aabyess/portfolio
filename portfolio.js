@@ -1540,6 +1540,8 @@ async function initDrive() {
         isKingBusy: () => !!(village && village.state().procession),
         onEvent: text => toast(text, 2600),
         getTavern: () => tavern, getKids: () => kids, castle,
+        sitPlayer: s => (tavern ? tavern.sitAt(s) : false),   // 연회 자리에 실제로 앉는다 (선술집과 같은 자세·카메라)
+        standPlayer: () => { if (tavern) tavern.standUp(); },
         bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
       });
     }).catch(e => console.warn('[npcs]', e));

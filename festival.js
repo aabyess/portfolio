@@ -474,7 +474,7 @@ export function createFestival({
     if (stepTo(n, f.tx, f.tz, sp, dt)) f.arrived = true;
     return f.arrived;
   }
-  /* 서서 보기 (cheerT 동안 Cheers) */
+  /* 서서 보기 (cheerT 동안 Cheers — npcs.js 가 서 있는 배우에겐 Idle + 두 팔 번쩍 몸짓으로 바꿔 튼다) */
   function standBy(n, dt, faceTo = null) {
     if (!walkIn(n, dt)) return;
     const f = n.fest;
@@ -1020,7 +1020,7 @@ export function createFestival({
         }
       } else if (J.phase === 'victory') {
         J.t -= dt;
-        if (J.winner && J.winner.mounted) npcs.actorPlay(J.winner.n, 'Cheers', 0.3);
+        if (J.winner && J.winner.mounted) { J.winner.n.standHop = 0; npcs.actorPlay(J.winner.n, 'Cheers', 0.3); }   // 말 위: 서서 환호 몸짓(두 팔)만, 콩콩 뛰기 없이
         if (J.t <= 0) return false;
       }
       for (const kn of J.ks) { animHorse(kn.horse, dt); glue(kn); }
