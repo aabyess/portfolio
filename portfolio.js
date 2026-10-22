@@ -1364,12 +1364,13 @@ async function initDrive() {
 
   /* ── 중세 손님들 — 숲길을 거닐다 포장마차 의자에 앉아 술을 마신다 (npcs.js) ──
      로딩을 막지 않게 기다리지 않는다. 의자 수치를 바꾸면 npcs.js의 STOOL_* 도 같이 바꿀 것 */
-  let npcs = null;
+  let npcs = null, events = null;
   let ridesRef = null;   // 탈것 바꾸기(rides)는 아래에서 만든다 — getRide 는 매 프레임 update 안에서만 불린다
   /* 차로 치면 넘어지고 화낸다 — 지금 탈것의 위치·방향·속도·크기. 같은 객체를 재사용한다 */
   const rideInfo = { x: 0, z: 0, heading: 0, halfX: 1.05, halfZ: 2.15, speed: 0, driving: false };
   {
     const { createNPCs, stallsFromStations, attachGrab } = await import('./npcs.js');
+    const { createEvents } = await import('./events.js');
     createNPCs({
       THREE, scene, GLTFLoader,
       dracoLoader: draco,
@@ -1399,6 +1400,25 @@ async function initDrive() {
         isOnFoot: () => player.mode === 'onfoot',
         getPlayerFacing: () => person.rotation.y,
         playPunch: () => playerPunch(),
+      });
+      /* 수배 ★·경비병·술집 싸움·음유시인 (events.js) */
+      events = createEvents({
+        THREE, npcs: n, camera, pathX,
+        getPlayerPos: () => activePos(),
+        isDriving: () => player.mode === 'driving',
+        isMusicOn: () => document.getElementById('g-music-btn')?.getAttribute('aria-pressed') === 'true',
+        isVisible: () => driveActive,
+        onPlayerCaught: () => {
+          /* 붙잡히면 출발점으로 끌려간다 */
+          if (player.mode === 'driving') toggleVehicle();
+          if (tavern && tavern.seated) tavern.standUp();
+          if (weapons) weapons.holster();
+          person.position.set(pathX(START_Z) + 2.2, 0, START_Z - 3);
+          pHeading = camYaw = Math.PI; pSpeed = 0;
+          toast('경비병에게 붙잡혔습니다! 임금님 앞에서 반성하세요', 2600);
+        },
+        onEvent: text => toast(text, 2400),
+        stallNames: stations.map(s => s.name),
       });
     }).catch(e => console.warn('[npcs]', e));
   }
@@ -1984,7 +2004,7 @@ async function initDrive() {
     camera, domElement: renderer.domElement, groundY,
     getNpcs: () => npcs, toyBlocks,
     isBlocked: () => !driveActive || panelOpen(),
-    explode: (pos, r, f) => { if (weapons) weapons.explode(pos, r, f); },
+    explode: (pos, r, f) => { if (weapons) weapons.explode(pos, r, f); if (events) events.notify('explosion', pos); },
     onChange(id, p) {
       MAX_FWD = p.maxFwd; MAX_REV = p.maxRev; ACCEL = p.accel; TURN = p.turn;
       ENTER_CAR_R = p.enterR;
@@ -2092,6 +2112,7 @@ async function initDrive() {
     weapons.update(dt, weaponsIn);                 // 무기 자세·투사체·효과·카메라 흔들림 (카메라 갱신 다음)
     proximity();
     if (npcs) npcs.update(dt, t);
+    if (events) events.update(dt, t);
     trackIn.mode = player.mode; trackIn.ride = rides.current; trackIn.heading = heading; trackIn.speed = speed;
     tracks.update(dt, trackIn, npcs && npcs.npcs);   // 눈 위 자국 — 사람·탈것·마을 사람
 
