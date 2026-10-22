@@ -96,6 +96,10 @@ const R90 = [Math.PI / 2, 0, 0];
 const GLB_FIX = {
   sword: { rot: R90 }, axe: { rot: R90 }, hammer: { rot: R90 }, pistol: { rot: R90 }, bow: { rot: R90 },
   arrow: {},
+  /* tools/blender/weapons/extra_weapons.py — 대체 모델과 같은 좌표로 만들어서 muzzle·tips·anchor·fuse·front·rear·hold 를 그대로 쓴다.
+     따로 쓰는 부품(빈 이름으로 찾음): crossbow 'bolt', flail 'ball'·'link', bazooka 'rocket', mortar 'shell' */
+  crossbow: { rot: R90 }, flail: { rot: R90 }, javelin: { rot: R90 }, bomb: { rot: R90 }, pan: { rot: R90 },
+  bazooka: { rot: R90 }, mortar: { rot: R90 },
 };
 const HAS_GLB = new Set(Object.keys(GLB_FIX));   // 파일이 있는 것만 불러온다 (없는 파일 404 를 콘솔에 남기지 않게)
 
@@ -339,6 +343,23 @@ export function createWeapons({
   const loader = GLTFLoader ? new GLTFLoader() : null;
   if (loader && dracoLoader) loader.setDRACOLoader(dracoLoader);
   const tried = {};
+  /* glb 안의 따로 쓰는 부품을 떼어 R90 을 씌운 묶음으로 돌려준다 (원점·방향은 extra_weapons.py 머리말 참고) */
+  const _eR90 = new THREE.Euler(...R90);
+  function takePart(m, name) {
+    const n = m.getObjectByName(name); if (!n || !n.parent) return null;
+    n.parent.remove(n);
+    const p = n.position.clone().applyEuler(_eR90);   // glTF 좌표 → 모델 좌표
+    n.position.set(0, 0, 0);
+    const inner = new THREE.Group(); inner.rotation.set(...R90); inner.add(n);
+    const w = new THREE.Group(); w.name = name; w.add(inner); w.position.copy(p);
+    w.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    return w;
+  }
+  /* 미리 만든 묶음(ROCKET·SHELL·flailBall 등)의 모양만 부품으로 바꾼다 — 참조는 그대로 */
+  function swapShape(group, part) {
+    while (group.children.length) group.remove(group.children[0]);
+    const c = part.clone(true); c.position.set(0, 0, 0); group.add(c);
+  }
   function tryGlb(id) {
     if (!loader || tried[id] || !HAS_GLB.has(id)) return;
     tried[id] = true;
@@ -355,7 +376,24 @@ export function createWeapons({
       // 활 glb 의 시위(뼈대로 당기는 메시)는 숨기고 코드 시위(선)를 쓴다 — 당김 정도를 코드가 그린다
       if (id === 'bow') m.traverse(o => { if (o.isMesh && /string/i.test(o.name)) o.visible = false; });
       const old = models[id];
-      for (const k of ['muzzle', 'anchor', 'fuse', 'len', 'tips']) if (old.userData[k] !== undefined) g.userData[k] = old.userData[k];
+      for (const k of ['muzzle', 'anchor', 'fuse', 'len', 'tips', 'rear', 'front', 'hold']) if (old.userData[k] !== undefined) g.userData[k] = old.userData[k];
+      if (id === 'crossbow') {   // 장전된 볼트 = 쏘면 복제돼 날아간다 (+Z 앞, 원점 = 꼬리)
+        const bolt = takePart(m, 'bolt');
+        if (bolt) { bolt.userData.len = 0.41; g.add(bolt); g.userData.bolt = bolt; }
+      }
+      if (id === 'flail') {      // 사슬 끝 공 + 사슬 고리 (선 대신 고리를 늘어놓는다)
+        const b = takePart(m, 'ball'), l = takePart(m, 'link');
+        if (b) swapShape(flailBall, b);
+        if (l) setChainLinks(l);
+      }
+      if (id === 'bazooka') {    // 통 앞에 보이는 탄두 + 날아가는 로켓 모양
+        const rk = takePart(m, 'rocket');
+        if (rk) { g.add(rk); g.userData.rocket = rk; swapShape(ROCKET, rk); }
+      }
+      if (id === 'mortar') {     // 오른손에 든 포탄 + 날아가는 포탄 모양
+        const sh = takePart(m, 'shell');
+        if (sh) { swapShape(SHELL, sh); swapShape(shellHand, sh); }
+      }
       if (id === 'pistol') {   // glb 총은 '손잡이 = +Y' 라 총열이 기울어 있다 → 총열(muzzle 빈 객체의 +Z)이 +Z 가 되게 X 축으로 돌린다
         const mz = m.getObjectByName('muzzle');
         g.userData.gripAxis = new V(0, 1, 0);
@@ -370,7 +408,7 @@ export function createWeapons({
       }
       // 활·석궁 시위와 석궁 볼트는 대체 모델 것을 계속 쓴다 (glb 에 없으면)
       if (old.userData.string) { g.add(old.userData.string); g.userData.string = old.userData.string; }
-      if (old.userData.bolt) { g.add(old.userData.bolt); g.userData.bolt = old.userData.bolt; }
+      if (old.userData.bolt && !g.userData.bolt) { g.add(old.userData.bolt); g.userData.bolt = old.userData.bolt; }
       holder.remove(old); models[id] = prepModel(g);
     }, undefined, () => { /* 없으면 대체 모델 */ });
   }
@@ -880,6 +918,25 @@ export function createWeapons({
   const chainGeo = new THREE.BufferGeometry(); chainGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(8 * 3), 3));
   const chain = new THREE.Line(chainGeo, new THREE.LineBasicMaterial({ color: 0x55575c })); chain.frustumCulled = false; chain.visible = false; scene.add(chain);
   const CHAIN_L = 0.55;
+  /* flail.glb 의 'link' 가 오면 선 대신 쇠고리 14개를 늘어놓는다 (chain 의 자식 → chain.visible 하나로 같이 켜고 끈다) */
+  const CHAIN_N = 14, chainLinks = [];
+  function setChainLinks(part) {
+    for (let i = 0; i < CHAIN_N; i++) { const c = part.clone(true); c.position.set(0, 0, 0); chain.add(c); chainLinks.push(c); }
+    chain.material.visible = false;
+  }
+  const _cq = new Q(), _cq2 = new Q(), _cd = new V();
+  function updateChainLinks(a0, sagOn) {   // a0 = 사슬 시작(손잡이 고리), ball.pos = 끝
+    if (!chainLinks.length) return;
+    _cd.subVectors(ball.pos, a0); const l = _cd.length(); if (!(l > 1e-4)) return;
+    _cd.multiplyScalar(1 / l);
+    _cq.setFromUnitVectors(UP, _cd);
+    for (let i = 0; i < CHAIN_N; i++) {
+      const f = (i + 0.5) / CHAIN_N, c = chainLinks[i];
+      c.position.lerpVectors(a0, ball.pos, f); c.position.y -= sagOn ? Math.sin(f * Math.PI) * 0.05 : 0;
+      c.quaternion.copy(_cq);
+      if (i & 1) c.quaternion.multiply(_cq2.setFromAxisAngle(UP, Math.PI / 2));   // 고리를 번갈아 90° 비튼다
+    }
+  }
 
   function shake(a) { S.shake = Math.max(S.shake, a); }
   const active = () => {
@@ -1623,6 +1680,7 @@ export function createWeapons({
       a[i * 3] = _v2.x + (ball.pos.x - _v2.x) * f; a[i * 3 + 1] = _v2.y + (ball.pos.y - _v2.y) * f - sag; a[i * 3 + 2] = _v2.z + (ball.pos.z - _v2.z) * f;
     }
     chainGeo.attributes.position.needsUpdate = true; chain.visible = true;
+    updateChainLinks(_v2, S.spinT < 0);
   }
 
   /* ── 근접 판정 ── */
