@@ -575,6 +575,41 @@ async function initDrive() {
     return;
   }
 
+  /* 아래에서 차례로 await import 하는 모듈들을 지금 한꺼번에 받기 시작한다.
+     import() 는 같은 주소면 같은 약속을 돌려주므로, 뒤의 await import 는 이미 받은(받는 중인) 것을 그대로 쓴다.
+     (하나씩 줄 서서 받으면 요청마다 왕복 시간이 쌓여 인터넷에서 몇 초씩 늦어진다) */
+  for (const u of [
+    'three',
+    'three/addons/loaders/GLTFLoader.js',
+    'three/addons/loaders/DRACOLoader.js',
+    'three/addons/geometries/RoundedBoxGeometry.js',
+    'cannon-es',
+    './animals.js',
+    './audio.js',
+    './bridge.js',
+    './castle.js',
+    './dialogue.js',
+    './events.js',
+    './festival.js',
+    './fishing.js',
+    './graphics.js',
+    './kids.js',
+    './minimap.js',
+    './npcs.js',
+    './pageant.js',
+    './perf.js',
+    './quests.js',
+    './seasons.js',
+    './shop.js',
+    './sky.js',
+    './tavern.js',
+    './tracks.js',
+    './vehicles.js',
+    './village-props.js',
+    './village.js',
+    './weapons.js',
+  ]) import(u).catch(() => {});
+
   await document.fonts.ready;   // 캔버스에 한글을 굽기 전에 웹폰트를 기다린다
 
   const THREE = await import('three');
@@ -1240,6 +1275,11 @@ async function initDrive() {
 
   /* ── 프로젝트 스테이션 ── */
   const manager = new THREE.LoadingManager();
+  /* 남은 로딩 수를 센다 — 월드 구성이 끝났을 때 이미 다 받았으면 바로 시작하려고 (onLoad 가 그보다 먼저 지나가 버리는 경우) */
+  let mgrPending = 0;
+  { const s0 = manager.itemStart.bind(manager), e0 = manager.itemEnd.bind(manager);
+    manager.itemStart = u => { mgrPending++; s0(u); };
+    manager.itemEnd = u => { mgrPending = Math.max(0, mgrPending - 1); e0(u); }; }
   const texLoader = new THREE.TextureLoader(manager);
   const stations = [];
 
@@ -2648,15 +2688,18 @@ async function initDrive() {
     bar.style.width = v + '%'; pctEl.textContent = v + '%';
   };
   let started = false;
+  performance.mark('drive-built');   // 로딩 시간 재기: 월드 구성 끝 (콘솔 performance.getEntriesByType('mark'))
   function start() {
     if (started) return;
     started = true;
+    performance.mark('world-ready');   // 로딩 화면이 걷히고 첫 프레임
     bar.style.width = '100%'; pctEl.textContent = '100%';
     setTimeout(() => load.classList.add('done'), 260);
     loop();
   }
   manager.onLoad = start;
-  setTimeout(start, 4000);   // 이미지가 안 와도 월드는 띄운다
+  if (mgrPending === 0) start();   // 이미 다 받았으면 기다리지 않는다 (예전엔 여기서 4초를 헛기다렸다)
+  setTimeout(start, 4000);         // 이미지가 안 와도 월드는 띄운다
 
   if (new URLSearchParams(location.search).has('test')) {
     window.__drive = {
