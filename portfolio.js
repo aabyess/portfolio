@@ -47,12 +47,12 @@ const PROJECTS = [
       { t: '코스 결과 페이지 무한 로딩', p: '생성이 끝났는데도 결과 화면이 계속 로딩 상태', c: '빈 배열 응답을 \'아직 생성 중\'으로 오인해 폴링이 멈추지 않음', f: '최대 60초 타임아웃과 실패 안내를 추가하고, 음식점·카페는 전용 모달로 나눠 상세 처리 정리' },
     ],
     stack: ['Next.js 15', 'TypeScript', 'Tailwind CSS v4', 'TanStack Query', 'Zustand', 'Kakao Maps SDK', 'Three.js', 'Motion', 'Vitest'],
-    img: 'images/nolleo-onna.png',
+    img: 'images/nolleo-onna.webp',
     gallery: [
-      { src: 'images/nolleo-onna.png', cap: '홈 — AI 여행 메이트 온나에게 코스 물어보기' },
-      { src: 'images/nolleo-spot.jpg', cap: '스팟 — 부산 16개 구 혼잡도 지도와 3,632곳 스팟 목록' },
-      { src: 'images/nolleo-course.jpg', cap: '코스 — 내가 만든 코스 모아보기' },
-      { src: 'images/nolleo-hankkut.jpg', cap: '한끗 — 동네별 꿀팁·후기 커뮤니티' }
+      { src: 'images/nolleo-onna.webp', cap: '홈 — AI 여행 메이트 온나에게 코스 물어보기' },
+      { src: 'images/nolleo-spot.webp', cap: '스팟 — 부산 16개 구 혼잡도 지도와 3,632곳 스팟 목록' },
+      { src: 'images/nolleo-course.webp', cap: '코스 — 내가 만든 코스 모아보기' },
+      { src: 'images/nolleo-hankkut.webp', cap: '한끗 — 동네별 꿀팁·후기 커뮤니티' }
     ],
     live: 'https://www.nolleo-onna.site/', repo: 'https://github.com/nolleo-onna/nolleo-onna-frontend',
     pos: [-17, -16]
@@ -97,12 +97,12 @@ const PROJECTS = [
       '<b>파일 업로드</b> MIME allowlist·5MB 제한, 계약 상태 변경 화이트리스트, 견적 번역 서버 생성으로 클라이언트 위조를 막았습니다.',
     ],
     stack: ['Next.js 15', 'React 19', 'TypeScript', 'Supabase', 'TanStack Query', 'Zustand', 'next-intl', 'DeepL API', 'Gemini API', 'Vercel'],
-    img: 'images/trade-cmarket.png',
+    img: 'images/trade-cmarket.webp',
     gallery: [
-      { src: 'images/trade-cmarket.png', cap: 'MitraPay 대시보드' },
-      { src: 'images/trade-dashboard.jpg', cap: '바이어 대시보드 — 거래 요약과 할 일' },
-      { src: 'images/trade-quote.jpg', cap: '견적요청 등록 — 템플릿과 AI 초안 작성' },
-      { src: 'images/trade-contract.jpg', cap: '계약 관리 — 수령 확인·영수증 업로드' }
+      { src: 'images/trade-cmarket.webp', cap: 'MitraPay 대시보드' },
+      { src: 'images/trade-dashboard.webp', cap: '바이어 대시보드 — 거래 요약과 할 일' },
+      { src: 'images/trade-quote.webp', cap: '견적요청 등록 — 템플릿과 AI 초안 작성' },
+      { src: 'images/trade-contract.webp', cap: '계약 관리 — 수령 확인·영수증 업로드' }
     ],
     live: 'https://cmarket-hazel.vercel.app/', repo: 'https://github.com/aabyess/cmarket',
     pos: [17, -38]
@@ -128,11 +128,11 @@ const PROJECTS = [
       '필터 드롭다운의 <b>포커스 문제</b>를 트리거에 forwardRef를 적용하고 MenuButton 렌더링 방식을 바꿔 해결했습니다.'
     ],
     stack: ['Next.js', 'TypeScript', 'Tailwind CSS', 'TanStack Query', 'Zustand', 'React Hook Form', 'Zod', 'MSW', 'Storybook', 'Jest'],
-    img: 'images/reboot.png',
+    img: 'images/reboot.webp',
     gallery: [
-      { src: 'images/reboot.png', cap: 'RE:BOOT 메인' },
-      { src: 'images/reboot-connect.jpg', cap: '커넥트(자유게시판) — 직접 맡은 영역' },
-      { src: 'images/reboot-meetup.jpg', cap: '모임 찾기 — 카테고리·지역·날짜 필터' }
+      { src: 'images/reboot.webp', cap: 'RE:BOOT 메인' },
+      { src: 'images/reboot-connect.webp', cap: '커넥트(자유게시판) — 직접 맡은 영역' },
+      { src: 'images/reboot-meetup.webp', cap: '모임 찾기 — 카테고리·지역·날짜 필터' }
     ],
     live: 'https://reboot-codeit.vercel.app/', repo: 'https://github.com/aabyess/Reboot',
     pos: [-17, -60]
@@ -154,10 +154,10 @@ const PROJECTS = [
       'API 호출 비용이 늘어나는 걸 막으려고 <b>사용자당 하루 요청을 50회로 제한</b>하는 사용량 제어 로직을 직접 구현했습니다.'
     ],
     stack: ['React (Vite)', 'TypeScript', 'Ant Design', 'OpenAI API', 'PDF.js', 'Mammoth'],
-    img: 'images/interview.png',
+    img: 'images/interview.webp',
     gallery: [
-      { video: 'images/interview.mp4', poster: 'images/interview.png', cap: '이력서 업로드부터 질문 생성·피드백까지 시연' },
-      { src: 'images/interview.png', cap: '맞춤 면접 질문 화면' }
+      { video: 'images/interview.mp4', poster: 'images/interview.webp', cap: '이력서 업로드부터 질문 생성·피드백까지 시연' },
+      { src: 'images/interview.webp', cap: '맞춤 면접 질문 화면' }
     ],
     repo: 'https://github.com/aabyess/myeonjeop-mate',
     pos: [17, -82]
@@ -181,10 +181,10 @@ const PROJECTS = [
       '이미지 경로 문제로 <b>기부·봉사 이미지가 안 뜨던 오류</b>를 고쳤습니다.'
     ],
     stack: ['React', 'Vite', 'React Router', 'Ant Design', 'Spring Boot', 'MySQL', 'PortOne'],
-    img: 'images/ignis.png',
+    img: 'images/ignis.webp',
     gallery: [
-      { src: 'images/ignis.png', cap: 'IGNIS 메인' },
-      { src: 'images/ignis_home.png', cap: '홈 — 기부·펀딩·봉사 통합 조회' }
+      { src: 'images/ignis.webp', cap: 'IGNIS 메인' },
+      { src: 'images/ignis_home.webp', cap: '홈 — 기부·펀딩·봉사 통합 조회' }
     ],
     repo: 'https://github.com/aabyess/Ignis.git',
     pos: [-17, -104]
@@ -206,7 +206,7 @@ const PROJECTS = [
       'FastAPI와 React 사이 <b>CORS 문제</b>를 원인부터 짚어 해결했습니다.'
     ],
     stack: ['React (Vite)', 'Ant Design', 'Framer Motion', 'FastAPI', 'Python', 'DeepFace', 'MySQL'],
-    img: 'images/lol.png',
+    img: 'images/lol.webp',
     repo: 'https://github.com/aabyess/lol-face-matcher2',
     pos: [17, -126]
   },
@@ -233,13 +233,13 @@ const PROJECTS = [
     ],
     stats: [['3,331', '커밋 (AI 공동 작성 2,893)'], ['9.4만 줄', 'C# (런타임 + 에디터 도구)'], ['4명', 'Claude Code 에이전트'], ['30여 회', '친구 대상 베타 배포']],
     stack: ['Unity 6 (URP)', 'C#', 'Photon Fusion', 'Claude Code', 'Opus · Sonnet', 'Blender MCP', 'Python'],
-    img: 'images/gurandi-combat_skill_effect.jpg',
+    img: 'images/gurandi-combat_skill_effect.webp',
     gallery: [
-      { video: 'images/gurandi-flow.mp4', poster: 'images/gurandi-flow.jpg', cap: '위습 → 뽑기 → 조합 흐름 (AI 에이전트가 자동 플레이로 녹화)' },
-      { src: 'images/gurandi-combat_skill_effect.jpg', cap: '스킬 전투' },
-      { src: 'images/gurandi-boss_round.jpg', cap: '보스 라운드' },
-      { src: 'images/gurandi-combine_table.jpg', cap: '조합표 — 유닛 240여 기' },
-      { src: 'images/gurandi-title_menu.jpg', cap: '타이틀 · 혼자 하기 / 같이 하기' }
+      { video: 'images/gurandi-flow.mp4', poster: 'images/gurandi-flow.webp', cap: '위습 → 뽑기 → 조합 흐름 (AI 에이전트가 자동 플레이로 녹화)' },
+      { src: 'images/gurandi-combat_skill_effect.webp', cap: '스킬 전투' },
+      { src: 'images/gurandi-boss_round.webp', cap: '보스 라운드' },
+      { src: 'images/gurandi-combine_table.webp', cap: '조합표 — 유닛 240여 기' },
+      { src: 'images/gurandi-title_menu.webp', cap: '타이틀 · 혼자 하기 / 같이 하기' }
     ],
     repo: 'https://github.com/aabyess/GuRandi-AI-Dev',
     pos: [4.2, 42]   // AI 구역을 맨 앞으로: 첫 가판대(놀러온나, 길 왼쪽)의 길 건너편. 연락처 표지판 줄(z 48~67)보다 아래
