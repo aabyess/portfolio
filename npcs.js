@@ -113,7 +113,7 @@
    ── 거리의 삶 (자동) ──
      구경꾼: 누가 맞거나 넘어지거나 던져지면 12 m 안 걷던 손님 최대 3명이 멈춰서 2초간 웃거나(Cheers) 항의(Stomp).
      수다: 가끔 길가에서 2~3명이 모여 8~15초 이야기("…" 말풍선, 고개·손짓). 동시에 최대 2무리.
-     술집 주인: 가판대마다 1명(innkeeper/maid/baker 복제)이 수레 뒤(BAR_LOCAL_X/Z)에 서서 카운터를 닦고
+     술집 주인: 가판대마다 1명(innkeeper/maid/baker 복제)이 부스 카운터 뒤(BAR_SPOT, 건물 안)에 서서 카운터를 닦고
        손님/플레이어 쪽을 본다. 배회·의자에서 빠지고, 잡거나 때릴 수 있으며 일어나면 카운터로 돌아간다.
        (createNPCs 옵션 barkeepers:false 로 끔)
      인원: count 옵션(예: 25). 처음 10명은 원래 색, 그 뒤 복제는 옷 색·키(0.95~1.05)를 조금씩 바꾼다.
@@ -197,7 +197,14 @@ const ALARM_R = { shot: 15, bomb: 24, explosion: 32 };   // 소동 종류별 기
 const FLEE_SPEED = 4.5;
 const WATCH_R = 12;              // 이 안에서 누가 맞으면 구경꾼이 반응
 const BUBBLE_MAX = 12, BUBBLE_DIST = 35;
-const BAR_LOCAL_X = 0, BAR_LOCAL_Z = -2.2;   // 술집 주인 자리 (가판대 그룹 지역좌표, 수레 뒤). 부스 glb 가 오면 여기만 바꾼다
+const BAR_LOCAL_X = 0, BAR_LOCAL_Z = 0.3;    // 술집 주인 자리 기본값 (가판대 그룹 지역좌표, 앞 +Z = 길 쪽)
+/* 부스 종류별 술집 주인 자리 (가판대 그룹 지역좌표 = 부스 glb 좌표, 그룹 크기 0.62 적용 전).
+   부스 glb 를 헤드리스 Blender 로 위에서 훑어(벽·카운터에서 0.22 m 떨어진 빈 바닥, 지붕 아래) 고른
+   카운터 바로 뒤·건물 안 자리. 부스 모양이 바뀌면 다시 잰다 */
+const BAR_SPOT = {   // y = 부스 바닥판 높이 (없으면 0 = 가판대 그룹 바닥)
+  tudor: { x: 0, z: 0.35, y: 0.186 }, norse: { x: 0, z: 0.6 }, bavarian: { x: 0, z: 0.45, y: 0.323 }, venta: { x: 0.4, z: 0 },
+  tent: { x: 0, z: 0.45 }, flemish: { x: -2.0, z: 0 }, osteria: { x: -0.5, z: -0.45, y: 0.194 },
+};
 const MIX_FAR = 35;              // 이보다 먼 손님은 애니메이션을 0.15초마다만 갱신
 const SHADOW_FAR = 30;           // 이보다 먼 손님은 그림자를 끈다
 const LOD_FAR = 24;              // 이보다 먼 손님은 부위 8개 대신 정점색 한 덩어리(그리기 호출 1개)로 그린다 (perf.js)
@@ -241,8 +248,9 @@ export function stallsFromStations(stations, { THREE, toyBlocks = null } = {}) {
     g.updateMatrixWorld(true);
     g.localToWorld(v.set(0, 0, STOOL_TABLE_Z));
     const stall = { x: v.x, z: v.z, rotY: g.rotation.y, seats: [] };
-    g.localToWorld(v.set(BAR_LOCAL_X, 0, BAR_LOCAL_Z));
-    stall.bar = { x: v.x, z: v.z, rotY: g.rotation.y };
+    const bs = BAR_SPOT[st.style] || { x: BAR_LOCAL_X, z: BAR_LOCAL_Z };
+    g.localToWorld(v.set(bs.x, bs.y || 0, bs.z));
+    stall.bar = { x: v.x, z: v.z, y: v.y, rotY: Math.atan2(stall.x - v.x, stall.z - v.z) };   // 카운터 너머 테이블(의자) 쪽을 본다
     for (let k = 0; k < 4; k++) {
       const a = k * Math.PI / 2 + Math.PI / 4;
       g.localToWorld(v.set(Math.cos(a) * STOOL_RING, 0, STOOL_TABLE_Z + Math.sin(a) * STOOL_RING));
@@ -630,7 +638,12 @@ export async function createNPCs({
     }
   }
 
-  /* ── 술집 주인: 가판대마다 한 명, 수레 뒤 카운터에 선다 ── */
+  /* 술집 주인 발밑: 카운터 자리 근처면 부스 바닥(가판대 그룹 높이·바닥판) — 지형이 부스 바닥보다 낮은 곳에서 가라앉지 않게 */
+  function barFloor(n) {
+    const g = groundY(n.x, n.z), s = stalls[n.bar], bp = s && s.bar;
+    return bp && bp.y != null && Math.hypot(n.x - bp.x, n.z - bp.z) < 1.2 ? Math.max(g, bp.y) : g;
+  }
+  /* ── 술집 주인: 가판대마다 한 명, 부스 카운터 뒤(건물 안)에 선다 ── */
   if (barkeepers) {
     const barSrc = sources.filter(q => /innkeeper|maid|baker/.test(q.file));
     const pool = barSrc.length ? barSrc : sources;
@@ -638,7 +651,7 @@ export async function createNPCs({
       if (!st.bar) return;
       const n = makeNPC(pool[si % pool.length], npcs.length, true);
       n.bar = si;
-      n.x = st.bar.x; n.z = st.bar.z; n.y = groundY(n.x, n.z); n.rot = st.bar.rotY;
+      n.x = st.bar.x; n.z = st.bar.z; n.y = barFloor(n); n.rot = st.bar.rotY;
       n.state = ST.BAR; n.timer = rr(1, 4); n.wiping = rnd() < 0.5;
       play(n, 'Idle', 0);
       n.cur.time = rnd() * CLIP_LEN.Idle;
@@ -1266,7 +1279,7 @@ export async function createNPCs({
     if (n.actor) { n.state = ST.ACTOR; n.y = groundY(n.x = Number.isFinite(n.x) ? n.x : 0, n.z = Number.isFinite(n.z) ? n.z : 0); play(n, 'Idle', 0.2); }   // [village]
     else if (n.bar != null && stalls[n.bar] && stalls[n.bar].bar) {
       const b = stalls[n.bar].bar;
-      n.x = b.x; n.z = b.z; n.rot = b.rotY; n.y = groundY(n.x, n.z);
+      n.x = b.x; n.z = b.z; n.rot = b.rotY; n.y = barFloor(n);
       n.state = ST.BAR; n.timer = rr(1, 4); play(n, 'Idle', 0.2);
     } else {
       n.z = rr(zMin, zMax);
@@ -1595,7 +1608,7 @@ export async function createNPCs({
       if (o && npcs.includes(o) && o.state === ST.SEATED) { if (!a) a = o; else if (!b) b = o; }
     }
     /* 테이블에서 길 쪽으로 조금 나온 자리에서 붙는다 */
-    let ux = s.x - (s.bar ? s.bar.x : s.x), uz = s.z - (s.bar ? s.bar.z : s.z - 1);
+    let ux = Math.sin(s.rotY || 0), uz = Math.cos(s.rotY || 0);   // 가판대 정면(길 쪽)
     const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul;
     fight.cx = s.x + ux * 2.7; fight.cz = s.z + uz * 2.7;
     fight.active = true; fight.a = a; fight.b = b; fight.t = FIGHT_TIME; fight.si = pick; fight.cheer = 1;
@@ -1668,7 +1681,7 @@ export async function createNPCs({
     let k = si;
     if (k < 0) { let bd = 1e9; stalls.forEach((s, i) => { const d = Math.hypot(s.x - n.x, s.z - n.z); if (d < bd) { bd = d; k = i; } }); }
     const s = stalls[k];
-    let ux = s.x - (s.bar ? s.bar.x : s.x), uz = s.z - (s.bar ? s.bar.z : s.z - 1);
+    let ux = Math.sin(s.rotY || 0), uz = Math.cos(s.rotY || 0);   // 가판대 정면(길 쪽)
     const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul;
     bard.active = true; bard.n = n; bard.si = k; bard.phase = 0; bard.playing = false; bard.t = 0;
     bard.x = s.x + ux * 3.4; bard.z = s.z + uz * 3.4; bard.face = Math.atan2(ux, uz);
@@ -1739,7 +1752,7 @@ export async function createNPCs({
   /* 가판대 앞(길 쪽) d m 지점 */
   const frontPt = { x: 0, z: 0, face: 0 };
   function stallFront(s, d) {
-    let ux = s.x - (s.bar ? s.bar.x : s.x), uz = s.z - (s.bar ? s.bar.z : s.z - 1);
+    let ux = Math.sin(s.rotY || 0), uz = Math.cos(s.rotY || 0);   // 가판대 정면(길 쪽)
     const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul;
     frontPt.x = clampX(s.x + ux * d); frontPt.z = Math.max(zMin, Math.min(zMax, s.z + uz * d)); frontPt.face = Math.atan2(ux, uz);
     return frontPt;
@@ -1775,29 +1788,25 @@ export async function createNPCs({
     const s = n.seat && n.seat.stall, bk = s ? barBy[s.idx] : null;
     if (!bk || bk.off || bk.state !== ST.BAR || bk.dist < 3) return false;   // 플레이어가 주인 앞에 있으면(주문·대화) 방해 안 한다
     say(n, pickOne(REFILL), 1.6);
-    bk.state = ST.SERVE; bk.serveTo = n; bk.arrived = false; bk.timer = 14; bk.wiping = false;
-    play(bk, 'Walk', 0.3);
+    bk.state = ST.SERVE; bk.serveTo = n; bk.arrived = false; bk.timer = 6; bk.wiping = false;
+    play(bk, 'Idle', 0.3);
     return true;
   }
+  /* 술집 주인은 건물 안(카운터 뒤)에 있으니 밖으로 걸어 나가지 않고 카운터 너머로 잔을 내민다 */
   function serveWalk(n, dt) {
-    const c = n.serveTo;
+    const c = n.serveTo, bp = stalls[n.bar] && stalls[n.bar].bar;
     n.timer -= dt;
+    if (bp) { n.x += (bp.x - n.x) * Math.min(1, dt * 4); n.z += (bp.z - n.z) * Math.min(1, dt * 4); }
+    const err = turnTo(n, Math.atan2(c.x - n.x, c.z - n.z), dt);
     if (!n.arrived) {
-      if ((c.state !== ST.SEATED && c.state !== ST.ARM) || n.timer <= 0) { n.serveTo = null; n.state = ST.BAR_RETURN; play(n, 'Walk', 0.3); }
-      else {
-        play(n, 'Walk', 0.3);
-        if (walkToward(n, c.x, c.z, dt, 1.05)) {
-          n.arrived = true; n.timer = 1.8;
-          play(n, 'Cheers', 0.2, STAND.offer); say(n, pickOne(SERVE_LINES), 1.6);
-          sayLater(c, '고맙소!', 0.9); c.cups = 0;
-        }
-        pushFromTables(n);
+      if ((c.state !== ST.SEATED && c.state !== ST.ARM) || n.timer <= 0) { n.serveTo = null; n.state = ST.BAR_RETURN; play(n, 'Idle', 0.3); }
+      else if (err < 0.35) {
+        n.arrived = true; n.timer = 1.8;
+        play(n, 'Cheers', 0.2, STAND.offer); say(n, pickOne(SERVE_LINES), 1.6);
+        sayLater(c, '고맙소!', 0.9); c.cups = 0;
       }
-    } else {
-      turnTo(n, Math.atan2(c.x - n.x, c.z - n.z), dt);
-      if (n.timer <= 0) { n.serveTo = null; n.state = ST.BAR_RETURN; play(n, 'Walk', 0.3); }
-    }
-    groundSnap(n, dt);
+    } else if (n.timer <= 0) { n.serveTo = null; n.state = ST.BAR_RETURN; play(n, 'Idle', 0.3); }
+    n.y += (barFloor(n) - n.y) * Math.min(1, dt * 12);
   }
   /* 취해서 발이 꼬여 넘어진다 (구경꾼은 웃는다, 화내지 않음) */
   function trip(n) {
@@ -1871,11 +1880,15 @@ export async function createNPCs({
       if (g.off || g.state !== ST.GUARD_LEAVE) continue;
       const d = Math.hypot(g.x - f.cx, g.z - f.cz); if (d < bd) { bd = d; best = g; }
     }
-    if (!best) for (const k of barBy) {   // 아니면 가까운 술집 주인이
-      if (!k || k.off || (k.state !== ST.BAR && k.state !== ST.BAR_RETURN) || k.dist < 3) continue;
-      const d = Math.hypot(k.x - f.cx, k.z - f.cz); if (d < bd) { bd = d; best = k; }
+    if (!best) {   // 경비병이 없으면 가까운 술집 주인이 카운터 안에서 소리만 친다 (건물 벽을 뚫고 나가지 않게)
+      let k0 = null, kd = 30;
+      for (const k of barBy) {
+        if (!k || k.off || k.state !== ST.BAR || k.dist < 3) continue;
+        const d = Math.hypot(k.x - f.cx, k.z - f.cz); if (d < kd) { kd = d; k0 = k; }
+      }
+      if (k0) { say(k0, '거기 그만들 해!', 1.6, '#7a1a10'); k0.wiping = false; }
+      return null;
     }
-    if (!best) return null;
     best.state = ST.BREAKUP; best.socG = f; best.arrived = false; best.timer = 15; best.wiping = false;
     play(best, best.actions.Run ? 'Run' : 'Walk', 0.3);
     say(best, '거기 무슨 일이야!', 1.6, '#7a1a10');
@@ -2625,7 +2638,7 @@ export async function createNPCs({
     } else if (n.state === ST.BAR || n.state === ST.SERVE) {
       const s = stalls[n.bar], bp = s.bar;
       n.x += (bp.x - n.x) * Math.min(1, dt * 4); n.z += (bp.z - n.z) * Math.min(1, dt * 4);
-      n.y = groundY(n.x, n.z);
+      n.y = barFloor(n);
       /* 플레이어가 가까우면 플레이어를, 아니면 앉은 손님 쪽(=길 쪽)을 본다 */
       let face = bp.rotY;
       if (n.state === ST.SERVE) face = Math.atan2(px - n.x, pz - n.z);   // 주문받을 때만 플레이어를 본다. 평소엔 손님 쪽
@@ -2642,7 +2655,7 @@ export async function createNPCs({
     } else if (n.state === ST.BAR_RETURN) {
       const bp = stalls[n.bar].bar;
       if (walkToward(n, bp.x, bp.z, dt, 0.15)) { n.state = ST.BAR; n.timer = rr(2, 4); n.wiping = false; play(n, 'Idle', 0.4); }
-      n.y += (groundY(n.x, n.z) - n.y) * Math.min(1, dt * 12);
+      n.y += (barFloor(n) - n.y) * Math.min(1, dt * 12);
     } else if (n.state === ST.GUARD) {
       const dx = px - n.x, dz = pz - n.z, d = Math.hypot(dx, dz);
       const err = turnTo(n, Math.atan2(dx, dz), dt * 1.8);
