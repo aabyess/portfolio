@@ -8,4 +8,6 @@ class NoCache(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
 port = int(sys.argv[1]) if len(sys.argv) > 1 else 8732
+# 동시 연결 대기열을 늘린다 (기본 5 — 첫 화면에 수십 개를 한꺼번에 요청하면 가끔 연결이 끊겨 모듈·모델을 못 받았다)
+http.server.ThreadingHTTPServer.request_queue_size = 128
 http.server.ThreadingHTTPServer(('', port), NoCache).serve_forever()

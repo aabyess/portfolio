@@ -282,9 +282,27 @@ const links = p => `
 /* ── 이미지 여러 장 ──
    큰 화면 + 좌우 버튼 + 장수 + 캡션 + 썸네일 줄. 게임 창과 문서 뷰가 같이 쓴다. */
 const galleryOf = p => p.gallery || [p.video ? { video: p.video, poster: p.poster } : { src: p.img }];
+/* 영상은 src 대신 data-src 로 두고(preload="none"), 화면에 실제로 보일 때 wakeVideos 가 받기 시작해 튼다.
+   문서 뷰는 페이지를 열 때 미리 그려 두므로 그냥 autoplay 로 두면 게임만 보는 사람도 영상 1.5 MB 를 처음에 받았다 */
 const slideHTML = (g, alt) => g.video
-  ? `<video src="${g.video}"${g.poster ? ` poster="${g.poster}"` : ''} autoplay loop muted playsinline preload="metadata"></video>`
+  ? `<video data-src="${g.video}"${g.poster ? ` poster="${g.poster}"` : ''} loop muted playsinline preload="none"></video>`
   : `<img src="${g.src}" alt="${alt}" loading="lazy" decoding="async" />`;
+/* 보이면 받고 틀고, 안 보이면 멈춘다 (문서 뷰가 숨겨져 있을 때 = display:none 이면 보이지 않는 것으로 친다) */
+const videoIO = 'IntersectionObserver' in window ? new IntersectionObserver(es => {
+  for (const e of es) {
+    const v = e.target;
+    if (e.isIntersecting) {
+      if (!v.getAttribute('src') && v.dataset.src) { v.src = v.dataset.src; v.preload = 'auto'; }
+      v.play().catch(() => { /* 자동재생이 막히면 포스터로 남는다 */ });
+    } else if (!v.paused) v.pause();
+  }
+}) : null;
+function wakeVideos(root) {
+  root.querySelectorAll('video[data-src]').forEach(v => {
+    if (videoIO) videoIO.observe(v);
+    else if (!v.getAttribute('src')) { v.src = v.dataset.src; v.autoplay = true; }   // 아주 옛 브라우저
+  });
+}
 function galleryHTML(p) {
   const gs = galleryOf(p), many = gs.length > 1;
   return `<div class="gal" data-gal="${p.id}" style="--c:${p.color}">
@@ -306,12 +324,16 @@ function bindGallery(root, p) {
   let i = 0;
   const show = n => {
     i = (n + gs.length) % gs.length;
-    el.querySelector('.gal-main > img, .gal-main > video').outerHTML = slideHTML(gs[i], gs[i].cap || p.name + ' 화면');
+    const cur = el.querySelector('.gal-main > img, .gal-main > video');
+    if (cur.tagName === 'VIDEO' && videoIO) videoIO.unobserve(cur);
+    cur.outerHTML = slideHTML(gs[i], gs[i].cap || p.name + ' 화면');
+    wakeVideos(el);
     const cap = el.querySelector('.gal-cap'); if (cap) cap.textContent = gs[i].cap || '';
     const cnt = el.querySelector('.gal-count'); if (cnt) cnt.textContent = `${i + 1} / ${gs.length}`;
     el.querySelectorAll('.gal-th').forEach((b, k) => b.classList.toggle('on', k === i));
     el.querySelector('.gal-th.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   };
+  wakeVideos(el);
   el.querySelector('.prev')?.addEventListener('click', () => show(i - 1));
   el.querySelector('.next')?.addEventListener('click', () => show(i + 1));
   el.querySelectorAll('.gal-th').forEach(b => b.addEventListener('click', () => show(+b.dataset.i)));
@@ -575,45 +597,57 @@ async function initDrive() {
     return;
   }
 
-  /* 아래에서 차례로 await import 하는 모듈들을 지금 한꺼번에 받기 시작한다.
+  /* ── 단계별 로딩 ──
+     첫 화면은 "바로 보이는 것"만 기다린다: 지형(월드 glb)·하늘·계절·주인공·지금 탈것·길·선술집 부스와 게시판·
+     장난감 블록·연락처·표지판. 나머지(손님·아이·동물·성·축제·행사·의뢰 게시판·가게·미니맵·배경 소리)는
+     첫 프레임을 그린 뒤 startDeferred() 가 하나씩 불러와 도착하는 대로 나타난다.
+     마을 소품(vp-kit.glb)·돌다리(bridge.glb)는 배치(충돌·풀·나무 비우기)만 먼저 하고 모델은 첫 화면 뒤에 받는다 (LaterGLTFLoader).
+
+     아래에서 차례로 await import 하는 "첫 화면용" 모듈들을 지금 한꺼번에 받기 시작한다.
      import() 는 같은 주소면 같은 약속을 돌려주므로, 뒤의 await import 는 이미 받은(받는 중인) 것을 그대로 쓴다.
-     (하나씩 줄 서서 받으면 요청마다 왕복 시간이 쌓여 인터넷에서 몇 초씩 늦어진다) */
+     (하나씩 줄 서서 받으면 요청마다 왕복 시간이 쌓여 인터넷에서 몇 초씩 늦어진다)
+     늦게 불러오는 모듈은 여기 넣지 않는다 — 첫 화면에 필요한 파일과 대역폭을 다투지 않게. */
   for (const u of [
     'three',
     'three/addons/loaders/GLTFLoader.js',
     'three/addons/loaders/DRACOLoader.js',
     'three/addons/geometries/RoundedBoxGeometry.js',
+    'three/addons/postprocessing/EffectComposer.js',   // graphics.js 가 맨 끝에 부르는 것들도 미리
+    'three/addons/postprocessing/RenderPass.js',
+    'three/addons/postprocessing/UnrealBloomPass.js',
+    'three/addons/postprocessing/ShaderPass.js',
+    'three/addons/shaders/FXAAShader.js',
     'cannon-es',
-    './animals.js',
-    './audio.js',
     './bridge.js',
-    './castle.js',
+    './clear-spots.js',
     './dialogue.js',
-    './events.js',
-    './festival.js',
     './fishing.js',
     './graphics.js',
-    './kids.js',
-    './minimap.js',
-    './npcs.js',
-    './pageant.js',
     './perf.js',
-    './quests.js',
     './seasons.js',
-    './shop.js',
     './sky.js',
+    './stalls.js',
     './tavern.js',
     './tracks.js',
     './vehicles.js',
     './village-props.js',
-    './village.js',
     './weapons.js',
   ]) import(u).catch(() => {});
-
-  await document.fonts.ready;   // 캔버스에 한글을 굽기 전에 웹폰트를 기다린다
+  /* 월드 데이터(지형 높이·가판대 자리)도 웹폰트를 기다리는 동안 미리 받는다 */
+  const worldJson = fetch('models/autumn-world.json').then(r => r.json());
+  /* 캔버스에 한글을 굽기 전에 웹폰트를 기다린다 — 다만 모델 다운로드는 그 전에 시작하고, 기다리는 건 첫 글씨를 굽기 직전(장난감 블록)이다 */
+  const fontsReady = document.fonts.ready;
 
   const THREE = await import('three');
   const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
+
+  /* 첫 화면 뒤에 받을 모델용 로더: load() 를 첫 프레임 뒤로 미룬다 (첫 화면 파일과 대역폭을 다투지 않게).
+     loadAsync 도 안에서 load 를 부르므로 같이 미뤄진다 */
+  let openLaterGate;
+  const afterFirstFrame = new Promise(r => { openLaterGate = r; });
+  class LaterGLTFLoader extends GLTFLoader {
+    load(url, onLoad, onProgress, onError) { afterFirstFrame.then(() => super.load(url, onLoad, onProgress, onError)); }
+  }
 
   /* ── 월드 크기 ──
      원형 광장에서 직선 고속도로로 바꿨다. 차는 (0,14)에서 -Z를 향해 출발하고
@@ -642,7 +676,7 @@ async function initDrive() {
   /* ════ 가을 숲 월드 ════
      Blender에서 만든 장면을 glb로 내보내 쓰고, 지형 높이·풀 자리·가판대 좌표는 JSON으로 받는다.
      웹에서 버거운 풀·낙엽·바람은 여기서 가볍게 다시 만든다. */
-  const WORLD = await (await fetch('models/autumn-world.json')).json();
+  const WORLD = await worldJson;
   const GRID = WORLD.grid;
   /* 월드는 길 방향(z)으로 더 길다. 예전 정사각형 JSON(n, half)도 그대로 읽는다 */
   const GX = GRID.nx ?? GRID.n, GZ = GRID.nz ?? GRID.n;
@@ -736,51 +770,100 @@ async function initDrive() {
      가판대 6곳 밖에 세운 구역(AI 구역)은 그 자리 나무를 여기서 지운다.
      땅에 닿은 줄기 정점을 모아 그루터기 위치를 찾고, 반경 r 안의 그루터기에 가장 가까운
      삼각형(줄기·가지·잎)을 통째로 접어 없앤다. 반경 밖 나무는 잎이 반쯤 잘리지 않게 그대로 둔다. */
-  function clearTrees(root, spots, r) {
-    if (!spots.length) return;
+  /* 여러 묶음([{ spots, r }])을 한 번에 처리한다 — 정점·삼각형을 한 번만 훑고, 자리·그루터기는 격자로 찾는다
+     (묶음마다 따로 돌면 월드 정점을 열 번 넘게 훑어 첫 화면이 0.7초쯤 늦어졌다) */
+  function clearTreesMany(root, groups) {
+    const all = [];
+    for (const g of groups) for (const [x, z] of g.spots) all.push({ x, z, r: g.r });
+    if (!all.length) return;
     root.updateMatrixWorld(true);
     const trunks = [], leaves = [];
     root.traverse(o => { if (!o.isMesh || !o.geometry.index) return; if (o.name.includes('Leaves')) leaves.push(o); else if (o.name.includes('Trunks')) trunks.push(o); });
     if (!trunks.length) return;
-    const v = new THREE.Vector3(), near = (x, z, R) => spots.some(([sx, sz]) => Math.hypot(x - sx, z - sz) < R);
-    /* 그루터기: 땅 가까운 줄기 정점을 1유닛 안끼리 묶는다 */
-    const stumps = [];
+    const PAD = 8, C = 8, key = (i, j) => i * 100003 + j;
+    /* 자리 격자: 각 자리를 (r + PAD) 범위가 닿는 칸마다 넣는다 */
+    const spotGrid = new Map();
+    for (const s of all) {
+      const R = s.r + PAD;
+      for (let i = Math.floor((s.x - R) / C); i <= Math.floor((s.x + R) / C); i++)
+        for (let j = Math.floor((s.z - R) / C); j <= Math.floor((s.z + R) / C); j++) {
+          const k = key(i, j); let l = spotGrid.get(k); if (!l) spotGrid.set(k, l = []); l.push(s);
+        }
+    }
+    /* (x, z) 가 어떤 자리의 r + pad 안이면 true (pad ≤ PAD) */
+    const near = (x, z, pad) => {
+      const l = spotGrid.get(key(Math.floor(x / C), Math.floor(z / C)));
+      if (l) for (const s of l) if (Math.hypot(x - s.x, z - s.z) < s.r + pad) return true;
+      return false;
+    };
+    const v = new THREE.Vector3();
+    /* 그루터기: 땅 가까운 줄기 정점을 1유닛 안끼리 묶는다 (1유닛 격자로 이웃 칸만 본다) */
+    const stumps = [], sGrid = new Map();
+    const sAdd = (s) => { const k = key(Math.floor(s.x), Math.floor(s.z)); let l = sGrid.get(k); if (!l) sGrid.set(k, l = []); l.push(s); };
+    const sFind = (x, z) => {
+      const ci = Math.floor(x), cj = Math.floor(z);
+      for (let i = ci - 1; i <= ci + 1; i++) for (let j = cj - 1; j <= cj + 1; j++) {
+        const l = sGrid.get(key(i, j)); if (l) for (const s of l) if (Math.hypot(s.x - x, s.z - z) < 1.0) return s;
+      }
+      return null;
+    };
     for (const t of trunks) for (let i = 0, tp = t.geometry.attributes.position; i < tp.count; i++) {
       v.fromBufferAttribute(tp, i).applyMatrix4(t.matrixWorld);
-      if (!near(v.x, v.z, r + 8) || v.y - heightAt(v.x, v.z) > 0.6) continue;
-      const s = stumps.find(s => Math.hypot(s.x - v.x, s.z - v.z) < 1.0);
+      if (!near(v.x, v.z, PAD) || v.y - heightAt(v.x, v.z) > 0.6) continue;
+      const s = sFind(v.x, v.z);
       if (s) { s.x = (s.x * s.n + v.x) / (s.n + 1); s.z = (s.z * s.n + v.z) / (s.n + 1); s.n++; }
-      else stumps.push({ x: v.x, z: v.z, n: 1 });
+      else { const ns = { x: v.x, z: v.z, n: 1 }; stumps.push(ns); sAdd(ns); }
     }
-    for (const s of stumps) s.kill = near(s.x, s.z, r);
+    for (const s of stumps) s.kill = near(s.x, s.z, 0);
     if (!stumps.some(s => s.kill)) return;
+    /* 가장 가까운 그루터기(6유닛 안) 찾기용 격자 — 평균을 내며 움직였으니 최종 위치로 다시 만든다 */
+    const S6 = 6, g6 = new Map();
+    for (const s of stumps) { const k = key(Math.floor(s.x / S6), Math.floor(s.z / S6)); let l = g6.get(k); if (!l) g6.set(k, l = []); l.push(s); }
+    const c = new THREE.Vector3();
     for (const m of [...trunks, ...leaves]) {
-      const pos = m.geometry.attributes.position, idx = m.geometry.index, c = new THREE.Vector3();
+      const pos = m.geometry.attributes.position, idx = m.geometry.index;
+      let changed = false;
       for (let f = 0; f < idx.count; f += 3) {
         c.set(0, 0, 0);
         for (let k = 0; k < 3; k++) c.add(v.fromBufferAttribute(pos, idx.getX(f + k)));
         c.multiplyScalar(1 / 3).applyMatrix4(m.matrixWorld);
-        if (!near(c.x, c.z, r + 6)) continue;
+        if (!near(c.x, c.z, 6)) continue;
         let best = null, bd = 6;
-        for (const s of stumps) { const d = Math.hypot(s.x - c.x, s.z - c.z); if (d < bd) { bd = d; best = s; } }
-        if (best && best.kill) { idx.setX(f, 0); idx.setX(f + 1, 0); idx.setX(f + 2, 0); }
+        const ci = Math.floor(c.x / S6), cj = Math.floor(c.z / S6);
+        for (let i = ci - 1; i <= ci + 1; i++) for (let j = cj - 1; j <= cj + 1; j++) {
+          const l = g6.get(key(i, j)); if (l) for (const s of l) { const d = Math.hypot(s.x - c.x, s.z - c.z); if (d < bd) { bd = d; best = s; } }
+        }
+        if (best && best.kill) { idx.setX(f, 0); idx.setX(f + 1, 0); idx.setX(f + 2, 0); changed = true; }
       }
-      idx.needsUpdate = true;
+      if (changed) idx.needsUpdate = true;
     }
   }
+  const clearTrees = (root, spots, r) => clearTreesMany(root, [{ spots, r }]);   // 예전 모양 (모듈 머리말 연결 예시와 같게)
+  void clearTrees;
+
+  /* ── 첫 화면 로딩 관리자 ──
+     첫 화면에 꼭 필요한 파일(월드 glb·주인공·차·게시판 그림)만 여기에 건다. 다 오면 start() 로 로딩 화면을 걷는다.
+     첫 화면 뒤에 불러오는 모듈은 각자 기본 로더를 써서 이 관리자를 기다리게 하지 않는다.
+     남은 로딩 수를 센다 — 월드 구성이 끝났을 때 이미 다 받았으면 바로 시작하려고 (onLoad 가 그보다 먼저 지나가 버리는 경우) */
+  const manager = new THREE.LoadingManager();
+  let mgrPending = 0;
+  { const s0 = manager.itemStart.bind(manager), e0 = manager.itemEnd.bind(manager);
+    manager.itemStart = u => { mgrPending++; s0(u); };
+    manager.itemEnd = u => { mgrPending = Math.max(0, mgrPending - 1); e0(u); }; }
 
   /* ── Blender 월드 glb ── */
-  const worldManager = new THREE.LoadingManager();
   /* 월드 glb는 Draco로 압축돼 있다(7.9MB → 1.1MB). 디코더는 three와 같은 버전의 CDN에서 받는다 */
   const { DRACOLoader } = await import('three/addons/loaders/DRACOLoader.js');
   const draco = new DRACOLoader();
   draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/');
-  /* ── 마을 소품: 오두막 마을 두 곳·밭과 풍차·우물·분수·가로등·굴뚝 연기 (village-props.js) ── */
+  draco.preload();   // 디코더(wasm)를 월드 glb 와 같이 받기 시작한다
+  /* ── 마을 소품: 오두막 마을 두 곳·밭과 풍차·우물·분수·가로등·굴뚝 연기 (village-props.js) ──
+     배치·충돌·풀 빼기·나무 비우기는 지금 하고, 모델(vp-kit.glb)은 첫 화면 뒤에 받는다 */
   const { createVillageProps } = await import('./village-props.js');
-  const vprops = createVillageProps({ THREE, scene, GLTFLoader, dracoLoader: draco, groundY, heightAt, pathX,
+  const vprops = createVillageProps({ THREE, scene, GLTFLoader: LaterGLTFLoader, dracoLoader: draco, groundY, heightAt, pathX,
     roadHalf: WORLD.path.half, getNight: () => night, seasons, camera,
     avoid: [{ x: pathX(57.4) - 4.6, z: 57.4, r: 2.5 }] });   // 의뢰 게시판 자리
-  const worldLoader = new GLTFLoader(worldManager);
+  const worldLoader = new GLTFLoader(manager);
   worldLoader.setDRACOLoader(draco);
   /* 장난감 블록·상호왕국 표지판 자리 (나무를 치우려고 월드 로딩 전에 정한다) */
   const NAME_Z = WORLD.start.z - 12, ROW_Z = WORLD.start.z - 9.6, BLOCK_X = pathX(NAME_Z) + 15;
@@ -790,14 +873,13 @@ async function initDrive() {
     return { x: bx - Math.cos(rot) * gap, z: bz + Math.sin(rot) * gap, rot };
   })();
   const { PONDS } = await import('./fishing.js');   // 연못 자리의 나무는 치운다
-  const { CASTLE_CLEAR } = await import('./castle.js');   // 성문·성벽 자리의 나무도
-  const { FESTIVAL_CLEAR, createFestival } = await import('./festival.js');   // 창시합장·활터·마을 광장
-  const { SHOP_CLEAR, createShop } = await import('./shop.js');                // 물약 가게·상인 자리
-  const { PAGEANT_CLEAR, createPageant } = await import('./pageant.js');       // 연회·결혼식·등불·투석기·줄다리기 자리
-  let castle = null, animals = null, quests = null, kids = null, shop = null, minimap = null;   // 아래에서 만든다 (걷기·운전 충돌, 행차가 먼저 참조)
-  /* 개울 위 돌다리 (bridge.js) — 월드의 옛 나무다리(EX_Bridge)는 숨긴다. 높이 곡선은 bridgeY 그대로 */
+  /* 성문·축제·가게·행사 자리의 나무도 — 그 모듈들은 첫 화면 뒤에 불러오므로 자리만 작은 모듈(clear-spots.js)에서 읽는다 */
+  const { CASTLE_CLEAR, FESTIVAL_CLEAR, SHOP_CLEAR, PAGEANT_CLEAR } = await import('./clear-spots.js');
+  /* 아래 모듈들은 첫 화면 뒤에 startDeferred() 가 만든다. 그 전까지 null 이라 쓰는 곳마다 if (x) 로 확인한다 */
+  let castle = null, animals = null, quests = null, kids = null, shop = null, minimap = null, ambience = null;
+  /* 개울 위 돌다리 (bridge.js) — 월드의 옛 나무다리(EX_Bridge)는 숨긴다. 높이 곡선은 bridgeY 그대로. 모델은 첫 화면 뒤에 받는다 */
   const { createBridge } = await import('./bridge.js');
-  const bridge = createBridge({ THREE, scene, GLTFLoader, dracoLoader: draco, pathX, bridgeData: WORLD.bridge });
+  const bridge = createBridge({ THREE, scene, GLTFLoader: LaterGLTFLoader, dracoLoader: draco, pathX, bridgeData: WORLD.bridge });
   worldLoader.load('models/autumn-world.glb', gltf => {
     gltf.scene.traverse(o => {
       if (!o.isMesh) return;
@@ -820,15 +902,17 @@ async function initDrive() {
     seasons.attachWorld(gltf.scene);   // 계절: 잎·땅·길 색과 눈 쌓임 (addWind 다음에 붙여야 둘 다 산다)
     scene.add(gltf.scene);
     bridge.hideOld(gltf.scene);
-    clearTrees(gltf.scene, PROJECTS.filter(p => p.ai).map(p => p.pos), 7.5);
-    clearTrees(gltf.scene, PONDS.map(p => [p.x, p.z]), 6.2);
-    clearTrees(gltf.scene, [[BLOCK_X, (NAME_Z + ROW_Z) / 2]], 6);       // 장난감 블록 자리
-    clearTrees(gltf.scene, [[KINGDOM_SIGN.x, KINGDOM_SIGN.z]], 2.6);   // 상호랜드 표지판
-    clearTrees(gltf.scene, CASTLE_CLEAR.spots, CASTLE_CLEAR.r);         // 북쪽 성문
-    for (const g of vprops.clearGroups) clearTrees(gltf.scene, g.spots, g.r);   // 오두막·밭·풍차
-    clearTrees(gltf.scene, FESTIVAL_CLEAR.spots, FESTIVAL_CLEAR.r);              // 축제 자리
-    clearTrees(gltf.scene, SHOP_CLEAR.spots, SHOP_CLEAR.r);                      // 물약 가게·상인
-    clearTrees(gltf.scene, PAGEANT_CLEAR.spots, PAGEANT_CLEAR.r);                // 연회장·투석기·줄다리기
+    clearTreesMany(gltf.scene, [
+      { spots: PROJECTS.filter(p => p.ai).map(p => p.pos), r: 7.5 },   // AI 구역
+      { spots: PONDS.map(p => [p.x, p.z]), r: 6.2 },                   // 연못
+      { spots: [[BLOCK_X, (NAME_Z + ROW_Z) / 2]], r: 6 },              // 장난감 블록 자리
+      { spots: [[KINGDOM_SIGN.x, KINGDOM_SIGN.z]], r: 2.6 },           // 상호랜드 표지판
+      CASTLE_CLEAR,                                                    // 북쪽 성문
+      ...vprops.clearGroups,                                           // 오두막·밭·풍차
+      FESTIVAL_CLEAR,                                                  // 축제 자리
+      SHOP_CLEAR,                                                      // 물약 가게·상인
+      PAGEANT_CLEAR,                                                   // 연회장·투석기·줄다리기
+    ]);
   });
 
   /* ── 풀 — 브루노 시몽 숲처럼 짧고 뾰족한 풀을 촘촘히 ──
@@ -1000,7 +1084,8 @@ async function initDrive() {
   }
   car.add(stockCar);
 
-  if (CAR_MODEL_URL) new GLTFLoader().load(CAR_MODEL_URL, gltf => {
+  if (CAR_MODEL_URL) new GLTFLoader(manager).load(CAR_MODEL_URL,   // 첫 화면용 (로딩 관리자가 기다린다)
+    gltf => {
     const model = gltf.scene;
     const size = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());
     if (size.z > 0.0001) model.scale.setScalar(CAR_LEN / size.z);
@@ -1078,7 +1163,8 @@ async function initDrive() {
   let charMixer = null, charAction = null;
   const charClips = {};
 
-  if (CHAR_MODEL_URL) new GLTFLoader().load(CHAR_MODEL_URL, gltf => {
+  if (CHAR_MODEL_URL) new GLTFLoader(manager).load(CHAR_MODEL_URL,   // 첫 화면용
+    gltf => {
     const model = gltf.scene;
     /* 스킨 메시는 본 변형까지 반영한 실제 정점으로 재야 크기가 맞는다 (precise) */
     model.updateMatrixWorld(true);
@@ -1136,6 +1222,7 @@ async function initDrive() {
   /* ── 장난감 이름 블록 ──
      차로 들이받으면 장난감처럼 무너진다. 물리는 cannon-es로 계산하고, 차와 캐릭터는
      물리에 끌려가지 않는 '키네마틱' 몸체로 넣어 블록만 밀어낸다. R로 다시 쌓는다. */
+  await fontsReady;   // 여기부터 캔버스에 한글(블록·표지판·게시판 이름)을 굽는다 — 웹폰트가 와 있어야 대체 글꼴로 굳지 않는다
   const CANNON = await import('cannon-es');
   const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -24, 0) });
   vprops.addBodies(CANNON, world);   // 오두막·풍차·우물 등 고정 몸체
@@ -1274,12 +1361,6 @@ async function initDrive() {
   }
 
   /* ── 프로젝트 스테이션 ── */
-  const manager = new THREE.LoadingManager();
-  /* 남은 로딩 수를 센다 — 월드 구성이 끝났을 때 이미 다 받았으면 바로 시작하려고 (onLoad 가 그보다 먼저 지나가 버리는 경우) */
-  let mgrPending = 0;
-  { const s0 = manager.itemStart.bind(manager), e0 = manager.itemEnd.bind(manager);
-    manager.itemStart = u => { mgrPending++; s0(u); };
-    manager.itemEnd = u => { mgrPending = Math.max(0, mgrPending - 1); e0(u); }; }
   const texLoader = new THREE.TextureLoader(manager);
   const stations = [];
 
@@ -1412,7 +1493,8 @@ async function initDrive() {
       });
     }
 
-    if (p.video) {
+    /* 영상은 첫 화면 뒤, 플레이어가 이 게시판 근처(VIDEO_NEAR)에 처음 왔을 때 받기 시작한다 (step() 의 스테이션 줄) */
+    const startVideo = p.video ? () => {
       const v = document.createElement('video');
       Object.assign(v, { src: p.video, loop: true, muted: true, playsInline: true, autoplay: true });
       /* 실제로 재생이 시작된 뒤에 교체한다 */
@@ -1425,7 +1507,7 @@ async function initDrive() {
         screenMat.userData.video = v;
       }, { once: true });
       v.play().catch(() => { /* 자동재생이 막히면 정지 이미지로 남는다 */ });
-    }
+    } : null;
 
     const label = labelSprite(p.name, p.role, p.color);
     label.position.set(0, frame.position.y + boardH / 2 + 2.1, 0);
@@ -1464,7 +1546,7 @@ async function initDrive() {
     }
 
     scene.add(g);
-    stations.push({ ...p, style, group: g, face, ring, label, crystal, labelY: label.position.y, phase: Math.random() * Math.PI * 2 });
+    stations.push({ ...p, style, group: g, face, ring, label, crystal, labelY: label.position.y, phase: Math.random() * Math.PI * 2, startVideo });
     addStaticLOD(THREE, face, { dist: 38, keep: o => !!o.material.map || o === crystal || o.parent === crystal });   // 간판 기둥·틀·지붕만 합침 (그림 판은 그대로)
   }
 
@@ -1517,11 +1599,17 @@ async function initDrive() {
     }
   }
 
-  /* ── 중세 손님들 — 숲길을 거닐다 포장마차 의자에 앉아 술을 마신다 (npcs.js) ──
-     로딩을 막지 않게 기다리지 않는다. 의자 수치를 바꾸면 npcs.js의 STOOL_* 도 같이 바꿀 것 */
-  /* ── 북쪽 길 끝 성문 "상호성" (castle.js) — 임금님 행차가 이리로 들어간다. 성벽은 물리 상자로 막는다 ── */
-  {
-    const { createCastle } = await import('./castle.js');
+  /* 첫 화면 뒤에 불러오는 모듈 (start() 가 파일을 미리 받고, 아래 load* 함수가 만든다) */
+  const DEFERRED_MODULES = ['./castle.js', './npcs.js', './events.js', './village.js', './festival.js', './pageant.js',
+    './animals.js', './kids.js', './quests.js', './shop.js', './minimap.js', './audio.js'];
+  /* 모듈 받기가 한 번 실패하면(순간 네트워크 끊김) 같은 주소의 import() 는 계속 실패하므로 주소를 바꿔 한 번 더 시도한다 */
+  const importLater = u => import(u).catch(() => new Promise(r => setTimeout(r, 700)).then(() => import(u + '?retry=1')));
+  /* ════ 첫 화면 뒤에 만드는 것들 (startDeferred 가 순서대로 부른다) ════
+     함수 선언이라 여기서는 만들기만 하고, 부르는 건 첫 프레임 뒤다. 그때까지 castle·npcs·animals·kids 등은 null. */
+  /* ── 북쪽 길 끝 성문 "상호성" (castle.js) — 임금님 행차가 이리로 들어간다. 성벽은 물리 상자로 막는다 ──
+     행차(village)·의뢰(quests)·행사(pageant)·미니맵이 castle 값을 받으므로 그보다 먼저 만든다 */
+  async function loadCastle() {
+    const { createCastle } = await importLater('./castle.js');
     castle = createCastle({ THREE, scene, GLTFLoader, dracoLoader: draco, groundY, pathX, CANNON, world, getNight: () => night });
   }
   /* 마을 소품·성벽·가게 건물 — 걷는 손님·아이·동물이 뚫고 지나가지 않게 밀어낸다 */
@@ -1530,11 +1618,13 @@ async function initDrive() {
   let ridesRef = null;   // 탈것 바꾸기(rides)는 아래에서 만든다 — getRide 는 매 프레임 update 안에서만 불린다
   /* 차로 치면 넘어지고 화낸다 — 지금 탈것의 위치·방향·속도·크기. 같은 객체를 재사용한다 */
   const rideInfo = { x: 0, z: 0, heading: 0, halfX: 1.05, halfZ: 2.15, speed: 0, driving: false };
-  {
-    const { createNPCs, stallsFromStations, attachGrab } = await import('./npcs.js');
-    const { createEvents } = await import('./events.js');
-    const { createVillage } = await import('./village.js');
-    createNPCs({
+  /* ── 중세 손님들 — 숲길을 거닐다 포장마차 의자에 앉아 술을 마신다 (npcs.js) ──
+     손님이 오면 수배·행차·축제·행사(events/village/festival/pageant)를 이어서 만든다 (모두 손님을 배우로 쓴다).
+     의자 수치를 바꾸면 stalls.js 의 STOOL_* 도 같이 바꿀 것 */
+  async function loadPeople() {
+    const [{ createNPCs, stallsFromStations, attachGrab }, { createEvents }, { createVillage }, { createFestival }, { createPageant }] = await Promise.all([
+      importLater('./npcs.js'), importLater('./events.js'), importLater('./village.js'), importLater('./festival.js'), importLater('./pageant.js')]);
+    return createNPCs({
       THREE, scene, GLTFLoader,
       dracoLoader: draco,
       groundY, pathX,
@@ -1638,8 +1728,8 @@ async function initDrive() {
   }
 
   /* ── 돌아다니는 동물 19마리: 판다·곰·사슴·여우·토끼·양·멧돼지·강아지·고양이 (animals.js) ── */
-  {
-    const { createAnimals } = await import('./animals.js');
+  async function loadAnimals() {
+    const { createAnimals } = await importLater('./animals.js');
     animals = createAnimals({
       obstacles: propObstacles,
       THREE, scene, GLTFLoader, dracoLoader: draco, groundY, pathX,
@@ -1655,9 +1745,9 @@ async function initDrive() {
   }
 
   /* ── 아이들 7명: 술래잡기·오리 줄 따라오기·동물 쫓기·겨울 눈싸움, 밤엔 집으로 (kids.js). 맞지 않고 피한다 ── */
-  {
-    const { createKids } = await import('./kids.js');
-    createKids({ THREE, scene, GLTFLoader, dracoLoader: draco, groundY, pathX, obstacles: propObstacles,
+  async function loadKids() {
+    const { createKids } = await importLater('./kids.js');
+    return createKids({ THREE, scene, GLTFLoader, dracoLoader: draco, groundY, pathX, obstacles: propObstacles,
       bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
       stalls: stations.map(s => ({ x: s.group.position.x, z: s.group.position.z })),
       getPlayerPos: () => activePos(), isOnFoot: () => player.mode === 'onfoot',
@@ -2338,6 +2428,7 @@ async function initDrive() {
      직진만 해서는 아무것도 열리지 않고 매번 길 밖으로 빠져야 한다.
      고속도로 광고판처럼 지나가면서 차례로 뜨도록 도로 폭을 덮는 거리로 잡는다. */
   const ENTER_R = 9, LEAVE_R = 13;   // 길 위로 지나가면 안내가 뜨는 거리
+  const VIDEO_NEAR = 40;             // 게시판 영상(mp4)을 받기 시작하는 거리 — 처음부터 받으면 첫 화면이 늦어진다
 
   /* 지금 조종 중인 쪽(차 또는 캐릭터)의 위치 */
   const activePos = () => (player.mode === 'onfoot' ? person.position : car.position);
@@ -2425,7 +2516,7 @@ async function initDrive() {
   /* ── 선술집 — 빈 의자 옆에서 E로 앉고, 주문판에서 술을 시켜 마신다 (tavern.js) ── */
   {
     const { createTavern } = await import('./tavern.js');
-    const { stallsFromStations } = await import('./npcs.js');
+    const { stallsFromStations } = await import('./stalls.js');   // npcs.js(큰 파일)는 첫 화면 뒤라 작은 모듈에서
     tavern = createTavern({
       THREE, scene, camera, person,
       personClips: () => charClips,
@@ -2488,9 +2579,9 @@ async function initDrive() {
     });
   }
 
-  /* ── 의뢰 게시판과 퀘스트 11종 (quests.js) — 출발점 왼쪽 길가. 보상 은화는 선술집 지갑으로 ── */
-  {
-    const { createQuests } = await import('./quests.js');
+  /* ── 의뢰 게시판과 퀘스트 11종 (quests.js) — 출발점 왼쪽 길가. 보상 은화는 선술집 지갑으로 (첫 화면 뒤, 성 다음) ── */
+  async function loadQuests() {
+    const { createQuests } = await importLater('./quests.js');
     quests = createQuests({
       THREE, scene, camera, pathX, groundY,
       getPlayerPos: () => activePos(),
@@ -2504,7 +2595,9 @@ async function initDrive() {
     });
   }
 
-  /* ── 약초 마녀의 물약 가게(동쪽 숲 21,-24)와 떠돌이 상인 마차 — 물약·모자·망토 염색·애완 오리 (shop.js) ── */
+  /* ── 약초 마녀의 물약 가게(동쪽 숲 21,-24)와 떠돌이 상인 마차 — 물약·모자·망토 염색·애완 오리 (shop.js, 첫 화면 뒤) ── */
+  async function loadShop() {
+  const { createShop } = await importLater('./shop.js');
   shop = createShop({
     THREE, scene, camera, person, GLTFLoader, dracoLoader: draco, groundY, pathX,
     getPlayerPos: () => activePos(),
@@ -2514,10 +2607,11 @@ async function initDrive() {
     blocks: (x, z, r) => vprops.blocks(x, z, r),
     onOpen() { for (const k in keys) keys[k] = false; pSpeed = 0; speed = 0; if (weapons) weapons.holster(); },
   });
+  }
 
-  /* ── 미니맵(오른쪽 위, 클릭 = 북쪽 고정) + M 큰 지도 — 행사·퀘스트·상인 표시 (minimap.js) ── */
-  {
-    const { createMinimap } = await import('./minimap.js');
+  /* ── 미니맵(오른쪽 위, 클릭 = 북쪽 고정) + M 큰 지도 — 행사·퀘스트·상인 표시 (minimap.js, 첫 화면 뒤, 성 다음) ── */
+  async function loadMinimap() {
+    const { createMinimap } = await importLater('./minimap.js');
     minimap = createMinimap({
       THREE, pathX, world: WORLD, camera,
       bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
@@ -2534,9 +2628,10 @@ async function initDrive() {
     });
   }
 
-  /* ── 배경 소리: 바람·낙엽·개울·선술집 웅성거림·새·귀뚜라미·부엉이·개구리·발소리 (audio.js, 전부 합성음) ── */
-  const { createAudio } = await import('./audio.js');
-  const ambience = createAudio({
+  /* ── 배경 소리: 바람·낙엽·개울·선술집 웅성거림·새·귀뚜라미·부엉이·개구리·발소리 (audio.js, 전부 합성음, 첫 화면 뒤) ── */
+  async function loadAudio() {
+  const { createAudio } = await importLater('./audio.js');
+  ambience = createAudio({
     getPlayerPos: () => activePos(),
     getCamera: () => camera,
     getNight: () => night,
@@ -2551,6 +2646,7 @@ async function initDrive() {
     onFoot: () => player.mode === 'onfoot',
     pathX, roadHalf: WORLD.path.half, bridge: WORLD.bridge, stream: WORLD.stream,
   });
+  }
 
   /* 오른쪽 마우스를 누르고 있는 동안 어깨 너머로 살짝 줌 (떼면 돌아온다) */
   let zoomHeld = false, zoomK = 0;
@@ -2629,7 +2725,7 @@ async function initDrive() {
     if (village) village.update(dt, t);
     if (festival) festival.update(dt, t);
     if (pageant) pageant.update(dt, t);
-    ambience.update(dt, t);
+    if (ambience) ambience.update(dt, t);
     if (castle) castle.update(dt, t);
     vprops.update(dt, t);
     if (animals) animals.update(dt, t);
@@ -2655,6 +2751,7 @@ async function initDrive() {
       ang = Math.max(-1.2, Math.min(1.2, ang));   // 뒤돌아 수레를 등지지 않게 제한
       s.face.rotation.y += (ang - s.face.rotation.y) * Math.min(1, dt * 2.4);
       const d = Math.hypot(me.x - s.pos[0], me.z - s.pos[1]);
+      if (s.startVideo && d < VIDEO_NEAR) { s.startVideo(); s.startVideo = null; }   // 게시판 영상은 가까이 왔을 때 처음 받는다
       const pulse = d < ENTER_R + 6 ? 1 + Math.sin(t * 4) * 0.035 : 1;
       s.ring.scale.set(pulse, pulse, 1);
       s.label.position.y = s.labelY + Math.sin(t * 1.3 + s.phase) * 0.18;
@@ -2689,13 +2786,55 @@ async function initDrive() {
   };
   let started = false;
   performance.mark('drive-built');   // 로딩 시간 재기: 월드 구성 끝 (콘솔 performance.getEntriesByType('mark'))
+  /* 첫 화면 파일이 다 오면 → 늦게 쓸 모듈 파일을 받기 시작하고, 셰이더를 미리 (비동기로) 컴파일한 뒤 로딩 화면을 걷는다.
+     처음 방문(셰이더 캐시 없음)이면 첫 렌더에서 셰이더 수십 개를 컴파일하느라 화면이 2초쯤 멈췄다.
+     compileAsync 는 KHR_parallel_shader_compile 로 기다리는 동안 메인 스레드를 막지 않는다 (최대 2.5초만 기다린다) */
   function start() {
     if (started) return;
     started = true;
+    performance.mark('assets-ready');
+    for (const u of DEFERRED_MODULES) import(u).catch(() => {});   // 파일만 미리 받는다 (만드는 건 첫 프레임 뒤)
+    const warm = renderer.compileAsync ? renderer.compileAsync(scene, camera).catch(() => {}) : Promise.resolve();
+    Promise.race([warm, new Promise(r => setTimeout(r, 2500))]).then(reveal);
+  }
+  function reveal() {
     performance.mark('world-ready');   // 로딩 화면이 걷히고 첫 프레임
     bar.style.width = '100%'; pctEl.textContent = '100%';
     setTimeout(() => load.classList.add('done'), 260);
     loop();
+    /* 첫 프레임이 실제로 그려진 다음(rAF 두 번) 나머지를 만들기 시작한다.
+       탭이 뒤에 있으면 rAF 가 돌지 않으므로 1초 타이머로도 시작한다 (뒤 탭에서도 받아 두게) */
+    let kicked = false;
+    const kick = () => {
+      if (kicked) return;
+      kicked = true;
+      performance.mark('first-frame');
+      startDeferred().catch(e => console.warn('[deferred]', e));
+    };
+    requestAnimationFrame(() => requestAnimationFrame(kick));
+    setTimeout(kick, 1000);
+  }
+
+  /* ── 첫 화면 뒤에 불러오기 ──
+     성 → (손님·수배·행차·축제·행사 / 동물 / 아이들 / 의뢰 게시판 / 가게 / 미니맵 / 배경 소리).
+     모듈 파일은 start() 에서 한꺼번에 받기 시작하고, 만드는 건 한 번씩 쉬어 가며 하나씩 해서 화면이 덜 끊기게 한다.
+     손님·동물·아이 모델은 각 모듈이 비동기로 받아 도착하는 대로 나타난다. */
+  const idle = () => new Promise(r => (window.requestIdleCallback ? requestIdleCallback(() => r(), { timeout: 200 }) : setTimeout(r, 16)));
+  async function startDeferred() {
+    openLaterGate();   // 마을 소품·돌다리 모델 다운로드 시작 (LaterGLTFLoader)
+    const run = async (name, fn) => { await idle(); performance.mark('defer:' + name); try { await fn(); } catch (e) { console.warn(`[${name}]`, e); } performance.mark('defer:' + name + ':done'); };
+    await run('castle', loadCastle);                         // 행차·의뢰·행사·미니맵이 castle 값을 받는다
+    const people = run('npcs', loadPeople);                  // 모델이 오기를 기다리지 않고 다음으로
+    await idle();
+    const beasts = run('animals', loadAnimals);
+    await idle();
+    const kidsP = run('kids', loadKids);
+    await run('quests', loadQuests);
+    await run('shop', loadShop);
+    await run('minimap', loadMinimap);
+    await run('audio', loadAudio);
+    await Promise.all([people, beasts, kidsP]);
+    performance.mark('deferred-done');
   }
   manager.onLoad = start;
   if (mgrPending === 0) start();   // 이미 다 받았으면 기다리지 않는다 (예전엔 여기서 4초를 헛기다렸다)

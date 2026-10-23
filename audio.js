@@ -494,6 +494,8 @@ export function createAudio({
     window.addEventListener('pointerdown', unlock, true);
     window.addEventListener('keydown', unlock, true);
     document.addEventListener('visibilitychange', onVis);
+    /* 첫 화면 뒤에 늦게 만들어지므로, 그 전에 이미 클릭·키 입력이 있었다면(인트로 등) 바로 시작한다 */
+    if (navigator.userActivation && navigator.userActivation.hasBeenActive) setTimeout(unlock, 0);
   }
 
   /* ── 음악 버튼 옆 작은 스피커 버튼 ── */

@@ -131,7 +131,9 @@
       캔버스(renderer.domElement)에만 리스너를 달고 stopPropagation 을 하지 않으므로 window 의
       pointerdown(음악 첫 제스처)은 그대로 받는다. 버튼·패널 같은 UI 위에서는 캔버스가 이벤트를 받지 않는다.
    ════════════════════════════════════════════════════════════════════ */
-import { shareSkeleton, flatSkinnedLOD } from './perf.js';   // 성능: 부위끼리 뼈대 공유 + 먼 거리 한 덩어리 LOD
+import { shareSkeleton, flatSkinnedLOD } from './perf.js';
+import { stallsFromStations, STOOL_TABLE_Z, STOOL_RING, STOOL_H, STOOL_BASE_Y, BAR_SPOT, BAR_LOCAL_X, BAR_LOCAL_Z } from './stalls.js';   // 의자·카운터 자리 (작은 모듈)
+import { loadGLTFShared } from './gltf-cache.js';   // 같은 glb 를 다른 모듈(shop.js)과 한 번만 받는다   // 성능: 부위끼리 뼈대 공유 + 먼 거리 한 덩어리 LOD
 
 
 /* 10명 (남 6, 여 4). 없는 파일은 경고만 남기고 건너뛴다 */
@@ -155,8 +157,7 @@ export const ACTOR_MODELS = [
 ];
 const DRACO_CDN = 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/';
 
-/* portfolio.js 의자 블록과 같은 값 */
-const STOOL_TABLE_Z = 4.6, STOOL_RING = 1.75, STOOL_H = 0.42, STOOL_BASE_Y = 0.01;
+/* portfolio.js 의자 블록과 같은 값 — stalls.js 에 있다 */
 
 const MODEL_H = 1.8, CHAR_H = 1.95, S = CHAR_H / MODEL_H;
 const HIP_SIT = 0.42;            // Sit 포즈 엉덩이 높이 (모델 단위)
@@ -197,14 +198,6 @@ const ALARM_R = { shot: 15, bomb: 24, explosion: 32 };   // 소동 종류별 기
 const FLEE_SPEED = 4.5;
 const WATCH_R = 12;              // 이 안에서 누가 맞으면 구경꾼이 반응
 const BUBBLE_MAX = 12, BUBBLE_DIST = 35;
-const BAR_LOCAL_X = 0, BAR_LOCAL_Z = 0.3;    // 술집 주인 자리 기본값 (가판대 그룹 지역좌표, 앞 +Z = 길 쪽)
-/* 부스 종류별 술집 주인 자리 (가판대 그룹 지역좌표 = 부스 glb 좌표, 그룹 크기 0.62 적용 전).
-   부스 glb 를 헤드리스 Blender 로 위에서 훑어(벽·카운터에서 0.22 m 떨어진 빈 바닥, 지붕 아래) 고른
-   카운터 바로 뒤·건물 안 자리. 부스 모양이 바뀌면 다시 잰다 */
-const BAR_SPOT = {   // y = 부스 바닥판 높이 (없으면 0 = 가판대 그룹 바닥)
-  tudor: { x: 0, z: 0.35, y: 0.186 }, norse: { x: 0, z: 0.6 }, bavarian: { x: 0, z: 0.45, y: 0.323 }, venta: { x: 0.4, z: 0 },
-  tent: { x: 0, z: 0.45 }, flemish: { x: -2.0, z: 0 }, osteria: { x: -0.5, z: -0.45, y: 0.194 },
-};
 const MIX_FAR = 35;              // 이보다 먼 손님은 애니메이션을 0.15초마다만 갱신
 const SHADOW_FAR = 30;           // 이보다 먼 손님은 그림자를 끈다
 const LOD_FAR = 24;              // 이보다 먼 손님은 부위 8개 대신 정점색 한 덩어리(그리기 호출 1개)로 그린다 (perf.js)
@@ -239,36 +232,8 @@ const LIE_Y = 0.2;               // 누웠을 때 몸 중심 높이 (대체 동�
 const THROW_MAX = 14, THROW_UP = 2.5;
 const HIST = 8;                  // 던지기 속도 계산용 최근 위치 기록 개수
 
-/* ── 스테이션 → stalls 배열 ── */
-export function stallsFromStations(stations, { THREE, toyBlocks = null } = {}) {
-  const v = new THREE.Vector3();
-  const out = [];
-  for (const st of stations) {
-    const g = st.group;
-    g.updateMatrixWorld(true);
-    g.localToWorld(v.set(0, 0, STOOL_TABLE_Z));
-    const stall = { x: v.x, z: v.z, rotY: g.rotation.y, seats: [] };
-    const bs = BAR_SPOT[st.style] || { x: BAR_LOCAL_X, z: BAR_LOCAL_Z };
-    g.localToWorld(v.set(bs.x, bs.y || 0, bs.z));
-    stall.bar = { x: v.x, z: v.z, y: v.y, rotY: Math.atan2(stall.x - v.x, stall.z - v.z) };   // 카운터 너머 테이블(의자) 쪽을 본다
-    for (let k = 0; k < 4; k++) {
-      const a = k * Math.PI / 2 + Math.PI / 4;
-      g.localToWorld(v.set(Math.cos(a) * STOOL_RING, 0, STOOL_TABLE_Z + Math.sin(a) * STOOL_RING));
-      const seat = { x: v.x, z: v.z, y: STOOL_BASE_Y, rotY: Math.atan2(stall.x - v.x, stall.z - v.z), mesh: null };
-      if (toyBlocks) {
-        for (const b of toyBlocks) {
-          const h = b.home;
-          if (h && Math.abs(h.x - v.x) < 0.05 && Math.abs(h.z - v.z) < 0.05) {
-            seat.mesh = b.mesh; seat.y = h.y - STOOL_H / 2; break;
-          }
-        }
-      }
-      stall.seats.push(seat);
-    }
-    out.push(stall);
-  }
-  return out;
-}
+/* 스테이션 → stalls 배열: stalls.js 로 옮겼다 (선술집(tavern.js)이 첫 화면 전에 이 큰 파일 없이 쓰게). 그대로 다시 내보낸다 */
+export { stallsFromStations };
 
 /* ── 메인 ── */
 export async function createNPCs({
@@ -290,7 +255,7 @@ export async function createNPCs({
   const loader = new GLTFLoader();
   loader.setDRACOLoader(draco);
 
-  const loadAll = (list, warn) => Promise.all(list.map(m => loader.loadAsync(m.file).then(g => { g.gender = m.gender; g.file = m.file; return g; }).catch(() => {
+  const loadAll = (list, warn) => Promise.all(list.map(m => loadGLTFShared(loader, m.file).then(g => ({ ...g, gender: m.gender, file: m.file }))   /* 공용 캐시: 원본에 덧붙이지 않고 감싼다 */.catch(() => {
     if (warn) console.warn('[npcs] 모델 없음, 건너뜀:', m.file); else console.info('[npcs] 배우 모델 없음 → 대체 모델 사용:', m.file);
     return null;
   })));

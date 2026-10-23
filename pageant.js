@@ -70,16 +70,9 @@ export const PAGEANT_SITES = {
   trebuchet: { x: 28, z: -15, fx: 37.5, fz: -26.5, name: '동쪽 들판(마녀 오두막 동쪽)' },
   tug: { x: -30, z: 69, name: '서쪽 풀밭' },
 };
-/* portfolio.js clearTrees(gltf.scene, PAGEANT_CLEAR.spots, PAGEANT_CLEAR.r) */
-export const PAGEANT_CLEAR = {
-  r: 4.2,
-  spots: [
-    [15, 48], [18.5, 48], [22, 48], [25.5, 48], [20, 44.5], [20, 51.5],
-    [-15.5, 50], [-12, 51],
-    [28, -15], [25.5, -13.5], [30.5, -16], [31, -19.5], [34, -22.5], [37.5, -26.5], [37.5, -23], [35, -28],
-    [-36, 69], [-33, 69], [-30, 69], [-27, 69], [-24, 69], [-30, 66], [-30, 72],
-  ],
-};
+/* portfolio.js clearTrees(gltf.scene, PAGEANT_CLEAR.spots, PAGEANT_CLEAR.r) — 첫 화면 전에 읽으려고 clear-spots.js 로 옮겼다 */
+import { PAGEANT_CLEAR } from './clear-spots.js';
+export { PAGEANT_CLEAR };
 
 const D2R = Math.PI / 180;
 const FIRST = [55, 95], GAP = [90, 150], SITE_NEAR = 100;

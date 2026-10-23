@@ -24,8 +24,12 @@ export function createBridge({ THREE, scene, GLTFLoader, dracoLoader, world = nu
   const lampMats = [];
   let glow = 0.4, disposed = false, loaded = null;
 
+  /* 옛 나무다리는 새 돌다리 모델이 도착한 뒤에 숨긴다 (모델을 첫 화면 뒤에 받으므로 그 사이 다리가 비지 않게) */
+  let oldWorld = null;
   function hideOld(worldScene) {
-    const old = worldScene?.getObjectByName('EX_Bridge');
+    oldWorld = worldScene || oldWorld;
+    if (!loaded) return;
+    const old = oldWorld?.getObjectByName('EX_Bridge');
     if (old) old.visible = false;
   }
   if (world) hideOld(world);
@@ -51,6 +55,7 @@ export function createBridge({ THREE, scene, GLTFLoader, dracoLoader, world = nu
     });
     applyGlow();
     group.add(loaded);
+    hideOld(null);
     addStaticLOD(THREE, loaded, { dist: 45 });   // 성능: 멀면 부위 20여 개 대신 정점색 한 덩어리 (등불 유리·불꽃은 그대로)
   }, undefined, err => console.warn('[bridge] load failed', err));
 
