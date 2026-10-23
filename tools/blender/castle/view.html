@@ -1,0 +1,50 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>castle view</title>
+<style>html,body{margin:0;background:#000;overflow:hidden}</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script></head><body>
+<script>addEventListener("error",e=>document.title="ERR "+e.message);addEventListener("unhandledrejection",e=>document.title="REJ "+(e.reason&&e.reason.message));</script>
+<script type="module">
+// 성문 단독 확인 페이지: /tools/blender/castle/view.html?open=1&cam=near|far|night
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { createCastle } from '../../../castle.js';
+const q = new URLSearchParams(location.search);
+const night = q.get('cam') === 'night' ? 1 : 0;
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight); renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(night ? 0x0c0c20 : 0xf0a070); scene.fog = new THREE.Fog(scene.background, 30, 110);
+scene.add(new THREE.HemisphereLight(0xffb48a, 0x1a1030, night ? 0.15 : 0.8));
+const sun = new THREE.DirectionalLight(0xffa060, night ? 0.1 : 1.5); sun.position.set(-40, 30, -40); sun.castShadow = true;
+Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 40, bottom: -40 }); sun.target.position.set(0, 0, -80); scene.add(sun, sun.target);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), new THREE.MeshStandardMaterial({ color: 0x7a4a22 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+const pathX = z => 3.08 * Math.sin(-0.04285714285714286 * z);
+const road = new THREE.Mesh(new THREE.PlaneGeometry(5, 40), new THREE.MeshStandardMaterial({ color: 0x9a8060 }));
+road.rotation.x = -Math.PI / 2; road.position.set(pathX(-70), 0.02, -65); scene.add(road);
+const d = new DRACOLoader(); d.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/');
+const castle = createCastle({ THREE, scene, GLTFLoader, dracoLoader: d, pathX, groundY: () => 0.04, getNight: () => night, url: '../../../models/props/castle-gate.glb' });
+const cam = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.5, 500);
+const c = q.get('cam') || 'far';
+if (c === 'near') { cam.position.set(2.5, 2.2, -70); cam.lookAt(-1, 3.5, -82); }
+else { cam.position.set(1.5, 6, -55); cam.lookAt(-0.9, 6, -80); }
+document.title = "LOADING";
+await castle.ready;
+document.title = "LOADED";
+if (q.get('open')) castle.openGate(0);
+// 문 앞에서 사람 크기 확인용 기둥(1.8 m)
+const man = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1.8), new THREE.MeshStandardMaterial({ color: 0x2244ff }));
+const e = castle.gateEntry(0, +(q.get('depth') || 3)); man.position.set(e.x, 0.9, e.z); scene.add(man);
+let t = 0;
+for (let i = 0; i < 200; i++) { t += 1 / 60; castle.update(1 / 60, t); }
+(function loop() { t += 1 / 60; castle.update(1 / 60, t); renderer.render(scene, cam); requestAnimationFrame(loop); })();
+document.title = 'READY ' + JSON.stringify(window.__castle.state) + ' blocks(front)=' + castle.blocks(-0.9, -79.5, 0.3) + ' blocks(door)=' + castle.blocks(-0.9, -81, 0.3) + ' wall=' + castle.blocks(10, -82, 0.3);
+</script></body></html>

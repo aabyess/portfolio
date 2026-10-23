@@ -215,7 +215,7 @@ const PROJECTS = [
       { src: 'images/gurandi-title_menu.jpg', cap: '타이틀 · 혼자 하기 / 같이 하기' }
     ],
     repo: 'https://github.com/aabyess/GuRandi-AI-Dev',
-    pos: [-4.6, -10.5]
+    pos: [4.2, 42]   // AI 구역을 맨 앞으로: 첫 가판대(놀러온나, 길 왼쪽)의 길 건너편. 연락처 표지판 줄(z 48~67)보다 아래
   }
 ];
 
@@ -297,7 +297,8 @@ const listBlock = (title, items, cls = '', fold = 0) => items && items.length
 
 /* ════════════════════════════════════════════════════════════
    배경음악 — 유튜브 공식 플레이어(IFrame API)로 재생한다.
-   브라우저는 사용자가 한 번 조작하기 전엔 소리를 막으므로 첫 클릭/키 입력에 시작한다.
+   인트로부터 바로 재생을 시도하고, 브라우저가 소리 자동 재생을 막으면
+   첫 클릭/키 입력(인트로 중 포함)에 다시 튼다.
    끄면 멈추고 카드도 숨긴다. 문서 뷰로 가면 멈추고 게임으로 돌아오면 다시 튼다.
    ════════════════════════════════════════════════════════════ */
 function createMusic() {
@@ -306,7 +307,7 @@ function createMusic() {
   if (!btn || !card) return null;
   let want = true;
   try { want = localStorage.getItem(KEY) !== 'off'; } catch { /* 저장소가 막혀도 기본은 켜짐 */ }
-  let player = null, ready = false, started = false;
+  let player = null, ready = false, started = true;   // 조작을 기다리지 않고 바로 재생을 시도한다
 
   const api = () => {
     if (document.getElementById('yt-iframe-api')) return;
@@ -314,7 +315,10 @@ function createMusic() {
       player = new YT.Player('g-music-player', {
         width: 200, height: 200, videoId: VIDEO,
         playerVars: { controls: 0, start: 7, loop: 1, playlist: VIDEO, playsinline: 1, rel: 0, modestbranding: 1 },
-        events: { onReady: () => { ready = true; player.setVolume(35); sync(); } }
+        events: { onReady: () => {
+          ready = true; player.setVolume(35); sync();
+          if (navigator.userActivation?.hasBeenActive) start();   // 인트로 중에 이미 클릭·키 입력이 있었다면 바로 튼다
+        } }
       });
     };
     const sc = document.createElement('script');
@@ -331,10 +335,21 @@ function createMusic() {
     if (!ready) return;
     if (on) player.playVideo(); else player.pauseVideo();
   }
+  /* 자동 재생이 막혔다면 사용자의 첫 조작 순간에 다시 튼다.
+     유튜브 플레이어는 첫 조작의 playVideo()를 무시할 때가 있어서 0.8초 뒤 확인하고 최대 3번까지 다시 부른다 */
+  let retry = 0;
+  const canPlay = () => want && ready && document.body.dataset.view === 'drive';
+  const playing = () => player.getPlayerState() === YT.PlayerState.PLAYING;
   function start() {
-    if (started || !want || document.body.dataset.view !== 'drive') return;
-    started = true;
-    sync();
+    if (!canPlay() || playing()) return;
+    clearTimeout(retry);
+    let tries = 0;
+    const attempt = () => {
+      if (!canPlay() || playing()) return;
+      player.playVideo();
+      if (++tries < 3) retry = setTimeout(attempt, 800);
+    };
+    attempt();
   }
   btn.addEventListener('click', e => {
     e.stopPropagation();
@@ -345,6 +360,7 @@ function createMusic() {
   });
   addEventListener('pointerdown', start);
   addEventListener('keydown', start);
+  addEventListener('portfolio:intro-gesture', start);   // 인트로는 키 입력을 가로채므로 따로 알려 준다
   api();
   return { sync };
 }
@@ -498,7 +514,7 @@ const WHEEL_SPEC = [
 
 /* 캐릭터 모델. null이면 박스로 조립한 기본 캐릭터를 쓴다.
    리깅된 .glb를 넣으면 애니메이션(idle/run)을 자동으로 찾아 쓴다. */
-const CHAR_MODEL_URL = 'models/person.glb';   // Quaternius Casual Character (CC0)
+const CHAR_MODEL_URL = 'models/player.glb';   // 상호랜드 왕자 (tools/blender/player, 뼈·동작은 Quaternius person.glb 그대로)
 const CHAR_HEIGHT = 1.95;   // 월드 기준 키. glb도 여기에 맞춰 크기를 맞춘다.
 
 let driveReady = false;
@@ -533,7 +549,7 @@ async function initDrive() {
      게시판이 도로 좌우에 번갈아 선다. 경계는 원이 아니라 사각형이다. */
   const CAR_LEN = 4.2, PAD_R = 7.5;
   const ROAD_HALF = 9;                                   // 포장도로 반폭
-  const BOUND = { x: 39, zMin: -39, zMax: 39 };          // 가을 숲 월드(84×84) 안
+  const BOUND = { x: 39, zMin: -81, zMax: 81 };          // 가을 숲 월드(84×168) 안
 
   const NEON_PINK = 0xff3d9a, NEON_CYAN = 0x2de2ff, SUN_WARM = 0xff8c42;
 
@@ -557,14 +573,16 @@ async function initDrive() {
      웹에서 버거운 풀·낙엽·바람은 여기서 가볍게 다시 만든다. */
   const WORLD = await (await fetch('models/autumn-world.json')).json();
   const GRID = WORLD.grid;
+  /* 월드는 길 방향(z)으로 더 길다. 예전 정사각형 JSON(n, half)도 그대로 읽는다 */
+  const GX = GRID.nx ?? GRID.n, GZ = GRID.nz ?? GRID.n;
+  const HX = GRID.halfX ?? GRID.half, HZ = GRID.halfZ ?? GRID.half;
   const pathX = z => WORLD.path.amp * Math.sin(-WORLD.path.k * z);
   /* Blender 격자(위가 +Y)를 웹 좌표(-Z가 앞)로 읽는다 */
   function heightAt(x, z) {
-    const n = GRID.n;
-    const fx = Math.min(n - 1.001, Math.max(0, (x + GRID.half) / GRID.step));
-    const fy = Math.min(n - 1.001, Math.max(0, (-z + GRID.half) / GRID.step));
+    const fx = Math.min(GX - 1.001, Math.max(0, (x + HX) / GRID.step));
+    const fy = Math.min(GZ - 1.001, Math.max(0, (-z + HZ) / GRID.step));
     const ix = Math.floor(fx), iy = Math.floor(fy), tx = fx - ix, ty = fy - iy;
-    const h = (i, j) => GRID.h[j * n + i];
+    const h = (i, j) => GRID.h[j * GX + i];
     return (h(ix, iy) * (1 - tx) + h(ix + 1, iy) * tx) * (1 - ty) + (h(ix, iy + 1) * (1 - tx) + h(ix + 1, iy + 1) * tx) * ty;
   }
   function bridgeY(x, z) {
@@ -582,73 +600,54 @@ async function initDrive() {
 
   const timeU = { value: 0 };   // 바람·물결 셰이더 공용 시간
 
-  /* ── 하늘 · 안개 · 시간 흐름 ──
-     약 2분 30초에 한 바퀴: 저녁 → 깊은 밤 → 다시 저녁. night(0~1)에 맞춰 하늘·안개·빛을 섞는다. */
+  /* ── 하늘 · 안개 · 하루 (sky.js) ──
+     약 3분 30초에 하루: 새벽 → 한낮 → 황금빛 저녁 → 노을 → 밤. 하늘 돔·별·해·달·안개·빛을 sky.js가 맡는다.
+     계절(seasons.js)이 그 위에 덧칠하므로 step()에서 updateDayNight 다음에 seasons.update. */
   scene.fog = new THREE.Fog(0x2a1a33, 26, 100);
-  const C = h => new THREE.Color(h);
-  const DUSK  = { top: C(0x0e0a22), mid: C(0x4f2546), hor: C(0xe0844a), fog: C(0x2a1a33), hemi: 0.7,  sun: 1.35, fill: 0.45, exp: 1.1 };
-  const NIGHT = { top: C(0x03040e), mid: C(0x0c1430), hor: C(0x2a2048), fog: C(0x0b0d1c), hemi: 0.32, sun: 0.0,  fill: 0.6,  exp: 1.0 };
-  const skyU = { top: { value: DUSK.top.clone() }, mid: { value: DUSK.mid.clone() }, hor: { value: DUSK.hor.clone() } };
-  scene.add(new THREE.Mesh(new THREE.SphereGeometry(320, 32, 20), new THREE.ShaderMaterial({
-    uniforms: skyU, side: THREE.BackSide, depthWrite: false, fog: false,
-    vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-    fragmentShader: `uniform vec3 top; uniform vec3 mid; uniform vec3 hor; varying vec3 vP;
-      void main(){ float h = clamp(vP.y, 0.0, 1.0);
-        vec3 c = mix(hor, mid, smoothstep(0.0, 0.18, h)); c = mix(c, top, smoothstep(0.18, 0.6, h));
-        gl_FragColor = vec4(c, 1.0); }`
-  })));
-  /* 밤에만 보이는 별 */
-  const stars = (() => {
-    const N = 900, a = new Float32Array(N * 3);
-    for (let i = 0; i < N; i++) {
-      const th = Math.random() * Math.PI * 2, ph = Math.acos(0.15 + Math.random() * 0.85);
-      a.set([Math.sin(ph) * Math.cos(th) * 300, Math.cos(ph) * 300, Math.sin(ph) * Math.sin(th) * 300], i * 3);
-    }
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(a, 3));
-    const m = new THREE.PointsMaterial({ color: 0xffffff, size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false });
-    scene.add(new THREE.Points(g, m));
-    return m;
-  })();
 
   /* ── 조명 ── */
-  const hemi = new THREE.HemisphereLight(0xffb48a, 0x1a1030, DUSK.hemi);
+  const hemi = new THREE.HemisphereLight(0xffb48a, 0x1a1030, 0.7);
   scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xff9050, DUSK.sun);   // 지평선에 걸린 마지막 햇빛
-  sun.position.set(-40, 16, 34);
+  const sun = new THREE.DirectionalLight(0xff9050, 1.35);   // 낮엔 해, 밤엔 달 (sky.js가 방향·색을 바꾼다)
+  /* 월드가 길어서 그림자 상자를 플레이어 주변에만 두고 따라다니게 한다 (아래 followSun). 방향은 sky.js가 매 프레임 정한다 */
+  const SUN_OFFSET = new THREE.Vector3(-40, 16, 34);
+  sun.position.copy(SUN_OFFSET);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -55, right: 55, top: 55, bottom: -55, near: 1, far: 160 });
   sun.shadow.bias = -0.0008; sun.shadow.normalBias = 0.04;
-  scene.add(sun);
-  const fill = new THREE.DirectionalLight(0x7088ff, DUSK.fill);   // 푸른 달빛
+  scene.add(sun, sun.target);
+  const followSun = (x, z) => { sun.target.position.set(x, 0, z); sun.position.set(x + SUN_OFFSET.x, SUN_OFFSET.y, z + SUN_OFFSET.z); };
+  const fill = new THREE.DirectionalLight(0x7088ff, 0.45);   // 푸른 보조광
   fill.position.set(40, 20, -30);
   scene.add(fill);
 
+  const { createSky } = await import('./sky.js');
+  const sky = createSky({ THREE, scene, renderer, hemi, sun, fill, sunOffset: SUN_OFFSET });
+  const skyU = sky.skyU;
+
   /* 선술집 불빛과 차 헤드라이트는 밤이 깊을수록 밝아진다 (아래에서 채운다) */
   const nightGlow = { lights: [], lanterns: [], bulbs: [], heads: [] };
-  const DAY_PERIOD = 150;
   let night = 0;
-  function updateDayNight(t) {
-    night = 0.5 - 0.5 * Math.cos(t / DAY_PERIOD * Math.PI * 2);
+  function updateDayNight(dt) {
+    sky.update(dt);
+    night = sky.night;
     const k = night;
-    skyU.top.value.copy(DUSK.top).lerp(NIGHT.top, k);
-    skyU.mid.value.copy(DUSK.mid).lerp(NIGHT.mid, k);
-    skyU.hor.value.copy(DUSK.hor).lerp(NIGHT.hor, k);
-    scene.fog.color.copy(DUSK.fog).lerp(NIGHT.fog, k);
-    hemi.intensity = DUSK.hemi + (NIGHT.hemi - DUSK.hemi) * k;
-    sun.intensity = DUSK.sun + (NIGHT.sun - DUSK.sun) * k;
-    fill.intensity = DUSK.fill + (NIGHT.fill - DUSK.fill) * k;
-    renderer.toneMappingExposure = DUSK.exp + (NIGHT.exp - DUSK.exp) * k;
-    stars.opacity = Math.max(0, (k - 0.35) / 0.65) * 0.9;
-    for (const l of nightGlow.lights) l.intensity = 12 + 14 * k;
-    for (const m of nightGlow.lanterns) m.emissiveIntensity = 1.1 + 1.0 * k;
-    for (const m of nightGlow.bulbs) m.color.setHex(0xffd98a).multiplyScalar(1.1 + 0.9 * k);
-    for (const h of nightGlow.heads) h.intensity = 12 + 28 * k;   // 밤에도 앞 블록이 하얗게 날아가지 않을 만큼만
+    for (const l of nightGlow.lights) l.intensity = 4 + 22 * k;
+    for (const m of nightGlow.lanterns) m.emissiveIntensity = 0.6 + 1.5 * k;
+    for (const m of nightGlow.bulbs) m.color.setHex(0xffd98a).multiplyScalar(0.8 + 1.2 * k);
+    for (const h of nightGlow.heads) h.intensity = 6 + 34 * k;   // 밤에도 앞 블록이 하얗게 날아가지 않을 만큼만
   }
+
+  /* ── 계절 (seasons.js) ──
+     약 1분마다 가을 → 겨울 → 봄 → 여름. 낮밤 위에 덧칠하므로 step()에서 updateDayNight 바로 다음에 부른다 */
+  const { createSeasons } = await import('./seasons.js');
+  const seasons = createSeasons({ THREE, scene, renderer, hemi, sun, skyU, sky, badge: document.getElementById('g-season') });
 
   /* 월드 바깥 바닥 — 지형 가장자리가 허공에 뜨지 않게 */
   {
     const outer = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), new THREE.MeshStandardMaterial({ color: 0x6e3412, roughness: 1 }));
+    seasons.addGround(outer.material);   // 계절: 바깥 바닥 색과 눈
     outer.rotation.x = -Math.PI / 2; outer.position.y = -0.6; outer.receiveShadow = true;
     scene.add(outer);
   }
@@ -705,8 +704,29 @@ async function initDrive() {
   const { DRACOLoader } = await import('three/addons/loaders/DRACOLoader.js');
   const draco = new DRACOLoader();
   draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/');
+  /* ── 마을 소품: 오두막 마을 두 곳·밭과 풍차·우물·분수·가로등·굴뚝 연기 (village-props.js) ── */
+  const { createVillageProps } = await import('./village-props.js');
+  const vprops = createVillageProps({ THREE, scene, GLTFLoader, dracoLoader: draco, groundY, heightAt, pathX,
+    roadHalf: WORLD.path.half, getNight: () => night, seasons, camera,
+    avoid: [{ x: pathX(57.4) - 4.6, z: 57.4, r: 2.5 }] });   // 의뢰 게시판 자리
   const worldLoader = new GLTFLoader(worldManager);
   worldLoader.setDRACOLoader(draco);
+  /* 장난감 블록·상호왕국 표지판 자리 (나무를 치우려고 월드 로딩 전에 정한다) */
+  const NAME_Z = WORLD.start.z - 12, ROW_Z = WORLD.start.z - 9.6, BLOCK_X = pathX(NAME_Z) + 15;
+  /* 상호랜드 표지판은 의뢰 게시판(quests.js 기본 자리: 길 왼쪽 z 57.4, 같은 방향) 바로 옆, 출발점 쪽에 나란히 선다 */
+  const KINGDOM_SIGN = (() => {
+    const bz = 57.4, bx = pathX(bz) - 4.6, rot = Math.PI / 2 - 0.45, gap = 3.5;   // quests.js 게시판 값과 같게
+    return { x: bx - Math.cos(rot) * gap, z: bz + Math.sin(rot) * gap, rot };
+  })();
+  const { PONDS } = await import('./fishing.js');   // 연못 자리의 나무는 치운다
+  const { CASTLE_CLEAR } = await import('./castle.js');   // 성문·성벽 자리의 나무도
+  const { FESTIVAL_CLEAR, createFestival } = await import('./festival.js');   // 창시합장·활터·마을 광장
+  const { SHOP_CLEAR, createShop } = await import('./shop.js');                // 물약 가게·상인 자리
+  const { PAGEANT_CLEAR, createPageant } = await import('./pageant.js');       // 연회·결혼식·등불·투석기·줄다리기 자리
+  let castle = null, animals = null, quests = null, kids = null, shop = null, minimap = null;   // 아래에서 만든다 (걷기·운전 충돌, 행차가 먼저 참조)
+  /* 개울 위 돌다리 (bridge.js) — 월드의 옛 나무다리(EX_Bridge)는 숨긴다. 높이 곡선은 bridgeY 그대로 */
+  const { createBridge } = await import('./bridge.js');
+  const bridge = createBridge({ THREE, scene, GLTFLoader, dracoLoader: draco, pathX, bridgeData: WORLD.bridge });
   worldLoader.load('models/autumn-world.glb', gltf => {
     gltf.scene.traverse(o => {
       if (!o.isMesh) return;
@@ -726,19 +746,29 @@ async function initDrive() {
       }
       if (o.name.includes('Water')) o.castShadow = false;
     });
+    seasons.attachWorld(gltf.scene);   // 계절: 잎·땅·길 색과 눈 쌓임 (addWind 다음에 붙여야 둘 다 산다)
     scene.add(gltf.scene);
+    bridge.hideOld(gltf.scene);
     clearTrees(gltf.scene, PROJECTS.filter(p => p.ai).map(p => p.pos), 7.5);
+    clearTrees(gltf.scene, PONDS.map(p => [p.x, p.z]), 6.2);
+    clearTrees(gltf.scene, [[BLOCK_X, (NAME_Z + ROW_Z) / 2]], 6);       // 장난감 블록 자리
+    clearTrees(gltf.scene, [[KINGDOM_SIGN.x, KINGDOM_SIGN.z]], 2.6);   // 상호랜드 표지판
+    clearTrees(gltf.scene, CASTLE_CLEAR.spots, CASTLE_CLEAR.r);         // 북쪽 성문
+    for (const g of vprops.clearGroups) clearTrees(gltf.scene, g.spots, g.r);   // 오두막·밭·풍차
+    clearTrees(gltf.scene, FESTIVAL_CLEAR.spots, FESTIVAL_CLEAR.r);              // 축제 자리
+    clearTrees(gltf.scene, SHOP_CLEAR.spots, SHOP_CLEAR.r);                      // 물약 가게·상인
+    clearTrees(gltf.scene, PAGEANT_CLEAR.spots, PAGEANT_CLEAR.r);                // 연회장·투석기·줄다리기
   });
 
   /* ── 풀 — 브루노 시몽 숲처럼 짧고 뾰족한 풀을 촘촘히 ──
      차나 사람이 지나간 자리는 눕고, 몇 초에 걸쳐 다시 일어난다.
      밟힌 정도는 월드를 덮는 128×128 텍스처(trail)에 적고 셰이더가 읽는다. */
-  const TRAIL_N = 128;
-  const trailData = new Uint8Array(TRAIL_N * TRAIL_N * 4);
-  const trailTex = new THREE.DataTexture(trailData, TRAIL_N, TRAIL_N, THREE.RGBAFormat);
+  const TRAIL_N = 128, TRAIL_NZ = Math.round(TRAIL_N * HZ / HX);   // 칸이 정사각형이 되게 z쪽을 늘린다
+  const trailData = new Uint8Array(TRAIL_N * TRAIL_NZ * 4);
+  const trailTex = new THREE.DataTexture(trailData, TRAIL_N, TRAIL_NZ, THREE.RGBAFormat);
   trailTex.magFilter = trailTex.minFilter = THREE.LinearFilter;
   trailTex.needsUpdate = true;
-  const trailCells = (x, z) => [Math.round((x + GRID.half) / (GRID.half * 2) * (TRAIL_N - 1)), Math.round((z + GRID.half) / (GRID.half * 2) * (TRAIL_N - 1))];
+  const trailCells = (x, z) => [Math.round((x + HX) / (HX * 2) * (TRAIL_N - 1)), Math.round((z + HZ) / (HZ * 2) * (TRAIL_NZ - 1))];
   let trailAcc = 0;
   /* 매 프레임: 전체를 조금씩 회복시키고(다시 자람), 지나가는 자리를 눕힌다 */
   function updateTrail(dt, stamps) {
@@ -746,9 +776,9 @@ async function initDrive() {
     const dec = Math.floor(trailAcc); trailAcc -= dec;
     if (dec) for (let i = 0; i < trailData.length; i += 4) { const v = trailData[i]; if (v) trailData[i] = v > dec ? v - dec : 0; }
     for (const [x, z, r] of stamps) {
-      const [cx, cz] = trailCells(x, z), rc = Math.ceil(r / (GRID.half * 2) * TRAIL_N);
+      const [cx, cz] = trailCells(x, z), rc = Math.ceil(r / (HX * 2) * TRAIL_N);
       for (let j = cz - rc; j <= cz + rc; j++) for (let i = cx - rc; i <= cx + rc; i++) {
-        if (i < 0 || j < 0 || i >= TRAIL_N || j >= TRAIL_N) continue;
+        if (i < 0 || j < 0 || i >= TRAIL_N || j >= TRAIL_NZ) continue;
         const d = Math.hypot(i - cx, j - cz) / rc;
         if (d > 1) continue;
         const k = (j * TRAIL_N + i) * 4, v = Math.round(255 * Math.min(1, (1 - d) * 1.6));
@@ -778,8 +808,10 @@ async function initDrive() {
     gm.onBeforeCompile = sh => {
       sh.uniforms.uTime = timeU;
       sh.uniforms.uTrail = { value: trailTex };
-      sh.uniforms.uHalf = { value: GRID.half };
-      sh.vertexShader = 'uniform float uTime; uniform sampler2D uTrail; uniform float uHalf;\nvarying float vH; varying float vPatch; varying float vPress;\n' +
+      sh.uniforms.uHalf = { value: new THREE.Vector2(HX, HZ) };
+      /* 계절: 풀 색(dry/lush)과 쌓인 눈(uSnow)은 seasons.js가 매 프레임 바꾼다 */
+      Object.assign(sh.uniforms, seasons.uniforms);
+      sh.vertexShader = 'uniform float uTime; uniform sampler2D uTrail; uniform vec2 uHalf; uniform float uSnow;\nvarying float vH; varying float vPatch; varying float vPress;\n' +
         sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
         vec4 gw = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
         vH = clamp(position.y / ${H.toFixed(2)}, 0.0, 1.0);
@@ -788,21 +820,25 @@ async function initDrive() {
         float press = texture2D(uTrail, (gw.xz + uHalf) / (uHalf * 2.0)).r;
         vPress = press;
         transformed.y *= 1.0 - press * 0.82;                       // 밟히면 눕는다
+        transformed.y *= 1.0 - uSnow * 0.5;                        // 눈에 묻혀 짧아진다
         float gs = sin(uTime*1.7 + gw.x*0.33 + gw.z*0.27)*0.55 + sin(uTime*2.9 + gw.x*0.8 - gw.z*0.45)*0.2 + 0.3;
         float bw = vH * vH * (1.0 - press);
         transformed.x += gs * bw * 0.22; transformed.z += gs * bw * 0.09;`);
-      sh.fragmentShader = 'varying float vH; varying float vPatch; varying float vPress;\n' + sh.fragmentShader.replace('#include <color_fragment>',
+      sh.fragmentShader = 'uniform vec3 uDry; uniform vec3 uLush; uniform float uSnow;\nvarying float vH; varying float vPatch; varying float vPress;\n' + sh.fragmentShader.replace('#include <color_fragment>',
         `#include <color_fragment>
-        vec3 dry = vec3(0.86, 0.55, 0.22), lush = vec3(0.62, 0.52, 0.18);
-        diffuseColor.rgb *= mix(dry, lush, vPatch) * 1.35;
-        diffuseColor.rgb *= mix(0.38, 1.12, vH) * (1.0 - vPress * 0.1);`);
+        diffuseColor.rgb *= mix(uDry, uLush, vPatch) * 1.35;
+        diffuseColor.rgb *= mix(0.38, 1.12, vH) * (1.0 - vPress * 0.1);
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.9, 0.97), uSnow * (0.35 + 0.6 * vH));   // 눈이 쌓이면 하얗게`);
     };
     const spots = [];
-    const n = GRID.n;
-    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-      if (GRID.mask[j * n + i] < 0.6) continue;
+    for (let j = 0; j < GZ; j++) for (let i = 0; i < GX; i++) {
+      if (GRID.mask[j * GX + i] < 0.6) continue;
       const cnt = 3 + (Math.random() < 0.5 ? 1 : 0);
-      for (let k = 0; k < cnt; k++) spots.push([-GRID.half + (i + Math.random() - .5) * GRID.step, GRID.half - (j + Math.random() - .5) * GRID.step]);
+      for (let k = 0; k < cnt; k++) {
+        const gx = -HX + (i + Math.random() - .5) * GRID.step, gz = HZ - (j + Math.random() - .5) * GRID.step;
+        if (vprops.noGrass(gx, gz)) continue;   // 집·밭 안에는 풀을 심지 않는다
+        spots.push([gx, gz]);
+      }
     }
     const grass = new THREE.InstancedMesh(tuft, gm, spots.length);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
@@ -831,6 +867,7 @@ async function initDrive() {
       mesh.setColorAt(i, cols[i % 4]);
     }
     scene.add(mesh);
+    seasons.attachLeaves(mesh);   // 계절: 겨울엔 그치고 봄엔 분홍 꽃잎으로 (보이는 개수 mesh.count를 seasons가 정한다)
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), one = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
     return (dt, t, cx, cz) => {
       st.forEach((l, i) => {
@@ -980,7 +1017,12 @@ async function initDrive() {
     const b = new THREE.Box3().setFromObject(model, true);
     const c = b.getCenter(new THREE.Vector3());
     model.position.x -= c.x; model.position.z -= c.z; model.position.y -= b.min.y;
-    model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    model.traverse(o => {
+      if (!o.isMesh) return;
+      o.castShadow = true; o.receiveShadow = true;
+      /* 양면 재질이면 안쪽 면이 겹쳐 캐릭터가 시커멓게 보인다 → 앞면만 (망토는 안감이 따로 있어 괜찮다) */
+      for (const m of [].concat(o.material)) if (m.side === THREE.DoubleSide) m.side = THREE.FrontSide;
+    });
 
     for (const child of [...person.children]) person.remove(child);
     person.add(model);
@@ -1025,6 +1067,7 @@ async function initDrive() {
      물리에 끌려가지 않는 '키네마틱' 몸체로 넣어 블록만 밀어낸다. R로 다시 쌓는다. */
   const CANNON = await import('cannon-es');
   const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -24, 0) });
+  vprops.addBodies(CANNON, world);   // 오두막·풍차·우물 등 고정 몸체
   world.allowSleep = true;
   world.defaultContactMaterial.friction = 0.42;
   world.defaultContactMaterial.restitution = 0.12;
@@ -1085,13 +1128,49 @@ async function initDrive() {
     mesh.position.set(x, y, z);
     return b;
   }
-  /* 출발점 바로 앞 숲길 위 */
-  const NAME_Z = WORLD.start.z - 7, ROW_Z = WORLD.start.z - 4.6;
+  /* 출발점 앞 길 오른쪽 풀밭 (길은 비워 두고, 연락처 조형물 너머에서 보이게) */
   const NAME = [['최', '#ff6b3d'], ['상', '#1fa59c'], ['호', '#e8466e']];
-  NAME.forEach(([ch, c], i) => toyBlock(ch, 2.1, 2.1, 1.05, pathX(NAME_Z) + (i - 1) * 2.35, 1.05, NAME_Z, c, 3));
+  NAME.forEach(([ch, c], i) => toyBlock(ch, 2.1, 2.1, 1.05, BLOCK_X + (i - 1) * 2.35, 1.05, NAME_Z, c, 3));
   const SMALL = ['#f4a53c', '#3a9fc4', '#e8466e', '#2bb38f', '#8a6ad8'];
-  /* 작은 큐브 한 줄: FULLSTACK · DEV (가운데 한 칸 띄움) */
-  [...'FULLSTACK DEV'].forEach((ch, i) => { if (ch !== ' ') toyBlock(ch, 0.74, 0.74, 0.74, pathX(ROW_Z) + (i - 6) * 0.8, 0.37, ROW_Z, SMALL[i % 5], 0.6); });
+  /* 작은 큐브 한 줄: AI · ENGINEER (가운데 한 칸 띄움, 글자 수에 맞춰 가운데 정렬) */
+  const ROW_TEXT = 'AI ENGINEER', ROW_MID = (ROW_TEXT.length - 1) / 2;
+  [...ROW_TEXT].forEach((ch, i) => { if (ch !== ' ') toyBlock(ch, 0.74, 0.74, 0.74, BLOCK_X + (i - ROW_MID) * 0.8, 0.37, ROW_Z, SMALL[i % 5], 0.6); });
+
+  /* ── 길 왼쪽 나무 표지판 "상호랜드" (의뢰 게시판과 나란히) ── */
+  {
+    const g = new THREE.Group();
+    const wood = new THREE.MeshStandardMaterial({ color: 0x5a3a22, roughness: .85 });
+    for (const sx of [-1.15, 1.15]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 2.9, 8), wood);
+      post.position.set(sx, 1.45, 0); post.castShadow = true; g.add(post);
+    }
+    const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 420;
+    const c = cv.getContext('2d');
+    const grd = c.createLinearGradient(0, 0, 0, 420); grd.addColorStop(0, '#b07a45'); grd.addColorStop(1, '#8a5a2e');
+    c.fillStyle = grd; c.fillRect(0, 0, 1024, 420);
+    c.strokeStyle = 'rgba(60,32,14,.35)'; c.lineWidth = 3;                       // 나뭇결
+    for (let y = 18; y < 420; y += 26) { c.beginPath(); c.moveTo(0, y); c.bezierCurveTo(300, y + 8, 700, y - 8, 1024, y + 4); c.stroke(); }
+    c.strokeStyle = '#4a2a14'; c.lineWidth = 18; c.strokeRect(9, 9, 1006, 402);
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.font = '900 168px Pretendard, system-ui, sans-serif';
+    c.fillStyle = 'rgba(40,20,8,.55)'; c.fillText('상호랜드', 518, 172);
+    c.fillStyle = '#ffe2a8'; c.fillText('상호랜드', 512, 164);
+    c.font = '700 50px Pretendard, system-ui, sans-serif'; c.fillStyle = '#fff1d0';
+    c.fillText('♔ 임금님 최상호의 나라에 오신 걸 환영합니다', 512, 318);
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    const board = new THREE.Mesh(new THREE.BoxGeometry(2.9, 1.2, 0.12),
+      [wood, wood, wood, wood, new THREE.MeshStandardMaterial({ map: tex, roughness: .8 }), new THREE.MeshStandardMaterial({ map: tex, roughness: .8 })]);
+    board.position.y = 2.15; board.castShadow = true; g.add(board);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.1, 0.42), wood);   // 작은 처마
+    roof.position.y = 2.82; roof.castShadow = true; g.add(roof);
+    g.position.set(KINGDOM_SIGN.x, Math.max(0, heightAt(KINGDOM_SIGN.x, KINGDOM_SIGN.z)), KINGDOM_SIGN.z);
+    g.rotation.y = KINGDOM_SIGN.rot;                                              // 게시판과 같은 쪽(길·출발점)을 본다
+    scene.add(g);
+    const sb = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(1.35, 1.4, 0.15)) });
+    sb.position.set(g.position.x, g.position.y + 1.4, g.position.z);
+    sb.quaternion.setFromEuler(0, g.rotation.y, 0);
+    world.addBody(sb);
+  }
 
   function restackBlocks() {
     /* 차나 캐릭터가 블록 자리에 서 있으면 다시 쌓는 순간 블록이 튕겨 나간다. 출발점으로 옮긴다 */
@@ -1113,7 +1192,7 @@ async function initDrive() {
     prevCar.copy(car.position);
     carBody.position.set(car.position.x, car.position.y + 0.85, car.position.z);
     carBody.quaternion.setFromEuler(0, car.rotation.y, 0);
-    if (person.visible) personBody.position.set(person.position.x, person.position.y + 0.9, person.position.z);
+    if (person.visible && !(tavern && tavern.seated)) personBody.position.set(person.position.x, person.position.y + 0.9, person.position.z);   // 앉은 사람은 의자·테이블을 밀지 않게
     else personBody.position.set(0, -50, 0);
     world.step(1 / 60, dt, 3);
     for (const b of toyBlocks) {
@@ -1130,6 +1209,48 @@ async function initDrive() {
 
   /* 가판대 자리는 Blender에서 세운 6곳 (최신 프로젝트가 출발점에서 가장 가깝다) */
   PROJECTS.forEach((p, i) => { const st = WORLD.stalls[i]; if (st) p.pos = [st.x, st.z]; });
+
+  /* ── 중세 선술집 부스 7종 + 나무 의자·테이블 (models/props, README 참고) ──
+     부스 파일은 스테이션 그룹 단위(0.62배)라 그룹에 그대로 넣는다. 출발점에서 가까운 순서대로
+     tudor → norse → bavarian → venta → tent → flemish → osteria. 의자는 부스 분위기에 맞춰 고른다. */
+  const BOOTH_ORDER = ['tudor', 'norse', 'bavarian', 'venta', 'tent', 'flemish', 'osteria'];
+  const BOOTH_TOP = { tudor: 6.3, bavarian: 7.0, norse: 6.6, osteria: 5.1, venta: 5.1, flemish: 7.1, tent: 7.1 };   // 그룹 단위 꼭대기
+  const SEAT_OF = { norse: 'stool-log', venta: 'stool-barrel', flemish: 'stool-barrel' };   // 나머지는 stool
+  const { addStaticLOD } = await import('./perf.js');   // 멀리 있는 정적 묶음을 한 덩어리로 (그리기 호출 줄이기)
+  const props = {};
+  {
+    const pl = new GLTFLoader(); pl.setDRACOLoader(draco);
+    const get = name => new Promise(res => pl.load(`models/props/tavern-${name}.glb`, g => res(g.scene), undefined, () => res(null)));
+    const names = [...BOOTH_ORDER, 'stool', 'stool-barrel', 'stool-log', 'table'];
+    (await Promise.all(names.map(get))).forEach((sc, i) => { props[names[i]] = sc; });
+  }
+  /* 길을 따라 출발점(z가 큰 쪽)에서 가까운 순서 → 부스 종류 */
+  const boothOf = new Map([...PROJECTS].sort((a, b) => b.pos[1] - a.pos[1]).map((p, i) => [p, BOOTH_ORDER[i % BOOTH_ORDER.length]]));
+  /* 이름판(sign_face)에 프로젝트 이름을 따뜻한 페인트 글씨로 */
+  function paintSign(mesh, p) {
+    mesh.geometry.computeBoundingBox();
+    const bs = mesh.geometry.boundingBox.getSize(new THREE.Vector3());
+    const aspect = Math.max(1, (bs.x || 1) / (bs.y || bs.z || 1));
+    const H = 128, W = Math.min(1024, Math.round(H * aspect)), cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const g = cv.getContext('2d');
+    const grd = g.createLinearGradient(0, 0, 0, H);
+    grd.addColorStop(0, '#6b4024'); grd.addColorStop(1, '#4a2a17');
+    g.fillStyle = grd; g.fillRect(0, 0, W, H);
+    g.globalAlpha = 0.18; g.strokeStyle = '#2a170c';
+    for (let y = 8; y < H; y += 11) { g.beginPath(); g.moveTo(0, y); g.bezierCurveTo(W * 0.3, y + 4, W * 0.7, y - 4, W, y + 2); g.stroke(); }   // 나뭇결
+    g.globalAlpha = 1;
+    g.strokeStyle = p.color; g.lineWidth = 6; g.strokeRect(6, 6, W - 12, H - 12);
+    let fs = 70; g.font = `800 ${fs}px Pretendard, system-ui, sans-serif`;
+    while (g.measureText(p.name).width > W - 40 && fs > 28) { fs -= 4; g.font = `800 ${fs}px Pretendard, system-ui, sans-serif`; }
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.lineWidth = 7; g.strokeStyle = '#2a170c'; g.strokeText(p.name, W / 2, H / 2 + 3);
+    g.fillStyle = '#f6e2b8'; g.fillText(p.name, W / 2, H / 2 + 3);
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+    mesh.material = mesh.material.clone();
+    mesh.material.map = t; mesh.material.color.set(0xffffff); mesh.material.needsUpdate = true;
+  }
+
   for (const p of PROJECTS) {
     const g = new THREE.Group();
     g.position.set(p.pos[0], Math.max(0, heightAt(p.pos[0], p.pos[1])), p.pos[1]);
@@ -1156,49 +1277,33 @@ async function initDrive() {
     ring.rotation.x = -Math.PI / 2; ring.position.y = 0.04;
     g.add(ring);
 
-    /* 수레 몸통 + 색 띠 + 상판 */
-    add(new THREE.BoxGeometry(7, 1.5, 2.2), wood, 0, 1.05, 0);
-    add(new THREE.BoxGeometry(7.04, 0.45, 2.24), paint, 0, 1.25, 0);
-    add(new THREE.BoxGeometry(7.6, 0.18, 2.7), woodDark, 0, 1.88, 0.1);
-    /* 바퀴 두 개 */
-    for (const dx of [-2.6, 2.6]) {
-      const wh = add(new THREE.CylinderGeometry(0.62, 0.62, 0.25, 16), woodDark, dx, 0.62, 1.2);
-      wh.rotation.x = Math.PI / 2;
+    /* 선술집 부스 — 같은 역할의 손수레·차양·전구·상자는 부스 안에 다 들어 있다 */
+    const style = boothOf.get(p);
+    const booth = props[style] ? props[style].clone() : null;
+    if (booth) {
+      booth.traverse(o => {
+        if (!o.isMesh) return;
+        o.castShadow = o.receiveShadow = true;
+        const mn = o.material && o.material.name || '';
+        if (/^(Lantern|Flame|Firebox)_Glow/.test(mn)) {
+          if (!o.material.userData.glow) { o.material.userData.glow = true; nightGlow.lanterns.push(o.material); }
+          o.castShadow = false;
+        }
+        if (o.name.startsWith('sign_face') || /^Sign_Face/.test(mn)) paintSign(o, p);
+      });
+      g.add(booth);
+      addStaticLOD(THREE, booth, { dist: 38, keep: o => /_Glow|^Sign_Face/.test(o.material.name || '') || o.name.startsWith('sign_face') });   // perf.js: 멀면 한 덩어리
     }
-    /* 기둥 네 개 */
-    for (const dx of [-3.4, 3.4]) for (const dz of [-0.9, 1.1]) add(new THREE.BoxGeometry(0.16, 2.6, 0.16), wood, dx, 3.1, dz);
-    /* 줄무늬 차양 — 앞으로 기울어진 판 여러 장 */
-    for (let i = 0; i < 9; i++) {
-      const a = add(new THREE.BoxGeometry(0.86, 0.08, 3.2), i % 2 ? cream : paint, -3.45 + i * 0.86, 4.55, 0.4);
-      a.rotation.x = 0.22;
-    }
-    /* 차양 끝 물결 장식 */
-    for (let i = 0; i < 9; i++) {
-      const f = add(new THREE.ConeGeometry(0.43, 0.42, 3), i % 2 ? cream : paint, -3.45 + i * 0.86, 4.08, 2.0);
-      f.rotation.set(Math.PI, Math.PI / 6, 0);
-    }
-    /* 전구 줄 */
-    const bulbMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffd98a).multiplyScalar(1.1), fog: false, toneMapped: false });
-    nightGlow.bulbs.push(bulbMat);
-    for (let i = 0; i < 11; i++) {
-      const x = -3.5 + i * 0.7;
-      add(new THREE.SphereGeometry(0.11, 8, 6), bulbMat, x, 3.86 - Math.sin(i / 10 * Math.PI) * 0.22, 2.15);
-    }
-    /* 상판 위 소품 — 상자와 번호판 */
-    add(new THREE.BoxGeometry(0.9, 0.7, 0.8), wood, -2.4, 2.32, 0.3).rotation.y = 0.3;
-    add(new THREE.BoxGeometry(0.7, 0.55, 0.7), paint, -1.55, 2.25, 0.5).rotation.y = -0.2;
-    add(new THREE.BoxGeometry(1.1, 0.8, 0.9), wood, 4.3, 0.4, 1.6).rotation.y = 0.5;
-    add(new THREE.BoxGeometry(0.8, 0.6, 0.7), paint, 4.6, 1.1, 1.5).rotation.y = 0.2;
 
     /* 따뜻한 가판대 불빛 */
     const glow = new THREE.PointLight(0xff9a4a, 12, 20, 2);
     nightGlow.lights.push(glow);
-    glow.position.set(0, 3.6, 1.6);
+    glow.position.set(0, 3.0, 2.2);   // 부스 처마 아래
     g.add(glow);
 
     /* 간판은 수레 뒤에 서서 카메라를 향해 돈다 */
     const face = new THREE.Group();
-    face.position.set(0, 0, -2.6);
+    face.position.set(0, Math.max(0, (BOOTH_TOP[style] || 0) - 4.6), -2.6);   // 높은 지붕이 간판 아래를 가리지 않게 올린다
     g.add(face);
     const boardW = 9.4, boardH = 5.9;
     for (const dx of [-3.4, 3.4]) add(new THREE.BoxGeometry(0.28, 5.2, 0.28), woodDark, dx, 2.6, -0.2, face);
@@ -1251,40 +1356,6 @@ async function initDrive() {
     face.add(label);
 
 
-    /* ── 선술집 꾸밈 ── 빨간 등롱, 酒 깃발, 항아리. 의자·테이블은 물리 몸체라 아래에서 따로 놓는다 */
-    {
-      const lanternMat = new THREE.MeshStandardMaterial({ color: 0xc8261c, emissive: 0xff4a1e, emissiveIntensity: 1.1, roughness: .6 });
-      nightGlow.lanterns.push(lanternMat);
-      const capMat = new THREE.MeshStandardMaterial({ color: 0x1b1210, roughness: .8 });
-      for (const x of [-2.6, 0, 2.6]) {
-        add(new THREE.CylinderGeometry(0.34, 0.34, 0.62, 14), lanternMat, x, 3.25, 2.05).castShadow = false;
-        add(new THREE.CylinderGeometry(0.2, 0.2, 0.08, 10), capMat, x, 3.6, 2.05);
-        add(new THREE.CylinderGeometry(0.2, 0.2, 0.08, 10), capMat, x, 2.9, 2.05);
-        add(new THREE.CylinderGeometry(0.015, 0.015, 0.5, 4), capMat, x, 3.87, 2.05);
-      }
-      /* 酒 깃발 — 수레 옆 장대 */
-      add(new THREE.BoxGeometry(0.14, 5.2, 0.14), woodDark, -4.7, 2.6, 1.0);
-      const fcv = document.createElement('canvas'); fcv.width = 128; fcv.height = 256;
-      const fc = fcv.getContext('2d');
-      fc.fillStyle = p.ai ? '#1c1533' : '#f3e7d0'; fc.fillRect(0, 0, 128, 256);
-      fc.fillStyle = p.ai ? p.color : '#b3241a'; fc.fillRect(0, 0, 128, 14); fc.fillRect(0, 242, 128, 14);
-      fc.fillStyle = p.ai ? '#e9e2ff' : '#1d1512'; fc.font = p.ai ? '900 64px sans-serif' : '900 92px serif'; fc.textAlign = 'center'; fc.textBaseline = 'middle';
-      fc.fillText(p.ai ? 'AI' : '酒', 64, 128);
-      const ftex = new THREE.CanvasTexture(fcv); ftex.colorSpace = THREE.SRGBColorSpace;
-      const flag = add(new THREE.PlaneGeometry(1.0, 2.0), new THREE.MeshStandardMaterial({ map: ftex, side: THREE.DoubleSide, roughness: .9 }), -4.15, 4.0, 1.0);
-      flag.userData.flag = true;
-      /* 막걸리 항아리 */
-      const jarPts = [[0, 0], [0.42, 0.04], [0.62, 0.45], [0.58, 0.85], [0.36, 1.1], [0.38, 1.18], [0, 1.18]].map(([r, y]) => new THREE.Vector2(r, y));
-      const jarMat = new THREE.MeshStandardMaterial({ color: 0x5a2e1a, roughness: .35 });
-      add(new THREE.LatheGeometry(jarPts, 16), jarMat, 4.4, 0, -0.6);
-      add(new THREE.LatheGeometry(jarPts, 16), jarMat, 5.1, 0, 0.2).scale.setScalar(0.7);
-      /* 상판 위 술병과 사발 */
-      const bottle = new THREE.MeshStandardMaterial({ color: 0x2f9a58, emissive: 0x1f6a3a, emissiveIntensity: .5, roughness: .15, transparent: true, opacity: .9 });
-      const bowl = new THREE.MeshStandardMaterial({ color: 0xf1e6cf, roughness: .5 });
-      for (const [x, z] of [[0.6, 0.3], [1.0, 0.6], [1.35, 0.2]]) add(new THREE.CylinderGeometry(0.1, 0.12, 0.5, 10), bottle, x, 2.22, z);
-      for (const [x, z] of [[-0.4, 0.7], [0.1, 0.9]]) add(new THREE.CylinderGeometry(0.22, 0.13, 0.14, 12), bowl, x, 2.04, z);
-    }
-
     /* ── AI 구역 ── 간판 위에 떠서 도는 빛나는 결정, 길가에 "AI 활용 구역" 푯말 */
     let crystal = null;
     if (p.ai) {
@@ -1317,14 +1388,26 @@ async function initDrive() {
     }
 
     scene.add(g);
-    stations.push({ ...p, group: g, face, ring, label, crystal, labelY: label.position.y, phase: Math.random() * Math.PI * 2 });
+    stations.push({ ...p, style, group: g, face, ring, label, crystal, labelY: label.position.y, phase: Math.random() * Math.PI * 2 });
+    addStaticLOD(THREE, face, { dist: 38, keep: o => !!o.material.map || o === crystal || o.parent === crystal });   // 간판 기둥·틀·지붕만 합침 (그림 판은 그대로)
   }
 
-  /* ── 선술집 앞 빨간 플라스틱 의자와 둥근 테이블 ──
-     차로 부딪히면 넘어지고 R로 다시 세운다 (장난감 블록과 같은 목록에 넣는다) */
+  /* ── 선술집 앞 나무 의자와 둥근 테이블 (models/props) ──
+     차로 부딪히면 넘어지고 R로 다시 세운다 (장난감 블록과 같은 목록에 넣는다).
+     GLB 원점은 바닥이고 코드는 메시를 물리 몸체 중심(높이 절반)에 두므로 빈 그룹에 감싸 내린다.
+     모델이 없으면 예전 원기둥으로. 자리·높이는 그대로라 npcs.js STOOL_* 는 안 바꿔도 된다 */
   {
-    const stoolMat = new THREE.MeshStandardMaterial({ color: 0xc8312b, roughness: .45 });
+    const stoolMat = new THREE.MeshStandardMaterial({ color: 0x8a5a34, roughness: .8 });
     const tableMat = new THREE.MeshStandardMaterial({ color: 0x7a4a2a, roughness: .7 });
+    const wrapProp = (name, h) => {
+      if (!props[name]) return null;
+      const holder = new THREE.Group(), m = props[name].clone();   // clone 은 지오메트리·재질을 함께 쓴다
+      m.position.y = -h / 2;
+      m.traverse(o => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; } });
+      holder.add(m);
+      addStaticLOD(THREE, holder, { dist: 30 });   // 의자·테이블: 멀면 한 덩어리 (holder 째 물리로 움직여도 됨)
+      return holder;
+    };
     const v = new THREE.Vector3();
     for (const st of stations) {
       st.group.updateMatrixWorld(true);
@@ -1341,18 +1424,170 @@ async function initDrive() {
       };
       /* 그룹이 0.62배라 크기는 월드 기준으로 바로 잡는다 */
       const tH = 0.7, tR = 0.62;
-      const table = new THREE.Group();
+      let table = wrapProp('table', tH);
+      if (!table) {
+      table = new THREE.Group();
       const top = new THREE.Mesh(new THREE.CylinderGeometry(tR, tR, 0.07, 18), tableMat); top.position.y = tH / 2 - 0.035;
       const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.12, tH, 8), tableMat);
       top.castShadow = leg.castShadow = true;
       table.add(top, leg);
+      }
       place(table, new CANNON.Cylinder(tR, tR, tH, 10), 0, 4.6, tH, 1.2);
       for (let k = 0; k < 4; k++) {
         const a = k * Math.PI / 2 + Math.PI / 4;
-        const stool = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.17, 0.42, 12), stoolMat);
+        const stool = wrapProp(SEAT_OF[st.style] || 'stool', 0.42) || new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.17, 0.42, 12), stoolMat);
         place(stool, new CANNON.Cylinder(0.2, 0.17, 0.42, 10), Math.cos(a) * 1.75, 4.6 + Math.sin(a) * 1.75, 0.42, 0.35);
       }
     }
+  }
+
+  /* ── 중세 손님들 — 숲길을 거닐다 포장마차 의자에 앉아 술을 마신다 (npcs.js) ──
+     로딩을 막지 않게 기다리지 않는다. 의자 수치를 바꾸면 npcs.js의 STOOL_* 도 같이 바꿀 것 */
+  /* ── 북쪽 길 끝 성문 "상호성" (castle.js) — 임금님 행차가 이리로 들어간다. 성벽은 물리 상자로 막는다 ── */
+  {
+    const { createCastle } = await import('./castle.js');
+    castle = createCastle({ THREE, scene, GLTFLoader, dracoLoader: draco, groundY, pathX, CANNON, world, getNight: () => night });
+  }
+  /* 마을 소품·성벽·가게 건물 — 걷는 손님·아이·동물이 뚫고 지나가지 않게 밀어낸다 */
+  const propObstacles = (p, r) => { let h = vprops.pushOut(p, r); if (castle && castle.pushOut(p, r)) h = true; if (shop && shop.pushOut(p, r)) h = true; return h; };
+  let npcs = null, events = null, village = null, festival = null, pageant = null;
+  let ridesRef = null;   // 탈것 바꾸기(rides)는 아래에서 만든다 — getRide 는 매 프레임 update 안에서만 불린다
+  /* 차로 치면 넘어지고 화낸다 — 지금 탈것의 위치·방향·속도·크기. 같은 객체를 재사용한다 */
+  const rideInfo = { x: 0, z: 0, heading: 0, halfX: 1.05, halfZ: 2.15, speed: 0, driving: false };
+  {
+    const { createNPCs, stallsFromStations, attachGrab } = await import('./npcs.js');
+    const { createEvents } = await import('./events.js');
+    const { createVillage } = await import('./village.js');
+    createNPCs({
+      THREE, scene, GLTFLoader,
+      dracoLoader: draco,
+      groundY, pathX,
+      stalls: stallsFromStations(stations, { THREE, toyBlocks }),
+      bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
+      roadHalf: WORLD.path.half,
+      bridge: WORLD.bridge,
+      getPlayerPos: () => activePos(),
+      getNight: () => night,
+      count: 25,   // 모델을 돌려 써서 25명이 돌아다닌다
+      obstacles: propObstacles,
+      getRide: () => {
+        rideInfo.x = car.position.x; rideInfo.z = car.position.z;
+        rideInfo.heading = heading;              // 앞 방향 = (sin heading, cos heading)
+        rideInfo.speed = speed;                  // 부호 있는 m/s (후진이면 음수)
+        rideInfo.driving = player.mode === 'driving';
+        if (ridesRef) { const p = ridesRef.params(ridesRef.current); rideInfo.halfX = p.half[0]; rideInfo.halfZ = p.half[2]; }
+        return rideInfo;
+      },
+    }).then(n => {
+      npcs = n;
+      /* 걸어 다닐 때 손님을 짧게 클릭 = 주먹, 꾹 누르기 = 잡아서 던지기 */
+      attachGrab(n, {
+        THREE, camera, domElement: renderer.domElement,
+        getPlayerPos: () => activePos(), groundY,
+        isBlocked: () => !driveActive || panel.classList.contains('open') || !!(weapons && weapons.armed) || !!(tavern && tavern.seated) || !!(dialogue && dialogue.active) || !!(fishing && fishing.active) || !!(quests && quests.open) || !!(shop && shop.open) || attackBusy(),   // 무기를 들면 클릭은 공격
+        isOnFoot: () => player.mode === 'onfoot',
+        getPlayerFacing: () => person.rotation.y,
+        playPunch: () => { playerPunch(); if (animals) animals.punchFrom(person.position, person.rotation.y); if (kids) kids.punch(); },
+      });
+      /* 수배 ★·경비병·술집 싸움·음유시인 (events.js) */
+      events = createEvents({
+        THREE, npcs: n, camera, pathX,
+        getPlayerPos: () => activePos(),
+        isDriving: () => player.mode === 'driving',
+        isMusicOn: () => document.getElementById('g-music-btn')?.getAttribute('aria-pressed') === 'true',
+        isVisible: () => driveActive,
+        onPlayerCaught: () => {
+          /* 붙잡히면 그 자리에서 꾸중만 듣는다 (무기는 압수 = 집어넣기) */
+          if (weapons) weapons.holster();
+          pSpeed = 0;
+          const SCOLD = ['이번만 봐주겠다! 임금님 마을에서 소란은 금물이다!', '어허! 무기를 함부로 쓰면 못쓴다!', '한 번만 더 그러면 성 감옥행이다!', '임금님께서 슬퍼하신다. 착하게 지내거라!'];
+          /* 꾸중 끝에 임금님(최상호) 연락처를 하나 알려 준다 */
+          const CONTACT = [
+            '할 말이 있으면 임금님께 직접 서신을 보내라 ✉ maeguming0000@gmail.com',
+            '임금님의 업적이 궁금하면 왕실 기록소로 가 보거라 → github.com/aabyess',
+            '억울하면 임금님께 전갈을 넣어라 ☎ 010-3322-7250',
+          ];
+          const pick = a => a[Math.floor(Math.random() * a.length)];
+          toast(`🛡️ 근위병: "${pick(SCOLD)}"<div style="font:500 14px system-ui;opacity:.85;margin-top:6px">${pick(CONTACT)}</div>`, 4200);
+        },
+        onEvent: text => toast(text, 2400),
+        stallNames: stations.map(s => s.name),
+      });
+      /* 임금님 행차·밤 불꽃놀이·닭 소동·소매치기 (village.js) */
+      village = createVillage({
+        THREE, scene, camera, npcs: n, pathX, groundY,
+        getPlayerPos: () => activePos(),
+        isOnFoot: () => player.mode === 'onfoot',
+        getNight: () => night,
+        isMusicOn: () => document.getElementById('g-music-btn')?.getAttribute('aria-pressed') === 'true',
+        isVisible: () => driveActive,
+        onEvent: text => toast(text, 2400),
+        onAggro: () => toast('🛡️ 근위병: "감히 임금님께! 다음엔 정말 혼난다!"', 2400),   // 임금님을 쳐도 꾸중만
+        bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
+        gate: castle ? castle.villageGate(0) : null,   // 행차는 북쪽 성문으로 들어간다
+        isKingBusy: () => !!(pageant && pageant.state().current === 'feast'),   // 연회 중엔 행차 없음 (임금님은 한 분)
+      });
+      /* 중세 축제: 마상 창시합·활쏘기 대회·수확 모닥불·메이폴·거리 광대·밤하늘 용 (festival.js) */
+      festival = createFestival({
+        THREE, scene, camera, npcs: n, GLTFLoader, dracoLoader: draco, pathX, groundY,
+        getPlayerPos: () => activePos(),
+        isOnFoot: () => player.mode === 'onfoot',
+        getNight: () => night,
+        getSeason: () => seasons.season,
+        isMusicOn: () => document.getElementById('g-music-btn')?.getAttribute('aria-pressed') === 'true',
+        isVisible: () => driveActive,
+        onEvent: text => toast(text, 2600),
+        getPlayerWeapon: () => (weapons ? weapons.current : 'none'),
+        isBusy: () => !!(pageant && pageant.state().current),   // 연회·결혼식 등과 겹치지 않게
+        bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
+      });
+      /* 왕실 연회·결혼식 행렬·하늘 등불·투석기 시연·줄다리기 (pageant.js) — 축제·행차와 겹치지 않는다 */
+      pageant = createPageant({
+        THREE, scene, camera, npcs: n, pathX, groundY,
+        getPlayerPos: () => activePos(),
+        isOnFoot: () => player.mode === 'onfoot',
+        getNight: () => night,
+        getSeason: () => seasons.season,
+        isMusicOn: () => document.getElementById('g-music-btn')?.getAttribute('aria-pressed') === 'true',
+        isVisible: () => driveActive,
+        isBusy: () => !!(festival && festival.state().current),
+        isKingBusy: () => !!(village && village.state().procession),
+        onEvent: text => toast(text, 2600),
+        getTavern: () => tavern, getKids: () => kids, castle,
+        sitPlayer: s => (tavern ? tavern.sitAt(s) : false),   // 연회 자리에 실제로 앉는다 (선술집과 같은 자세·카메라)
+        standPlayer: () => { if (tavern) tavern.standUp(); },
+        bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
+      });
+    }).catch(e => console.warn('[npcs]', e));
+  }
+
+  /* ── 돌아다니는 동물 19마리: 판다·곰·사슴·여우·토끼·양·멧돼지·강아지·고양이 (animals.js) ── */
+  {
+    const { createAnimals } = await import('./animals.js');
+    animals = createAnimals({
+      obstacles: propObstacles,
+      THREE, scene, GLTFLoader, dracoLoader: draco, groundY, pathX,
+      bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
+      roadHalf: WORLD.path.half, waterY: WORLD.stream.water,
+      stalls: stations.map(s => ({ x: s.group.position.x, z: s.group.position.z })),
+      getPlayerPos: () => activePos(), getNpcs: () => npcs,
+      isOnFoot: () => player.mode === 'onfoot',
+      isBlocked: () => !driveActive,
+      onEvent: text => toast(text, 2200),
+      getRide: () => rideInfo,   // 차로 치면 데굴데굴 (npcs 의 getRide 가 매 프레임 채운다)
+    });
+  }
+
+  /* ── 아이들 7명: 술래잡기·오리 줄 따라오기·동물 쫓기·겨울 눈싸움, 밤엔 집으로 (kids.js). 맞지 않고 피한다 ── */
+  {
+    const { createKids } = await import('./kids.js');
+    createKids({ THREE, scene, GLTFLoader, dracoLoader: draco, groundY, pathX, obstacles: propObstacles,
+      bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
+      stalls: stations.map(s => ({ x: s.group.position.x, z: s.group.position.z })),
+      getPlayerPos: () => activePos(), isOnFoot: () => player.mode === 'onfoot',
+      getNight: () => night, getSeason: () => seasons.season, getNpcs: () => npcs,
+      getAnimals: () => animals, onEvent: text => toast(text, 2200),
+    }).then(k => { kids = k; }).catch(e => console.warn('[kids]', e));
   }
 
   /* ── 반딧불 — 선술집 근처에 많이, 숲에는 드문드문 ── */
@@ -1380,20 +1615,12 @@ async function initDrive() {
     };
   })();
 
-  /* ── 화면 가운데 잠깐 뜨는 알림 ── */
-  const toast = (() => {
-    const el = document.createElement('div');
-    el.id = 'g-toast';
-    Object.assign(el.style, { position: 'fixed', left: '50%', top: '18%', transform: 'translate(-50%,-50%) scale(.9)', zIndex: 44,
-      padding: '12px 22px', borderRadius: '14px', background: 'rgba(20,12,28,.82)', color: '#fff', font: '800 22px/1.2 Pretendard, system-ui, sans-serif',
-      letterSpacing: '-.01em', boxShadow: '0 10px 30px rgba(0,0,0,.35)', opacity: '0', transition: 'opacity .25s, transform .25s', pointerEvents: 'none', textAlign: 'center' });
-    document.getElementById('drive-root').appendChild(el);
-    let timer = 0;
-    return (html, ms = 1600) => {
-      el.innerHTML = html; el.style.opacity = '1'; el.style.transform = 'translate(-50%,-50%) scale(1)';
-      clearTimeout(timer); timer = setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translate(-50%,-50%) scale(.9)'; }, ms);
-    };
-  })();
+  /* ── 알림 — 모든 모듈이 같은 알림 기둥(notify.js)을 쓴다 (겹치지 않게 위에서부터 쌓인다).
+     기다리지 않고 불러오고, 불러오기 전에 온 알림은 모아 뒀다가 보여 준다 ── */
+  let notifyFn = null;
+  const pendingToasts = [];
+  import('./notify.js').then(m => { notifyFn = m.notify; for (const [h, ms] of pendingToasts.splice(0)) notifyFn(h, { ms, kind: 'main' }); });
+  const toast = (html, ms = 1600) => { if (notifyFn) notifyFn(html, { ms, kind: 'main' }); else pendingToasts.push([html, ms]); };
   /* ── 차 디테일: 헤드라이트, 흙먼지, 경적 ── */
   for (const sx of [-0.62, 0.62]) {
     const hl = new THREE.SpotLight(0xffe2b0, 12, 26, Math.PI / 7, 0.6, 1.6);
@@ -1511,13 +1738,22 @@ async function initDrive() {
       if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') { e.preventDefault(); galGo(e.code === 'ArrowLeft' ? -1 : 1); }
       return;
     }
+    if (e.code === 'KeyM' && !e.repeat && minimap) { e.preventDefault(); minimap.toggleBig(); return; }   // 큰 지도
+    if (e.code === 'KeyB' && !e.repeat && player.mode === 'onfoot') { e.preventDefault(); toggleDance(); return; }   // 춤
     /* 게시판 근처에서 Space는 브레이크가 아니라 "프로젝트 보기" */
     if (e.code === 'Space' && promptFor) { e.preventDefault(); activate(promptFor); hideHint(); return; }
     if (e.code === 'KeyR') { e.preventDefault(); restackBlocks(); return; }
     if (e.code === 'KeyH' && !e.repeat) { e.preventDefault(); honk(); return; }
     const k = KEYMAP[e.code];
     if (k) { keys[k] = true; e.preventDefault(); hideHint(); }
-    if (e.code === 'KeyF') { e.preventDefault(); toggleVehicle(); hideHint(); }
+    if (e.code === 'KeyF') {   // F: 대화(dialogue.js 가 먼저 가로챈다) > 의뢰 게시판 > 낚시 > 탈것
+      e.preventDefault();
+      if (player.mode === 'onfoot' && quests && quests.onF()) { hideHint(); return; }
+      if (player.mode === 'onfoot' && pageant && pageant.onF(e.repeat)) { hideHint(); return; }   // 연회 자리·소원 등불·투석기·줄다리기
+      if (player.mode === 'onfoot' && shop && shop.onF()) { hideHint(); return; }
+      if (player.mode === 'onfoot' && fishing && fishing.onF()) return;
+      toggleVehicle(); hideHint();
+    }
     if (e.code === 'Escape') closePanel();
   });
   addEventListener('keyup', e => { const k = KEYMAP[e.code]; if (k) keys[k] = false; });
@@ -1536,7 +1772,8 @@ async function initDrive() {
   });
 
   /* ── 주행 ── */
-  const MAX_FWD = 10, MAX_REV = 5, ACCEL = 9, BRAKE = 30, DRAG = 6, TURN = 1.9;
+  let MAX_FWD = 10, MAX_REV = 5, ACCEL = 9, TURN = 1.9;   // 탈것을 바꾸면 vehicles.js의 params로 바뀐다
+  const BRAKE = 30, DRAG = 6;
   let speed = 0, heading = Math.PI, steer = 0;
   const START_Z = WORLD.start.z;
   car.position.set(pathX(START_Z), 0, START_Z);
@@ -1566,6 +1803,10 @@ async function initDrive() {
     car.position.z += Math.cos(heading) * speed * dt;
 
     if (clampToBounds(car.position)) speed *= 0.3;
+    if (fishing && fishing.pushOut(car.position, 1.4)) speed *= 0.5;   // 연못에 빠지지 않게
+    if (castle && castle.pushOut(car.position, 1.4)) speed *= 0.5;     // 성벽
+    if (vprops.pushOut(car.position, 1.4)) speed *= 0.5;               // 오두막·우물
+    if (shop && shop.pushOut(car.position, 1.4)) speed *= 0.5;
     car.position.y += (groundY(car.position.x, car.position.z) - car.position.y) * Math.min(1, dt * 12);
     car.rotation.order = 'YXZ';
     car.rotation.y = heading;
@@ -1614,7 +1855,7 @@ async function initDrive() {
       const len = Math.hypot(dx, dz) || 1;
       dx /= len; dz /= len;
       pHeading = angLerp(pHeading, Math.atan2(dx, dz), dt * TURN_SNAP);
-      const top = keys.boost ? RUN_SPEED : WALK_SPEED;
+      const top = (keys.boost ? RUN_SPEED : WALK_SPEED) * (shop ? shop.effects.speedMul() : 1);   // 바람 물약
       pSpeed = pSpeed > top ? Math.max(top, pSpeed - RUN_DRAG * dt) : Math.min(top, pSpeed + RUN_ACCEL * dt);
     } else {
       pSpeed = Math.max(0, pSpeed - RUN_DRAG * dt);
@@ -1624,6 +1865,11 @@ async function initDrive() {
     person.position.z += Math.cos(pHeading) * pSpeed * dt;
 
     if (clampToBounds(person.position)) pSpeed = 0;
+    if (fishing && fishing.pushOut(person.position, 0.35)) pSpeed *= 0.5;
+    if (castle && castle.pushOut(person.position, 0.35)) pSpeed *= 0.5;
+    if (vprops.pushOut(person.position, 0.35)) pSpeed *= 0.5;
+    if (quests && quests.pushOut(person.position, 0.35)) pSpeed *= 0.5;
+    if (shop && shop.pushOut(person.position, 0.35)) pSpeed *= 0.5;
     person.rotation.y = pHeading;
 
     /* 달리는 동안만 카메라가 진행 방향으로 따라 돈다 */
@@ -1632,8 +1878,9 @@ async function initDrive() {
     const moving = pSpeed / RUN_SPEED;
     if (charMixer) {
       /* 걸음·달리기 클립 속도를 실제 이동 속도에 맞춰 발이 미끄러지지 않게 한다 */
-      playClip(pSpeed < 0.3 ? 'idle' : pSpeed < WALK_SPEED + 1 ? 'walk' : 'run');
-      if (charAction) charAction.timeScale = pSpeed < 0.3 ? 1 : pSpeed < WALK_SPEED + 1 ? Math.max(0.5, pSpeed / WALK_SPEED) : pSpeed / RUN_SPEED * 1.1;
+      const ps = pSpeed / (shop ? shop.effects.speedMul() : 1);   // 물약으로 빨라져도 걸음 클립은 원래 속도 기준
+      playClip(ps < 0.3 ? 'idle' : ps < WALK_SPEED + 1 ? 'walk' : 'run');
+      if (charAction) charAction.timeScale = ps < 0.3 ? 1 : ps < WALK_SPEED + 1 ? Math.max(0.5, ps / WALK_SPEED) : ps / RUN_SPEED * 1.1;
       charMixer.update(dt);
       person.position.y = groundY(person.position.x, person.position.z);
     } else {
@@ -1644,6 +1891,7 @@ async function initDrive() {
       limbs.legR.rotation.x = -swing;
       limbs.armL.rotation.x = -swing * 0.75;
       limbs.armR.rotation.x = swing * 0.75;
+      if (punchT > 0) { punchT -= dt; limbs.armR.rotation.x = -1.55 * Math.sin(Math.PI * (1 - punchT / 0.3)); }   // 주먹 잽
       person.position.y = groundY(person.position.x, person.position.z) + Math.abs(Math.sin(bob)) * 0.06 * moving;
     }
   }
@@ -1659,8 +1907,172 @@ async function initDrive() {
     charAction = next;
   }
 
+  /* ── 맨손 콤보 — 클릭할 때마다 왼손 잽 → 오른손 스트레이트 → 오른발 차기 → 드롭킥 ──
+     앞 기술이 끝나고 0.6초 안에 다시 누르면 다음 기술로 이어진다. 달리면서(Shift) 누르면 바로 드롭킥.
+     주먹은 상체 트랙만 떼어 걸음 위에 겹치고(다리는 계속 걷는다), 발차기·드롭킥은 그 자리에서 온몸으로 한다.
+     첫 타격(휘청·넘어짐)은 npcs.js attachGrab 의 punch() 가 클릭 순간에 하고, 발차기·드롭킥은 발이 닿는 순간 더 세게 날린다.
+     기본 박스 캐릭터는 오른팔을 직접 앞으로 뻗는다(walk 안에서 punchT로). */
+  let punchT = 0;
+  const UPPER = /^(Abdomen|Torso|Chest|Neck|Head|Shoulder|UpperArm|LowerArm|Wrist|Index|Middle|Ring|Pinky|Thumb)/;
+  const MOVES = [
+    { name: '왼손 잽',      clip: 'punch_left',  speed: 1.9, upper: true },
+    { name: '오른손 스트레이트', clip: 'punch_right', speed: 1.8, upper: true },
+    { name: '발차기',       clip: 'kick_right',  speed: 1.45, hitAt: 0.42, reach: 2.0, power: 6.5, up: 3, dmg: 40 },
+    { name: '드롭킥',       clip: 'kick_right',  drop: true, dur: 1.15, hitAt: 0.3, reach: 2.4, power: 10, up: 4, dmg: 70 },
+  ];
+  const moveActs = {};
+  const atk = { move: null, t: 0, dur: 0, hit: false, step: 0, win: 0, act: null, timer: 0 };
+  const _imp = new THREE.Vector3();
+  function moveAction(m) {
+    const key = m.clip + (m.upper ? ':up' : ':full');
+    if (moveActs[key]) return moveActs[key];
+    const src = charClips[m.clip];
+    if (!src) return null;
+    const clip = src.clone();
+    if (m.upper) clip.tracks = clip.tracks.filter(t => UPPER.test(t.name.split('.')[0]));
+    const a = charMixer.clipAction(clip);
+    a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true;
+    return (moveActs[key] = a);
+  }
+  /* 발차기·드롭킥 중엔 걷기를 멈춘다. 기술 앞부분에선 다음 클릭을 받지 않는다(연타로 기술이 씹히지 않게) */
+  const legMove = () => !!(atk.move && !atk.move.upper);
+  const attackBusy = () => !!(atk.move && atk.t < atk.dur * (atk.move.drop ? 0.85 : 0.55));
+  function playerPunch() {
+    if (player.mode !== 'onfoot') return;
+    if (!charMixer) { punchT = 0.3; return; }
+    let i = atk.win > 0 ? atk.step : 0;
+    if (pSpeed > WALK_SPEED + 0.8) i = 3;          // 달리다가 → 드롭킥
+    const m = MOVES[i], a = moveAction(m);
+    if (!a) return;
+    atk.step = (i + 1) % MOVES.length;
+    if (atk.act && atk.act !== a) atk.act.fadeOut(0.08);
+    clearTimeout(atk.timer);
+    a.stop().reset();
+    a.timeScale = m.drop ? 1.6 : m.speed;
+    a.weight = m.upper ? 3 : 8;                    // 주먹은 걸음 상체보다 강하게(3:1), 발차기는 거의 온몸
+    a.fadeIn(0.06).play();
+    atk.act = a; atk.move = m; atk.t = 0; atk.hit = false;
+    atk.dur = m.drop ? m.dur : a.getClip().duration / m.speed;
+    atk.win = atk.dur + 0.6;
+    if (m.drop) { atk.dropH = pHeading; if (kids) kids.cheer(person.position); }   // 드롭킥엔 아이들이 환호
+    if (!m.drop) atk.timer = setTimeout(() => a.fadeOut(0.12), Math.max(0, atk.dur - 0.12) * 1000);
+    if (!m.upper) pSpeed = m.drop ? pSpeed : 0;
+  }
+  /* 발이 닿는 순간: 앞쪽 reach m 안 사람들을 세게 날린다 */
+  function legHit(m) {
+    if (!npcs) return;
+    const fx = Math.sin(pHeading), fz = Math.cos(pHeading), px = person.position.x, pz = person.position.z;
+    for (const o of npcs.list()) {
+      const n = o.npc;
+      if (o.off || o.state === 'HELD') continue;
+      const dx = n.x - px, dz = n.z - pz, d = Math.hypot(dx, dz);
+      if (!(d < m.reach) || d < 1e-3 || (dx * fx + dz * fz) / d < 0.3) continue;
+      _imp.set((dx / d * 0.4 + fx * 0.6) * m.power, m.up, (dz / d * 0.4 + fz * 0.6) * m.power);
+      npcs.knockDown(n, _imp, 'punch', m.dmg);   // 맷집을 깎는다 (다 닳으면 넘어진다)
+    }
+  }
+  /* ── 춤 (B) — 4박자마다 동작이 바뀐다: 팔 흔들기 → 디스코 → 말춤 → 빙글 돌기. 움직이면 멈춘다.
+     클립이 없어서 대기(idle) 위에 팔·몸통 뼈를 돌려 얹는다. 근처 손님들이 따라 추고 아이들이 환호한다 ── */
+  const dance = { on: false, t: 0, h: 0, bones: null };
+  /* 뼈 축이 뼈마다 달라서, 캐릭터 기준 방향(앞·왼쪽)으로 돌린다: 부모 좌표로 바꾼 축으로 회전을 앞에 곱한다 */
+  const _dq = new THREE.Quaternion(), _dp = new THREE.Quaternion(), _dax = new THREE.Vector3();
+  const _dFwd = new THREE.Vector3(), _dLeft = new THREE.Vector3();
+  function rotWorld(bone, axis, ang) {
+    if (!bone || !ang) return;
+    bone.parent.getWorldQuaternion(_dp).invert();
+    _dq.setFromAxisAngle(_dax.copy(axis).applyQuaternion(_dp), ang);
+    bone.quaternion.premultiply(_dq);
+    bone.updateMatrixWorld(true);
+  }
+  function danceBones() {
+    if (dance.bones) return dance.bones;
+    const b = n => person.getObjectByName(n);
+    return (dance.bones = { ua: [b('UpperArmL'), b('UpperArmR')], la: [b('LowerArmL'), b('LowerArmR')], chest: b('Chest'), hips: b('Hips'), head: b('Head') });
+  }
+  function toggleDance(on = !dance.on) {
+    if (on && (player.mode !== 'onfoot' || tavern.seated || fishing.active || (dialogue && dialogue.active))) return;
+    dance.on = on; dance.t = 0; dance.h = pHeading;
+    if (on) {
+      pSpeed = 0;
+      if (weapons) weapons.holster();
+      if (npcs && npcs.danceAt) npcs.danceAt(person.position.x, person.position.z, 5, 22);
+      if (kids) kids.cheer(person.position);
+      toast('💃 춤판이 벌어졌어요! (움직이면 멈춰요)', 1800);
+    } else person.rotation.y = pHeading;
+  }
+  function danceStep(dt) {
+    if (!dance.on) return false;
+    if (player.mode !== 'onfoot' || keys.fwd || keys.back || keys.left || keys.right) { toggleDance(false); return false; }
+    dance.t += dt;
+    const B = danceBones(), beat = dance.t * 2.2;                           // 약 132 BPM
+    const s = Math.sin(beat * Math.PI), bounce = Math.abs(s), move = Math.floor(dance.t / 3.6) % 4;
+    if (charMixer) { playClip('idle'); charMixer.update(dt); }
+    let yaw = dance.h;
+    const arm = (i, up, fore = 0, fwd = 0) => {                               // i: 0 왼팔 1 오른팔 / up: 옆으로 들기, fore: 팔꿈치 굽히기, fwd: 앞으로 뻗기
+      rotWorld(B.ua[i], _dFwd, up * (i === 0 ? 1 : -1));
+      rotWorld(B.ua[i], _dLeft, -fwd);
+      rotWorld(B.la[i], _dLeft, -fore);
+    };
+    yaw += move === 0 ? s * 0.15 : move === 1 ? 0.3 : move === 2 ? Math.sin(beat * Math.PI * 0.5) * 0.25 : ((dance.t % 3.6) / 3.6) * Math.PI * 2;
+    person.rotation.y = yaw;
+    person.updateMatrixWorld(true);
+    _dFwd.set(Math.sin(yaw), 0, Math.cos(yaw)); _dLeft.set(Math.cos(yaw), 0, -Math.sin(yaw));
+    if (move === 0) {          // 팔 흔들기: 두 팔 번쩍, 좌우로 흔들
+      arm(0, 2.6 + s * 0.3, 0.3); arm(1, 2.6 - s * 0.3, 0.3);
+      rotWorld(B.chest, _dFwd, s * 0.12);
+    } else if (move === 1) {   // 디스코: 오른손 하늘 찌르기 ↔ 허리에 왼손
+      arm(1, s > 0 ? 2.7 : 0.5, 0.1); arm(0, 0.5, 1.6);
+      rotWorld(B.hips, THREE.Object3D.DEFAULT_UP, s * 0.25);
+    } else if (move === 2) {   // 말춤: 두 손 모아 앞으로, 통통 뛰기
+      arm(0, 0.2, 1.2, 1.1); arm(1, 0.2, 1.2, 1.1);
+      rotWorld(B.chest, _dLeft, 0.15);
+    } else {                   // 빙글 돌기: 한 바퀴 돌며 팔 벌리기
+      arm(0, 1.5, 0.2); arm(1, 1.5, 0.2);
+    }
+    rotWorld(B.head, _dFwd, Math.sin(beat * Math.PI * 0.5) * 0.12);
+    person.position.y = groundY(person.position.x, person.position.z) + bounce * (move === 2 ? 0.14 : 0.06);
+    return true;
+  }
+  if (new URLSearchParams(location.search).has('test')) window.__dance = { toggle: toggleDance, state: () => ({ ...dance, bones: undefined }), set t(v) { dance.t = v; } };
+
+  function attackStep(dt) {
+    if (atk.win > 0) atk.win -= dt;
+    const m = atk.move;
+    if (!m) return;
+    atk.t += dt;
+    const u = Math.min(1, atk.t / atk.dur);
+    if (!m.upper && !atk.hit && u >= m.hitAt) { atk.hit = true; legHit(m); }
+    if (m.drop) {
+      /* 드롭킥: 뛰어올라 몸을 뒤로 눕히며 두 발로 차고, 등으로 떨어졌다가 일어난다 */
+      const a = atk.act;
+      if (a && a.time > a.getClip().duration * 0.45) a.paused = true;   // 다리를 뻗은 순간에서 멈춘다
+      const air = THREE.MathUtils.clamp((u - 0.06) / 0.46, 0, 1);
+      const lean = u < 0.22 ? u / 0.22 : u < 0.62 ? 1 : Math.max(0, 1 - (u - 0.62) / 0.33);
+      if (air > 0 && air < 1) {
+        person.position.x += Math.sin(atk.dropH) * 6.5 * dt;
+        person.position.z += Math.cos(atk.dropH) * 6.5 * dt;
+        clampToBounds(person.position);
+        if (fishing) fishing.pushOut(person.position, 0.35);
+      }
+      person.rotation.order = 'YXZ';
+      person.rotation.y = pHeading = atk.dropH;
+      person.rotation.x = -1.3 * (lean * lean * (3 - 2 * lean));
+      person.position.y = groundY(person.position.x, person.position.z) + Math.sin(Math.PI * air) * 0.8 + lean * 0.12;
+      pSpeed = 0;
+    }
+    if (!m.upper) {
+      charMixer.update(dt);   // walk() 를 건너뛰는 동안 애니메이션은 여기서 돌린다
+      if (!m.drop) person.position.y = groundY(person.position.x, person.position.z);
+    }
+    if (atk.t >= atk.dur) {
+      if (m.drop) { person.rotation.x = 0; if (atk.act) { atk.act.paused = false; atk.act.fadeOut(0.15); } }
+      else if (!m.upper && atk.act) atk.act.fadeOut(0.15);
+      atk.move = null;
+    }
+  }
+
   /* ── 승하차 ── */
-  const ENTER_CAR_R = 5.5;
+  let ENTER_CAR_R = 5.5;   // 마차처럼 긴 탈것은 더 멀리서 탄다 (vehicles.js params)
   const player = { mode: 'driving' };
 
   function nearCar() {
@@ -1700,7 +2112,10 @@ async function initDrive() {
       <div class="keys"><span class="key">Space</span></div><span>보기·열기</span>
       ${driving ? '<div class="keys"><span class="key">Shift</span></div><span>부스트</span><div class="keys"><span class="key">H</span></div><span>경적</span>' : '<div class="keys"><span class="key">Shift</span></div><span>달리기</span>'}
       <div class="keys"><span class="key">R</span></div><span>다시 쌓기</span>
-      <div class="keys"><span class="key">F</span></div><span>${driving ? '내리기' : '타기'}</span>`;
+      <div class="keys"><span class="key">F</span></div><span>${driving ? '내리기' : '타기'}</span>
+      ${driving
+        ? '<div class="keys"><span class="key">V</span></div><span>탈것 바꾸기</span><span>· 탱크는 클릭 포격</span>'
+        : '<div class="keys"><span class="key">`</span></div><span>주먹</span><div class="keys"><span class="key">1~0 - =</span></div><span>무기</span><div class="keys"><span class="key">E</span></div><span>앉기</span><div class="keys"><span class="key">M</span></div><span>지도</span><div class="keys"><span class="key">B</span></div><span>춤</span><span>· 클릭 공격(연타 콤보) · 꾹 눌러 잡기</span>'}`;
   }
   updateHint();
 
@@ -1808,6 +2223,7 @@ async function initDrive() {
 
   function openPanel(p) {
     current = p.id;
+    if (quests) quests.notify('project', p.id);
     panel.style.setProperty('--c', p.color);
     pnNo.textContent = p.no;
     pnBd.innerHTML = `
@@ -1894,14 +2310,191 @@ async function initDrive() {
     onfoot:  { back: 7.2,  up: 3.9, ahead: 3, lookY: 1.3, ease: 0.0006 }
   };
 
+  /* ── 탈것 바꾸기 — 자동차 · 말 · 마차 · 오토바이 · 자전거 (vehicles.js) ──
+     차 루트 안에서 겉모습만 갈아 끼우고, 속도·회전·카메라·충돌 상자 값만 여기로 넘겨받는다.
+     위쪽 바의 버튼이나 V 키로 고른다. 모델은 처음 고를 때 내려받는다. */
+  const { createVehicleSwitcher, mountVehicleButton, applyBodyShape } = await import('./vehicles.js');
+  let weapons = null, tavern = null, dialogue = null, fishing = null;   // 아래에서 만든다. 탈것(탱크 폭발)·물리·잡기가 먼저 참조하므로 미리 선언
+  const rides = await createVehicleSwitcher({
+    THREE, GLTFLoader, dracoLoader: draco,
+    carGroup: car, person, scene,
+    personClips: () => charClips,
+    /* 탱크: 마우스로 포탑 조준, 클릭으로 포격. 폭발은 무기 모듈의 것을 같이 쓴다 */
+    camera, domElement: renderer.domElement, groundY,
+    getNpcs: () => npcs, toyBlocks,
+    isBlocked: () => !driveActive || panelOpen(),
+    explode: (pos, r, f) => { if (weapons) weapons.explode(pos, r, f); if (events) events.notify('explosion', pos); if (animals) animals.hitAt(pos, r, f); },
+    onChange(id, p) {
+      MAX_FWD = p.maxFwd; MAX_REV = p.maxRev; ACCEL = p.accel; TURN = p.turn;
+      ENTER_CAR_R = p.enterR;
+      Object.assign(CAM.driving, p.cam);
+      applyBodyShape(carBody, p);
+      speed = Math.min(speed, p.maxFwd);
+    }
+  });
+  mountVehicleButton({ container: document.getElementById('g-top'), switcher: rides });
+  ridesRef = rides;   // 손님 충돌(getRide)이 지금 탈것 크기를 읽는다
+  const rideIn = { speed: 0, steer: 0, moving: false, boosting: false, driving: true };   // 매 프레임 재사용
+
+  /* ── 눈 위 발자국 · 바퀴 자국 (tracks.js) ──
+     눈이 쌓였을 때만 찍히고 20초쯤 지나면 새 눈에 덮인다. 다리 위와 물 위에는 남기지 않는다 */
+  const { createTracks } = await import('./tracks.js');
+  const tracks = createTracks({
+    THREE, scene, uSnow: seasons.uniforms.uSnow, groundY, heightAt,
+    canMark: (x, z) => bridgeY(x, z) === null && heightAt(x, z) > WORLD.stream.water - 0.05
+  });
+  const trackIn = { mode: 'driving', ride: 'car', heading: 0, speed: 0, car: car.position, person: person.position };   // 매 프레임 재사용
+
+  /* ── 선술집 — 빈 의자 옆에서 E로 앉고, 주문판에서 술을 시켜 마신다 (tavern.js) ── */
+  {
+    const { createTavern } = await import('./tavern.js');
+    const { stallsFromStations } = await import('./npcs.js');
+    tavern = createTavern({
+      THREE, scene, camera, person,
+      personClips: () => charClips,
+      getNpcs: () => npcs,
+      stalls: stallsFromStations(stations, { THREE, toyBlocks }),
+      isBlocked: () => !driveActive || panelOpen() || !!(dialogue && dialogue.active) || !!(fishing && fishing.active) || !!(quests && quests.open) || !!(shop && shop.open),
+      onSit() { pSpeed = 0; if (weapons) weapons.holster(); },
+      onStand(h) { pHeading = camYaw = h; pSpeed = 0; },
+    });
+  }
+  const tavernIn = { onFoot: false, keys: null };   // 매 프레임 재사용
+
+  /* ── 연못 낚시 — 물가·선착장에서 "F 낚시하기", 겨울엔 얼음낚시 (fishing.js) ── */
+  {
+    const { createFishing } = await import('./fishing.js');
+    fishing = createFishing({
+      THREE, scene, camera, person, groundY,
+      personClips: () => charClips,
+      domElement: renderer.domElement,
+      getSeason: () => seasons.season,
+      isBlocked: () => !driveActive || panelOpen() || tavern.seated || !!(dialogue && dialogue.active),
+      onStart() { pSpeed = 0; if (weapons) weapons.holster(); },
+      onStop(h) { pHeading = camYaw = h; pSpeed = 0; },
+    });
+    if (new URLSearchParams(location.search).has('test')) window.__fishing = fishing;
+  }
+  const fishIn = { onFoot: false, keys: null };
+
+  /* ── 무기 10종 — 걸을 때 1~9·0으로 고르고 클릭으로 공격 (weapons.js). 피 없이 넘어지기만 한다 ── */
+  {
+    const { createWeapons } = await import('./weapons.js');
+    weapons = createWeapons({
+      THREE, scene, camera, person, GLTFLoader, dracoLoader: draco,
+      domElement: renderer.domElement,
+      personClips: () => charClips,
+      getNpcs: () => npcs,
+      toyBlocks, groundY,
+      colliders: () => festival ? [...stations.map(s => s.group), ...festival.colliders()] : stations.map(s => s.group),   // 활터 과녁에 화살이 꽂힌다
+      isBlocked: () => !driveActive || panelOpen() || !!(dialogue && dialogue.active) || !!(quests && quests.open) || !!(shop && shop.open),
+      onExplode: (p, r, f) => { if (animals) animals.hitAt(p, r, f); },   // 폭탄·바주카·박격포에 동물도 데굴데굴
+      onNoise: (k, p) => { if (animals) animals.alarm(p); },              // 총소리에 동물이 도망
+      canUse: () => player.mode === 'onfoot' && !tavern.seated && !(fishing && fishing.active),
+    });
+  }
+  const weaponsIn = { onFoot: false };   // 매 프레임 재사용
+
+  /* ── 마을 사람과 대화 — 가까이 가면 "F 대화하기", 동물의 숲처럼 아래 말풍선 (dialogue.js) ── */
+  {
+    const { createDialogue } = await import('./dialogue.js');
+    dialogue = createDialogue({
+      THREE, camera, person,
+      getNpcs: () => npcs,
+      isOnFoot: () => player.mode === 'onfoot' && !tavern.seated && !fishing.active,
+      isBlocked: () => !driveActive || panelOpen() || !!(quests && quests.open) || !!(shop && shop.open) || !!(minimap && minimap.bigOpen),
+      onStart() { for (const k in keys) keys[k] = false; pSpeed = 0; if (weapons) weapons.holster(); },
+      faceTo(h) { pHeading = h; pSpeed = 0; },
+      onEnd() { camYaw = pHeading; },
+      getSeason: () => seasons.season,   // 계절·밤 전용 대사
+      getNight: () => night,
+    });
+  }
+
+  /* ── 의뢰 게시판과 퀘스트 11종 (quests.js) — 출발점 왼쪽 길가. 보상 은화는 선술집 지갑으로 ── */
+  {
+    const { createQuests } = await import('./quests.js');
+    quests = createQuests({
+      THREE, scene, camera, pathX, groundY,
+      getPlayerPos: () => activePos(),
+      isOnFoot: () => player.mode === 'onfoot',
+      isBlocked: () => !driveActive || panelOpen() || !!(dialogue && dialogue.active) || !!(fishing && fishing.active) || tavern.seated,
+      getAnimals: () => animals, getVillage: () => village, getFishing: () => fishing,
+      getTavern: () => tavern, getNpcs: () => npcs, getDialogue: () => dialogue,
+      getRide: () => (player.mode === 'driving' ? rides.current : null),
+      castleGate: castle,
+      onOpen() { for (const k in keys) keys[k] = false; pSpeed = 0; speed = 0; if (weapons) weapons.holster(); },
+    });
+  }
+
+  /* ── 약초 마녀의 물약 가게(동쪽 숲 21,-24)와 떠돌이 상인 마차 — 물약·모자·망토 염색·애완 오리 (shop.js) ── */
+  shop = createShop({
+    THREE, scene, camera, person, GLTFLoader, dracoLoader: draco, groundY, pathX,
+    getPlayerPos: () => activePos(),
+    isOnFoot: () => player.mode === 'onfoot',
+    isBlocked: () => !driveActive || panelOpen() || !!(dialogue && dialogue.active) || !!(fishing && fishing.active) || tavern.seated || !!(quests && quests.open),
+    getTavern: () => tavern, getQuests: () => quests, getNpcs: () => npcs, getEvents: () => events,
+    blocks: (x, z, r) => vprops.blocks(x, z, r),
+    onOpen() { for (const k in keys) keys[k] = false; pSpeed = 0; speed = 0; if (weapons) weapons.holster(); },
+  });
+
+  /* ── 미니맵(오른쪽 위, 클릭 = 북쪽 고정) + M 큰 지도 — 행사·퀘스트·상인 표시 (minimap.js) ── */
+  {
+    const { createMinimap } = await import('./minimap.js');
+    minimap = createMinimap({
+      THREE, pathX, world: WORLD, camera,
+      bounds: { minX: -HX, maxX: HX, minZ: -HZ, maxZ: HZ },
+      getPlayerPos: () => activePos(),
+      getPlayerHeading: () => (player.mode === 'onfoot' ? pHeading : heading),
+      getRidePos: () => (player.mode === 'onfoot' ? car.position : null),
+      stations,
+      getPonds: () => (fishing && fishing.ponds) || null,
+      castle, vprops,
+      getFestival: () => festival, getPageant: () => pageant, getShop: () => shop,
+      getQuests: () => quests, getVillage: () => village,
+      getNpcs: () => npcs, getAnimals: () => animals,
+      isActive: () => driveActive,
+    });
+  }
+
+  /* ── 배경 소리: 바람·낙엽·개울·선술집 웅성거림·새·귀뚜라미·부엉이·개구리·발소리 (audio.js, 전부 합성음) ── */
+  const { createAudio } = await import('./audio.js');
+  const ambience = createAudio({
+    getPlayerPos: () => activePos(),
+    getCamera: () => camera,
+    getNight: () => night,
+    getSeason: () => seasons.season,
+    isMusicOn: () => document.getElementById('g-music-btn')?.getAttribute('aria-pressed') === 'true',
+    isVisible: () => driveActive,
+    getNpcs: () => npcs,
+    getStalls: () => stations.map(s => s.group.position),
+    isMoving: () => (player.mode === 'onfoot'
+      ? { speed: (tavern.seated || fishing.active) ? 0 : pSpeed, mode: 'onfoot' }
+      : { speed: Math.abs(speed), mode: rides.current }),
+    onFoot: () => player.mode === 'onfoot',
+    pathX, roadHalf: WORLD.path.half, bridge: WORLD.bridge, stream: WORLD.stream,
+  });
+
+  /* 오른쪽 마우스를 누르고 있는 동안 어깨 너머로 살짝 줌 (떼면 돌아온다) */
+  let zoomHeld = false, zoomK = 0;
+  const baseFov = camera.fov;
+  renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+  renderer.domElement.addEventListener('pointerdown', e => { if (e.button === 2 && driveActive) zoomHeld = true; });
+  window.addEventListener('pointerup', e => { if (e.button === 2) zoomHeld = false; });
+  window.addEventListener('blur', () => { zoomHeld = false; });
+
   function updateCamera(dt) {
     const onFoot = player.mode === 'onfoot';
     const c = onFoot ? CAM.onfoot : CAM.driving;
     const p = onFoot ? person.position : car.position;
     const h = onFoot ? camYaw : heading;
     const k = 1 - Math.pow(c.ease, dt);
+    zoomK += ((zoomHeld ? 1 : 0) - zoomK) * Math.min(1, dt * 9);
+    const fov = baseFov - 14 * zoomK;
+    if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+    const back = c.back * (1 - 0.45 * zoomK), side = (onFoot ? 0.75 : 0) * zoomK;   // 오른쪽 어깨 너머 = (-cos h, sin h)
 
-    camTarget.set(p.x - Math.sin(h) * c.back, p.y + c.up, p.z - Math.cos(h) * c.back);
+    camTarget.set(p.x - Math.sin(h) * back - Math.cos(h) * side, p.y + c.up * (1 - 0.3 * zoomK), p.z - Math.cos(h) * back + Math.sin(h) * side);
     camPos.lerp(camTarget, k);
     camera.position.copy(camPos);
 
@@ -1917,7 +2510,18 @@ async function initDrive() {
   function step(dt) {
     t += dt;
     if (player.mode === 'driving') drive(dt);
-    else walk(dt);
+    else if (!tavern.seated && !fishing.active) {
+      if (dialogue.active) keys.fwd = keys.back = keys.left = keys.right = keys.boost = false;
+      if (!danceStep(dt) && !legMove()) walk(dt);   // 춤·발차기·드롭킥 중엔 제자리 (애니메이션은 각자 돌린다)
+    }   // 의자에 앉아 있거나 낚시 중이면 걷기를 멈춘다
+    attackStep(dt);
+    tavernIn.onFoot = player.mode === 'onfoot'; tavernIn.keys = keys;
+    tavern.update(dt, tavernIn);
+    fishIn.onFoot = player.mode === 'onfoot'; fishIn.keys = keys;
+    fishing.update(dt, fishIn);
+    rideIn.speed = speed; rideIn.steer = steer; rideIn.boosting = !!keys.boost;
+    rideIn.moving = !!(keys.fwd || keys.back); rideIn.driving = player.mode === 'driving';
+    rides.update(dt, rideIn);   // 말 걸음·바퀴·핸들·탄 사람 자세
     physicsStep(dt);
     {
       /* 차 바퀴 자리와 차체, 걷는 사람 발 아래를 눕힌다 */
@@ -1931,13 +2535,38 @@ async function initDrive() {
       updateTrail(dt, stamps);
     }
     timeU.value = t;
-    updateDayNight(t);
+    updateDayNight(dt);   // 하루 (sky.js)
+    seasons.update(dt, activePos());   // 계절 — 낮밤 색 위에 덧칠하므로 updateDayNight 다음
     fireflies(t);
     for (const c of contacts) { c.icon.position.y = 1.75 + Math.sin(t * 1.4 + c.phase) * 0.12; c.icon.rotation.y = Math.sin(t * 0.6 + c.phase) * 0.35; }
     dust(dt);
     fallingLeaves(dt, t, activePos().x, activePos().z);
-    updateCamera(dt);
+    followSun(activePos().x, activePos().z);
+    tavern.cameraStep(camera, dt, d => dialogue.cameraStep(camera, d, d2 => fishing.cameraStep(camera, d2, updateCamera)));   // 앉으면 어깨 너머 카메라, 취하면 살짝 흔들림
+    weaponsIn.onFoot = player.mode === 'onfoot';
+    weapons.update(dt, weaponsIn);                 // 무기 자세·투사체·효과·카메라 흔들림 (카메라 갱신 다음)
+    if (shop) shop.update(dt, t);                  // 물약 효과(크기·투명·카메라) — 카메라 갱신 다음
     proximity();
+    if (npcs) npcs.update(dt, t);
+    if (events) events.update(dt, t);
+    if (village) village.update(dt, t);
+    if (festival) festival.update(dt, t);
+    if (pageant) pageant.update(dt, t);
+    ambience.update(dt, t);
+    if (castle) castle.update(dt, t);
+    vprops.update(dt, t);
+    if (animals) animals.update(dt, t);
+    if (quests) quests.update(dt, t);
+    if (kids) kids.update(dt, t);
+    if (minimap) minimap.update(dt);
+    bridge.setLampGlow(night);
+    if (dialogue) dialogue.update(dt);   // npcs.update 다음 (말 상대를 세워 둔다)
+    {
+      const busy = !!((dialogue && dialogue.active) || (fishing && fishing.active) || (shop && shop.open));   // 대화·낚시 중엔 단축 바·안내를 숨긴다
+      if (document.body.classList.contains('talking') !== busy) document.body.classList.toggle('talking', busy);
+    }
+    trackIn.mode = player.mode; trackIn.ride = rides.current; trackIn.heading = heading; trackIn.speed = speed;
+    tracks.update(dt, trackIn, npcs && npcs.npcs);   // 눈 위 자국 — 사람·탈것·마을 사람
 
     const me = activePos();
     for (const s of stations) {
@@ -1956,29 +2585,23 @@ async function initDrive() {
     }
   }
 
-  /* ── 빛 번짐 — 등롱·전구·반딧불처럼 밝은 것만 은은하게 번진다 ── */
-  const { EffectComposer } = await import('three/addons/postprocessing/EffectComposer.js');
-  const { RenderPass } = await import('three/addons/postprocessing/RenderPass.js');
-  const { UnrealBloomPass } = await import('three/addons/postprocessing/UnrealBloomPass.js');
-  const { OutputPass } = await import('three/addons/postprocessing/OutputPass.js');
-  const composer = new EffectComposer(renderer);
-  composer.addPass(new RenderPass(scene, camera));
-  composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.45, 0.5, 1.0));
-  composer.addPass(new OutputPass());
+  /* ── 그래픽 (graphics.js) — 빛 번짐·색 보정·땅안개·물·햇살 줄기, 화질 자동 조절 (음악 버튼 옆 "화질") ── */
+  const { createGraphics } = await import('./graphics.js');
+  const gfx = await createGraphics({ THREE, renderer, scene, camera, sun, hemi, sky, getPlayerPos: () => activePos(),
+    getNight: () => night, getSeason: () => seasons.season });
 
   function loop() {
     requestAnimationFrame(loop);
     const dt = Math.min(clock.getDelta(), 0.05);   // 탭 복귀 시 delta 폭주 방지
     if (!driveActive) return;                      // 문서 뷰일 땐 그리지 않는다
     step(dt);
-    composer.render();
+    gfx.render(dt);
   }
 
   addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(innerWidth, innerHeight);
-    composer.setSize(innerWidth, innerHeight);
+    gfx.setSize(innerWidth, innerHeight);
   });
 
   /* ── 로딩 ── */
