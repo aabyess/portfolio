@@ -469,7 +469,7 @@ export function createAudio({
     if (L.stream.pan) L.stream.pan.pan.setTargetAtTime(panTo(px, streamZ(px)), ctx.currentTime, 0.2);
     set('tavern', clamp01(tav));
     if (L.tavern.pan) L.tavern.pan.pan.setTargetAtTime(near.stall < 4 ? 0 : panTo(near.stallX, near.stallZ) * 0.7, ctx.currentTime, 0.3);
-    set('crickets', winter ? 0 : clamp01((night - 0.3) / 0.4) * (season === 'autumn' ? 0.6 : 1));
+    set('crickets', 0);   // 귀뚜라미는 셰이커처럼 들려서 뺐다 (사용자 요청)
     const eng = ENGINE[mode];
     if (eng) {
       const e = L.engine.extra, f = eng[0] + spd * eng[1];
