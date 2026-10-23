@@ -713,7 +713,11 @@ async function initDrive() {
   worldLoader.setDRACOLoader(draco);
   /* 장난감 블록·상호왕국 표지판 자리 (나무를 치우려고 월드 로딩 전에 정한다) */
   const NAME_Z = WORLD.start.z - 12, ROW_Z = WORLD.start.z - 9.6, BLOCK_X = pathX(NAME_Z) + 15;
-  const KINGDOM_SIGN = { x: pathX(WORLD.start.z - 6) - 3.6, z: WORLD.start.z - 6 };
+  /* 상호랜드 표지판은 의뢰 게시판(quests.js 기본 자리: 길 왼쪽 z 57.4, 같은 방향) 바로 옆, 출발점 쪽에 나란히 선다 */
+  const KINGDOM_SIGN = (() => {
+    const bz = 57.4, bx = pathX(bz) - 4.6, rot = Math.PI / 2 - 0.45, gap = 3.5;   // quests.js 게시판 값과 같게
+    return { x: bx - Math.cos(rot) * gap, z: bz + Math.sin(rot) * gap, rot };
+  })();
   const { PONDS } = await import('./fishing.js');   // 연못 자리의 나무는 치운다
   const { CASTLE_CLEAR } = await import('./castle.js');   // 성문·성벽 자리의 나무도
   const { FESTIVAL_CLEAR, createFestival } = await import('./festival.js');   // 창시합장·활터·마을 광장
@@ -748,7 +752,7 @@ async function initDrive() {
     clearTrees(gltf.scene, PROJECTS.filter(p => p.ai).map(p => p.pos), 7.5);
     clearTrees(gltf.scene, PONDS.map(p => [p.x, p.z]), 6.2);
     clearTrees(gltf.scene, [[BLOCK_X, (NAME_Z + ROW_Z) / 2]], 6);       // 장난감 블록 자리
-    clearTrees(gltf.scene, [[KINGDOM_SIGN.x, KINGDOM_SIGN.z]], 2.6);   // 상호왕국 표지판
+    clearTrees(gltf.scene, [[KINGDOM_SIGN.x, KINGDOM_SIGN.z]], 2.6);   // 상호랜드 표지판
     clearTrees(gltf.scene, CASTLE_CLEAR.spots, CASTLE_CLEAR.r);         // 북쪽 성문
     for (const g of vprops.clearGroups) clearTrees(gltf.scene, g.spots, g.r);   // 오두막·밭·풍차
     clearTrees(gltf.scene, FESTIVAL_CLEAR.spots, FESTIVAL_CLEAR.r);              // 축제 자리
@@ -1132,7 +1136,7 @@ async function initDrive() {
   const ROW_TEXT = 'AI ENGINEER', ROW_MID = (ROW_TEXT.length - 1) / 2;
   [...ROW_TEXT].forEach((ch, i) => { if (ch !== ' ') toyBlock(ch, 0.74, 0.74, 0.74, BLOCK_X + (i - ROW_MID) * 0.8, 0.37, ROW_Z, SMALL[i % 5], 0.6); });
 
-  /* ── 길 왼쪽 나무 표지판 "상호랜드" ── */
+  /* ── 길 왼쪽 나무 표지판 "상호랜드" (의뢰 게시판과 나란히) ── */
   {
     const g = new THREE.Group();
     const wood = new THREE.MeshStandardMaterial({ color: 0x5a3a22, roughness: .85 });
@@ -1160,7 +1164,7 @@ async function initDrive() {
     const roof = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.1, 0.42), wood);   // 작은 처마
     roof.position.y = 2.82; roof.castShadow = true; g.add(roof);
     g.position.set(KINGDOM_SIGN.x, Math.max(0, heightAt(KINGDOM_SIGN.x, KINGDOM_SIGN.z)), KINGDOM_SIGN.z);
-    g.rotation.y = 0.35;                                                          // 출발점에서 오는 사람을 비스듬히 본다
+    g.rotation.y = KINGDOM_SIGN.rot;                                              // 게시판과 같은 쪽(길·출발점)을 본다
     scene.add(g);
     const sb = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(1.35, 1.4, 0.15)) });
     sb.position.set(g.position.x, g.position.y + 1.4, g.position.z);
