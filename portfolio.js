@@ -1013,7 +1013,12 @@ async function initDrive() {
     const b = new THREE.Box3().setFromObject(model, true);
     const c = b.getCenter(new THREE.Vector3());
     model.position.x -= c.x; model.position.z -= c.z; model.position.y -= b.min.y;
-    model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    model.traverse(o => {
+      if (!o.isMesh) return;
+      o.castShadow = true; o.receiveShadow = true;
+      /* 양면 재질이면 안쪽 면이 겹쳐 캐릭터가 시커멓게 보인다 → 앞면만 (망토는 안감이 따로 있어 괜찮다) */
+      for (const m of [].concat(o.material)) if (m.side === THREE.DoubleSide) m.side = THREE.FrontSide;
+    });
 
     for (const child of [...person.children]) person.remove(child);
     person.add(model);
