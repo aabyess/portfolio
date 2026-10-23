@@ -1127,7 +1127,7 @@ async function initDrive() {
   const ROW_TEXT = 'AI ENGINEER', ROW_MID = (ROW_TEXT.length - 1) / 2;
   [...ROW_TEXT].forEach((ch, i) => { if (ch !== ' ') toyBlock(ch, 0.74, 0.74, 0.74, BLOCK_X + (i - ROW_MID) * 0.8, 0.37, ROW_Z, SMALL[i % 5], 0.6); });
 
-  /* ── 길 왼쪽 나무 표지판 "상호왕국" ── */
+  /* ── 길 왼쪽 나무 표지판 "상호랜드" ── */
   {
     const g = new THREE.Group();
     const wood = new THREE.MeshStandardMaterial({ color: 0x5a3a22, roughness: .85 });
@@ -1144,8 +1144,8 @@ async function initDrive() {
     c.strokeStyle = '#4a2a14'; c.lineWidth = 18; c.strokeRect(9, 9, 1006, 402);
     c.textAlign = 'center'; c.textBaseline = 'middle';
     c.font = '900 168px Pretendard, system-ui, sans-serif';
-    c.fillStyle = 'rgba(40,20,8,.55)'; c.fillText('상호왕국', 518, 172);
-    c.fillStyle = '#ffe2a8'; c.fillText('상호왕국', 512, 164);
+    c.fillStyle = 'rgba(40,20,8,.55)'; c.fillText('상호랜드', 518, 172);
+    c.fillStyle = '#ffe2a8'; c.fillText('상호랜드', 512, 164);
     c.font = '700 50px Pretendard, system-ui, sans-serif'; c.fillStyle = '#fff1d0';
     c.fillText('♔ 임금님 최상호의 나라에 오신 걸 환영합니다', 512, 318);
     const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
