@@ -1730,6 +1730,7 @@ async function initDrive() {
       return;
     }
     if (e.code === 'KeyM' && !e.repeat && minimap) { e.preventDefault(); minimap.toggleBig(); return; }   // 큰 지도
+    if (e.code === 'KeyB' && !e.repeat && player.mode === 'onfoot') { e.preventDefault(); toggleDance(); return; }   // 춤
     /* 게시판 근처에서 Space는 브레이크가 아니라 "프로젝트 보기" */
     if (e.code === 'Space' && promptFor) { e.preventDefault(); activate(promptFor); hideHint(); return; }
     if (e.code === 'KeyR') { e.preventDefault(); restackBlocks(); return; }
@@ -1961,6 +1962,70 @@ async function initDrive() {
       npcs.knockDown(n, _imp, 'punch', m.dmg);   // 맷집을 깎는다 (다 닳으면 넘어진다)
     }
   }
+  /* ── 춤 (B) — 4박자마다 동작이 바뀐다: 팔 흔들기 → 디스코 → 말춤 → 빙글 돌기. 움직이면 멈춘다.
+     클립이 없어서 대기(idle) 위에 팔·몸통 뼈를 돌려 얹는다. 근처 손님들이 따라 추고 아이들이 환호한다 ── */
+  const dance = { on: false, t: 0, h: 0, bones: null };
+  /* 뼈 축이 뼈마다 달라서, 캐릭터 기준 방향(앞·왼쪽)으로 돌린다: 부모 좌표로 바꾼 축으로 회전을 앞에 곱한다 */
+  const _dq = new THREE.Quaternion(), _dp = new THREE.Quaternion(), _dax = new THREE.Vector3();
+  const _dFwd = new THREE.Vector3(), _dLeft = new THREE.Vector3();
+  function rotWorld(bone, axis, ang) {
+    if (!bone || !ang) return;
+    bone.parent.getWorldQuaternion(_dp).invert();
+    _dq.setFromAxisAngle(_dax.copy(axis).applyQuaternion(_dp), ang);
+    bone.quaternion.premultiply(_dq);
+    bone.updateMatrixWorld(true);
+  }
+  function danceBones() {
+    if (dance.bones) return dance.bones;
+    const b = n => person.getObjectByName(n);
+    return (dance.bones = { ua: [b('UpperArmL'), b('UpperArmR')], la: [b('LowerArmL'), b('LowerArmR')], chest: b('Chest'), hips: b('Hips'), head: b('Head') });
+  }
+  function toggleDance(on = !dance.on) {
+    if (on && (player.mode !== 'onfoot' || tavern.seated || fishing.active || (dialogue && dialogue.active))) return;
+    dance.on = on; dance.t = 0; dance.h = pHeading;
+    if (on) {
+      pSpeed = 0;
+      if (weapons) weapons.holster();
+      if (npcs && npcs.danceAt) npcs.danceAt(person.position.x, person.position.z, 5, 22);
+      if (kids) kids.cheer(person.position);
+      toast('💃 춤판이 벌어졌어요! (움직이면 멈춰요)', 1800);
+    } else person.rotation.y = pHeading;
+  }
+  function danceStep(dt) {
+    if (!dance.on) return false;
+    if (player.mode !== 'onfoot' || keys.fwd || keys.back || keys.left || keys.right) { toggleDance(false); return false; }
+    dance.t += dt;
+    const B = danceBones(), beat = dance.t * 2.2;                           // 약 132 BPM
+    const s = Math.sin(beat * Math.PI), bounce = Math.abs(s), move = Math.floor(dance.t / 3.6) % 4;
+    if (charMixer) { playClip('idle'); charMixer.update(dt); }
+    let yaw = dance.h;
+    const arm = (i, up, fore = 0, fwd = 0) => {                               // i: 0 왼팔 1 오른팔 / up: 옆으로 들기, fore: 팔꿈치 굽히기, fwd: 앞으로 뻗기
+      rotWorld(B.ua[i], _dFwd, up * (i === 0 ? 1 : -1));
+      rotWorld(B.ua[i], _dLeft, -fwd);
+      rotWorld(B.la[i], _dLeft, -fore);
+    };
+    yaw += move === 0 ? s * 0.15 : move === 1 ? 0.3 : move === 2 ? Math.sin(beat * Math.PI * 0.5) * 0.25 : ((dance.t % 3.6) / 3.6) * Math.PI * 2;
+    person.rotation.y = yaw;
+    person.updateMatrixWorld(true);
+    _dFwd.set(Math.sin(yaw), 0, Math.cos(yaw)); _dLeft.set(Math.cos(yaw), 0, -Math.sin(yaw));
+    if (move === 0) {          // 팔 흔들기: 두 팔 번쩍, 좌우로 흔들
+      arm(0, 2.6 + s * 0.3, 0.3); arm(1, 2.6 - s * 0.3, 0.3);
+      rotWorld(B.chest, _dFwd, s * 0.12);
+    } else if (move === 1) {   // 디스코: 오른손 하늘 찌르기 ↔ 허리에 왼손
+      arm(1, s > 0 ? 2.7 : 0.5, 0.1); arm(0, 0.5, 1.6);
+      rotWorld(B.hips, THREE.Object3D.DEFAULT_UP, s * 0.25);
+    } else if (move === 2) {   // 말춤: 두 손 모아 앞으로, 통통 뛰기
+      arm(0, 0.2, 1.2, 1.1); arm(1, 0.2, 1.2, 1.1);
+      rotWorld(B.chest, _dLeft, 0.15);
+    } else {                   // 빙글 돌기: 한 바퀴 돌며 팔 벌리기
+      arm(0, 1.5, 0.2); arm(1, 1.5, 0.2);
+    }
+    rotWorld(B.head, _dFwd, Math.sin(beat * Math.PI * 0.5) * 0.12);
+    person.position.y = groundY(person.position.x, person.position.z) + bounce * (move === 2 ? 0.14 : 0.06);
+    return true;
+  }
+  if (new URLSearchParams(location.search).has('test')) window.__dance = { toggle: toggleDance, state: () => ({ ...dance, bones: undefined }), set t(v) { dance.t = v; } };
+
   function attackStep(dt) {
     if (atk.win > 0) atk.win -= dt;
     const m = atk.move;
@@ -2041,7 +2106,7 @@ async function initDrive() {
       <div class="keys"><span class="key">F</span></div><span>${driving ? '내리기' : '타기'}</span>
       ${driving
         ? '<div class="keys"><span class="key">V</span></div><span>탈것 바꾸기</span><span>· 탱크는 클릭 포격</span>'
-        : '<div class="keys"><span class="key">`</span></div><span>주먹</span><div class="keys"><span class="key">1~0 - =</span></div><span>무기</span><div class="keys"><span class="key">E</span></div><span>앉기</span><div class="keys"><span class="key">M</span></div><span>지도</span><span>· 클릭 공격(연타 콤보) · 꾹 눌러 잡기</span>'}`;
+        : '<div class="keys"><span class="key">`</span></div><span>주먹</span><div class="keys"><span class="key">1~0 - =</span></div><span>무기</span><div class="keys"><span class="key">E</span></div><span>앉기</span><div class="keys"><span class="key">M</span></div><span>지도</span><div class="keys"><span class="key">B</span></div><span>춤</span><span>· 클릭 공격(연타 콤보) · 꾹 눌러 잡기</span>'}`;
   }
   updateHint();
 
@@ -2438,7 +2503,7 @@ async function initDrive() {
     if (player.mode === 'driving') drive(dt);
     else if (!tavern.seated && !fishing.active) {
       if (dialogue.active) keys.fwd = keys.back = keys.left = keys.right = keys.boost = false;
-      if (!legMove()) walk(dt);   // 발차기·드롭킥 중엔 제자리 (애니메이션은 attackStep 이 돌린다)
+      if (!danceStep(dt) && !legMove()) walk(dt);   // 춤·발차기·드롭킥 중엔 제자리 (애니메이션은 각자 돌린다)
     }   // 의자에 앉아 있거나 낚시 중이면 걷기를 멈춘다
     attackStep(dt);
     tavernIn.onFoot = player.mode === 'onfoot'; tavernIn.keys = keys;

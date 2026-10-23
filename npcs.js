@@ -2934,6 +2934,7 @@ export async function createNPCs({
     alarm, barkeeperServe, say,
     addActor, actorOn, actorOff, actorPlay, isActing, watch,   // [village]
     standPlay, cheerStanding, actorSeated,                     // 서서 환호·마시기 (Cheers/Drink 클립은 앉은 자세)
+    danceAt: (x, z, n = 5, dur = 20) => startDance(x, z, n, dur, false, 22),   // 플레이어가 춤추면 근처 사람들이 따라 춘다
     social,                                                    // [social] toast/brawl/argue/armwrestle/dance/drunk/trip/couple/status
     onPlayerPunch: null,
     _grab: { pick, grab, setTarget, release, punch, setCtrl: c => { ctrl = c; } } });
