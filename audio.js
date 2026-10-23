@@ -463,7 +463,7 @@ export function createAudio({
     const wind = clamp01((0.25 + (winter ? 0.35 : 0) + high * 0.4 + storm * 0.4) * (0.55 + 0.45 * gust));
     set('wind', wind);
     if (L.wind.extra) L.wind.extra.frequency.setTargetAtTime(220 + 600 * gust * (0.6 + wind), ctx.currentTime, 0.4);
-    set('leaves', (season === 'autumn' ? 1 : winter ? 0 : 0.35) * clamp01(gust * gust * 1.3) * (1 - high * 0.7));
+    set('leaves', 0);   // 낙엽 바스락도 모래 흔드는 소리처럼 들려서 뺐다 (사용자 요청)
     const sk = clamp01(1 - near.stream / 30) ** 2 * (winter ? 0.5 : 1);   // 겨울엔 살얼음
     set('stream', sk);
     if (L.stream.pan) L.stream.pan.pan.setTargetAtTime(panTo(px, streamZ(px)), ctx.currentTime, 0.2);
