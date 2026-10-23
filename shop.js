@@ -78,29 +78,16 @@ const STORE_KEY = 'sangholand-shop-v1';
 const AMP = 3.08, K = 0.04285714285714286;          // portfolio.js pathX 와 같은 길 곡선
 const px0 = z => AMP * Math.sin(-K * z);
 
-/* 마녀 오두막 — 동쪽 숲, 앞면이 길(-x) 쪽. 사슴 서식지(29,-18)와 시냇물(z≈-36) 사이 빈 숲 */
-const HUT = { x: 21, z: -24, rotY: -Math.PI / 2 };
-/* 상인 마차 자리 — 길 중심에서 6 m 옆, 마차는 길과 나란히 (side +1 = +x 쪽) */
-const MERCHANT_SPOTS = [
-  { z: 18, side: 1, name: '마을 연못 북쪽 길가' },
-  { z: -2, side: 1, name: '창시합장 가는 길가' },
-  { z: -20, side: -1, name: '시냇물 다리 남쪽 길가' },
-  { z: -70, side: -1, name: '성문 앞 길가' },
-].map(s => ({ ...s, x: +(px0(s.z) + s.side * 6.2).toFixed(2) }));
+/* 마녀 오두막(HUT)·상인 마차 자리(MERCHANT_SPOTS)·나무 비우기 자리(SHOP_CLEAR)는 첫 화면 전에 읽으려고 clear-spots.js 로 옮겼다 */
+import { HUT, MERCHANT_SPOTS, SHOP_CLEAR } from './clear-spots.js';
+import { loadGLTFShared } from './gltf-cache.js';
+export { SHOP_CLEAR };
 
-/* 나무 비우기 자리 (portfolio.js clearTrees) */
 /* userData 에 물체·재질을 넣을 때는 열거 안 되게 (Object3D.clone() 이 userData 를 JSON 으로 복사하다 깨지지 않게, perf.js 와 같은 방식) */
 const udRef = (ud, k, v) => { Object.defineProperty(ud, k, { value: v, writable: true, configurable: true, enumerable: false }); return v; };
 import { notify } from './notify.js';   // 공용 알림 기둥 (다른 모듈 알림과 겹치지 않게)
 
 
-export const SHOP_CLEAR = {
-  r: 4.2,
-  spots: [
-    [HUT.x, HUT.z], [HUT.x - 3, HUT.z - 2.5], [HUT.x - 3, HUT.z + 2.5], [HUT.x + 2.5, HUT.z], [HUT.x - 5.5, HUT.z],
-    ...MERCHANT_SPOTS.flatMap(s => [[s.x + s.side * 1.4, s.z - 2.6], [s.x + s.side * 1.4, s.z + 2.6], [s.x - s.side * 0.9, s.z]]),
-  ],
-};
 
 const POTIONS = {
   giant:   { name: '거인 물약', icon: '🍄', color: '#d0402c', price: 8, dur: 40, desc: '쑥쑥! 몸이 두 배 넘게 커져요. 쿵쿵 걸으면 마을이 들썩.' },
@@ -663,7 +650,7 @@ export function createShop({
       const loader = new GLTFLoader(); if (dracoLoader) loader.setDRACOLoader(dracoLoader);
       const S = 1.95 / 1.8;
       const npc = async (file, parent, hatId, hatSize, scale) => {
-        const g = await loader.loadAsync(file); if (disposed) return null;
+        const g = await loadGLTFShared(loader, file); if (disposed) return null;   // npcs.js 와 같은 파일 → 한 번만 받는다 (원본은 skClone 으로 복제해 쓴다)
         const model = skClone(g.scene); model.scale.setScalar(S * scale);
         model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
         parent.add(model);

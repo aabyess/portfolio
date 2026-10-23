@@ -64,15 +64,9 @@ export const FESTIVAL_SITES = {   // 마을 소품(오두막·밭·풍차)·동�
   archery: { lineX: 19, tx: 35, tz: [63, 67, 71], x: 27, z: 67, name: '활터' },
   green: { x: -19, z: 47, name: '마을 광장' },
 };
-/* portfolio.js clearTrees(gltf.scene, FESTIVAL_CLEAR.spots, FESTIVAL_CLEAR.r) */
-export const FESTIVAL_CLEAR = {
-  r: 4.6,
-  spots: [
-    [27, -9], [27, -3], [27, 3], [27, 9], [27, 13], [22, -6], [22, 0], [22, 6], [32, -4], [32, 4], [32, 10],
-    [17, 60], [17, 66], [17, 72], [22, 67], [27, 63], [27, 71], [31, 67], [35, 63], [35, 67], [35, 71],
-    [-19, 47], [-15, 47], [-23, 47], [-19, 43], [-19, 51],
-  ],
-};
+/* portfolio.js clearTrees(gltf.scene, FESTIVAL_CLEAR.spots, FESTIVAL_CLEAR.r) — 첫 화면 전에 읽으려고 clear-spots.js 로 옮겼다 */
+import { FESTIVAL_CLEAR } from './clear-spots.js';
+export { FESTIVAL_CLEAR };
 
 const D2R = Math.PI / 180;
 const MAIN_FIRST = [45, 75], MAIN_GAP = [65, 110], DRAGON_EVERY = [600, 900];

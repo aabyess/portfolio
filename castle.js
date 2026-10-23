@@ -42,23 +42,9 @@
 import { addStaticLOD } from './perf.js';
 
 
-/* 길: portfolio.js 의 pathX = 3.08·sin(-0.04286·z) 와 같은 값 (월드 JSON path.amp / path.k) */
-const AMP = 3.08, K = 0.04285714285714286;
-const px0 = z => AMP * Math.sin(-K * z);
-const pxd = z => -AMP * K * Math.cos(-K * z);           // dx/dz
-const GZ = -80;                                          // 성문 앞면(아치 바깥 면) z
-
-/* rotY: 통로가 길 방향을 따라가게 살짝 돌린다 (로컬 -Z 가 성 안쪽) */
-export const GATES = [{ id: 'north', name: '상호성', x: +px0(GZ).toFixed(3), z: GZ, rotY: +Math.atan(pxd(GZ)).toFixed(4) }];
-
-/* 나무 비우기 자리: 성 앞면을 따라 (로컬 x -16..16, z 0..-4). 성 뒤쪽은 맵(z -84) 밖이라 나무가 없다 */
-export const CASTLE_CLEAR = {
-  r: 5.5,
-  spots: GATES.flatMap(g => [-15, -10, -5, 0, 5, 10, 15].map(lx => {
-    const c = Math.cos(g.rotY), s = Math.sin(g.rotY), lz = -2;
-    return [+(g.x + c * lx + s * lz).toFixed(2), +(g.z - s * lx + c * lz).toFixed(2)];
-  })),
-};
+/* 성문 자리·나무 비우기 자리는 첫 화면 전에 읽으려고 clear-spots.js 로 옮겼다 (여기서 그대로 다시 내보낸다) */
+import { GATES, CASTLE_CLEAR } from './clear-spots.js';
+export { GATES, CASTLE_CLEAR };
 
 /* 충돌 모양 (로컬 좌표, 미터). rect: 중심 x,z · 반폭 hx,hz · 높이 h / circ: 중심 · 반지름 r */
 const SOLIDS = [

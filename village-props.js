@@ -39,7 +39,7 @@
      colliders([{x, z, rot, hx, hz, h} | {x, z, r, h}]), addBodies(CANNON, world), stats, dispose()
    ════════════════════════════════════════════════════════════ */
 import { PONDS } from './fishing.js';
-import { CASTLE_CLEAR } from './castle.js';
+import { CASTLE_CLEAR } from './clear-spots.js';   // 성 모듈(castle.js)은 첫 화면 뒤에 불러오므로 자리만 작은 모듈에서
 
 const AMP = 3.08, K = 0.04285714285714286;
 const px0 = z => AMP * Math.sin(-K * z);
