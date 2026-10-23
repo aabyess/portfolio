@@ -135,6 +135,16 @@ body[data-view="drive"] #doc-root{display:none}
   border-radius:2px;background:var(--acc)}
 #doc-root .pts li b{color:var(--text);font-weight:600}
 #doc-root .pts li.hide{display:none}
+/* 트러블슈팅 카드 (문서 뷰·게임 프로젝트 창 공용) */
+.tr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;margin-bottom:16px}
+.tr{border:1px solid var(--line);border-radius:10px;padding:13px 15px;background:color-mix(in srgb,var(--line) 18%,transparent)}
+.tr-t{font-size:13.5px;font-weight:700;line-height:1.5;margin-bottom:8px;color:var(--text,var(--ink))}
+.tr dl{display:grid;grid-template-columns:30px 1fr;gap:4px 8px;font-size:12.5px;line-height:1.65;color:var(--muted);margin:0}
+.tr dt{font-weight:700;opacity:.75}
+.tr dt.fix{color:var(--acc,#e8734a);opacity:1}
+.tr dd{margin:0}
+#doc-root .pj code,#g-panel code{font-size:.9em;font-family:var(--mono);background:color-mix(in srgb,var(--line) 45%,transparent);padding:0 4px;border-radius:4px}
+@media (max-width:760px){.tr-grid{grid-template-columns:1fr}}
 #doc-root .more{font-family:var(--mono);font-size:12px;color:var(--acc);background:none;border:none;
   padding:4px 0;border-bottom:1px dashed var(--acc-line);margin-bottom:16px}
 #doc-root .more:hover{border-bottom-style:solid}
