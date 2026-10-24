@@ -23,6 +23,12 @@
      문서 뷰(#doc, #d-...)로 바로 들어온 사람은 3D 를 안 쓰므로 받지 않는다.
      목록을 바꾸면 portfolio.js initDrive() 의 첫 화면 목록과 맞출 것 -->
 <script>
+/* 성능 측정(주소에 ?prof): 50 ms 넘는 긴 작업(__lt)과 50 ms 넘게 끊긴 프레임(__gaps)을 처음부터 기록한다 */
+if (/[?&]prof/.test(location.search)) (function () {
+  var lt = window.__lt = [], gaps = window.__gaps = [], last = 0;
+  try { new PerformanceObserver(function (l) { l.getEntries().forEach(function (e) { lt.push([Math.round(e.startTime), Math.round(e.duration)]); }); }).observe({ type: 'longtask', buffered: true }); } catch (e) {}
+  (function f(now) { if (last && now - last > 50) gaps.push([Math.round(last), Math.round(now - last)]); last = now; requestAnimationFrame(f); })(0);
+})();
 (function () {
   if (/^#(doc|top|d-)/.test(location.hash)) return;
   var T = 'https://cdn.jsdelivr.net/npm/three@0.160.0/', J = T + 'examples/jsm/';
