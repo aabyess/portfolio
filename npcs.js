@@ -319,11 +319,13 @@ export async function createNPCs({
   }
   /* 먼 거리 LOD 켜고 끄기. 배우 옷 색을 나중에 바꿨으면(재질이 바뀜) 켤 때 정점색을 다시 굽는다 */
   function setLod(n, on) {
-    n.lodOn = on;
-    if (on && n.hi.some((m, k) => m.material !== n.lodMats[k])) {
+    if (on && (!n.lod || n.hi.some((m, k) => m.material !== n.lodMats[k]))) {
       const nl = makeLod(n.hi);
-      if (nl) { n.lod.parent.remove(n.lod); n.lod = nl; n.lodMats = n.hi.map(m => m.material); }
+      if (nl) { if (n.lod) n.lod.parent.remove(n.lod); n.lod = nl; n.lodMats = n.hi.map(m => m.material); }
+      else if (!n.lod) { n.noLod = true; return; }
     }
+    if (!n.lod) return;
+    n.lodOn = on;
     for (let k = 0; k < n.hi.length; k++) n.hi[k].visible = !on;
     n.lod.visible = on;
     n.lod.castShadow = on && n.shadow;
@@ -356,7 +358,7 @@ export async function createNPCs({
     /* 성능: 부위(메시)마다 따로 있던 뼈대를 하나로 → 뼈 행렬 갱신 8번 → 1번. 먼 거리용 한 덩어리 LOD */
     shareSkeleton(model);
     const hi = meshes.filter(m => m.isSkinnedMesh);
-    const lod = makeLod(hi);
+    const lod = null;   // 먼 거리 LOD 는 나중에(쉬는 틈에) 굽는다 — bakeLods() / setLod()
     /* root(발밑) → body(무게중심, 던질 때 여기서 구른다) → model */
     const body = new THREE.Group();
     body.position.y = COM;
@@ -372,7 +374,7 @@ export async function createNPCs({
     /* 코드로 덧붙이는 몸짓은 클립에 키가 없는 뼈에선 누적되므로, 믹서 갱신 전에 기본 자세로 되돌린다 */
     const boneRest = [];
     for (const k in bones) if (bones[k]) boneRest.push(bones[k], bones[k].quaternion.clone());
-    scene.add(root);
+    (buildHolder || scene).add(root);   // 처음 한꺼번에 만들 때는 다 만든 뒤 장면에 붙인다 (만드는 도중 프레임에 원점에 서 있지 않게)
     const mixer = new THREE.AnimationMixer(model);
     const actions = {};
     for (const clip of src.animations) {
@@ -405,7 +407,7 @@ export async function createNPCs({
       hist: Array.from({ length: HIST }, () => ({ x: 0, y: 0, z: 0, t: -1 })),
       sc, meshes, mats, shadow: true, bubble: null, boneRest, procDirty: false,
       standK: 0, standOn: false, standS: -9, standUntil: 0, standHop: 1, actSit: false,   // 서서 환호·마시기 덧씌우기 (standLayer)
-      hi, lod, lodOn: false, lodMats: hi.map(m => m.material),
+      hi, lod, lodOn: false, lodMats: [], noLod: hi.length < 2,
       guard: false, off: false, fight: null, foe: null, punchAnim: 0, gatherC: null, gx: 0, gz: 0, fx: 0, fz: 0,
       bar: -1, panicT: 0, panicX: 0, panicZ: 0, watchKind: 0, watchV: null, chatG: null, arrived: false, wiping: false, talkT: 0,
       propBone, propShow: null /* null = 클립대로, true/false = 잔 보이기/숨기기 (배우) */, carry: 0 /* 0..1 쟁반 들기 자세 */, bow: 0 /* 0..1 인사 */,
@@ -415,7 +417,14 @@ export async function createNPCs({
       socG: null, dPal: null, dAng0: 0, pcx: 0, pcz: 0, serveTo: null, hugO: null,
     };
   }
-  for (let i = 0; i < count; i++) npcs.push(makeNPC(sources[i % sources.length], i, i >= sources.length));
+  /* 한 프레임을 오래 막지 않게 몇 명씩 만들고 한 번 쉰다 (화면이 한 번 그려진 뒤 이어서) */
+  let buildHolder = new THREE.Group(), sliceT = performance.now();
+  const breathe = async () => {
+    if (performance.now() - sliceT < 6) return;
+    await new Promise(r => { const id = setTimeout(r, 60); requestAnimationFrame(() => { clearTimeout(id); setTimeout(r, 0); }); });
+    sliceT = performance.now();
+  };
+  for (let i = 0; i < count; i++) { npcs.push(makeNPC(sources[i % sources.length], i, i >= sources.length)); await breathe(); }
   const nWalkers = npcs.length;   // 이 뒤에 붙는 술집 주인은 배회·의자 계산에서 뺀다
 
   const api = {};   // 돌려줄 객체 (콜백 onAggression / onGuardCatch / onNpcEvent 를 events.js 가 단다)
@@ -612,8 +621,10 @@ export async function createNPCs({
   if (barkeepers) {
     const barSrc = sources.filter(q => /innkeeper|maid|baker/.test(q.file));
     const pool = barSrc.length ? barSrc : sources;
-    stalls.forEach((st, si) => {
-      if (!st.bar) return;
+    for (let si = 0; si < stalls.length; si++) {
+      const st = stalls[si];
+      if (!st.bar) continue;
+      await breathe();
       const n = makeNPC(pool[si % pool.length], npcs.length, true);
       n.bar = si;
       n.x = st.bar.x; n.z = st.bar.z; n.y = barFloor(n); n.rot = st.bar.rotY;
@@ -622,7 +633,23 @@ export async function createNPCs({
       n.cur.time = rnd() * CLIP_LEN.Idle;
       n.root.position.set(n.x, n.y, n.z); n.root.rotation.y = n.rot;
       npcs.push(n);
-    });
+    }
+  }
+  /* 다 만들고 자리를 잡았으니 장면에 붙인다. 먼 거리 LOD 는 쉬는 틈에 한 명씩 굽는다 */
+  for (const n of npcs) scene.add(n.root);
+  buildHolder = null;
+  {
+    const idle = cb => (window.requestIdleCallback ? requestIdleCallback(cb, { timeout: 500 }) : setTimeout(cb, 50));
+    let bi = 0;
+    const bakeNext = () => {
+      while (bi < npcs.length && (npcs[bi].lod || npcs[bi].noLod)) bi++;
+      if (bi >= npcs.length) return;
+      const n = npcs[bi++];
+      const nl = makeLod(n.hi);
+      if (nl && !n.lod) { n.lod = nl; n.lodMats = n.hi.map(m => m.material); } else if (nl) nl.removeFromParent(); else n.noLod = true;
+      idle(bakeNext);
+    };
+    idle(bakeNext);
   }
 
   /* 걷기 한 걸음: 목표점을 향해 돌고 앞으로 간다. 도착하면 true */
@@ -713,7 +740,7 @@ export async function createNPCs({
       n.dist = Math.hypot(pdx, pdz);
       const sh = n.dist < SHADOW_FAR;
       if (sh !== n.shadow) { n.shadow = sh; for (let k = 0; k < n.meshes.length; k++) n.meshes[k].castShadow = sh; if (n.lod) n.lod.castShadow = sh && n.lodOn; }
-      if (n.lod && (n.lodOn ? n.dist < LOD_FAR - 2 : n.dist > LOD_FAR)) setLod(n, !n.lodOn);
+      if (!n.noLod && (n.lodOn ? n.dist < LOD_FAR - 2 : n.dist > LOD_FAR)) setLod(n, !n.lodOn);
 
       /* ── 차에 치였나 (차 테두리 직사각형 + 몸 반지름) ── */
       if (n.hitCD > 0) n.hitCD -= dt;

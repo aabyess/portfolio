@@ -16,6 +16,11 @@
 
    4) flatSkinnedLOD(meshes, material): 부위 여러 개(텍스처 각각)를 정점색 한 덩어리로 합친 먼 거리용
       스킨 메시를 만든다 (텍스처를 정점 UV 자리에서 읽어 정점색으로 굽는다 → 그리기 호출 1개).
+      skinLOD(동물·아이)·npcs.js 는 이것을 만들 때가 아니라 쉬는 틈에 하나씩 굽는다.
+
+   5) createWarmup: 첫 화면 뒤에 장면에 붙는 물체의 셰이더(그림자용 포함)·텍스처를 몇 프레임에 나눠 준비한 다음 보여 주고,
+      나중에 붙을 점광원 자리를 미리 잡아 둔다 (점광원 수가 바뀌면 모든 셰이더를 다시 짠다).
+      Object3D.prototype.add 를 감싸 "새로 붙은 것"을 안다. graphics.js 가 만들고 render() 앞뒤로 begin/end 를 부른다.
    ════════════════════════════════════════════════════════════ */
 
 /* 비교용: 주소에 ?noperf 를 붙이면 이 파일의 최적화를 모두 끈다 (예전 그대로 그리기) */
@@ -401,28 +406,292 @@ export function addStaticLOD(THREE, root, { dist = 40, keep = null, roughness = 
 export function removeStaticLOD(L) { const i = LODS.indexOf(L); if (i >= 0) LODS.splice(i, 1); if (L && L.lo.parent) L.lo.parent.remove(L.lo); }
 
 /* ── 스킨 캐릭터(동물·아이)용 간단 LOD 묶음 ──
-   const L = skinLOD(THREE, model);  매 프레임: L.update(거리)  → far 넘으면 한 덩어리, 2 m 여유 */
+   const L = skinLOD(THREE, model);  매 프레임: L.update(거리)  → far 넘으면 한 덩어리, 2 m 여유
+   한 덩어리는 만들 때 굽지 않고 쉬는 틈(requestIdleCallback)에 하나씩 굽는다 — 동물·아이를 한꺼번에 만들 때
+   프레임이 길어지지 않게. 굽기 전에 멀어지면 그 자리에서 굽는다 */
 let skinLodMat = null;
 const skinLodBase = new Map();
+const lodQueue = [];
+let lodIdle = false;
+function bakeIdle() {
+  if (lodIdle || !lodQueue.length) return;
+  lodIdle = true;
+  const run = () => (window.requestIdleCallback ? requestIdleCallback(go, { timeout: 600 }) : setTimeout(go, 40));
+  const go = () => {
+    const L = lodQueue.shift();
+    if (L) L.bake();
+    if (lodQueue.length) run(); else lodIdle = false;
+  };
+  run();
+}
 export function skinLOD(THREE, root, { far = 22 } = {}) {
   if (PERF_OFF) return null;
   const hi = [];
   root.traverse(o => { if (o.isSkinnedMesh) hi.push(o); });
   if (hi.length < 2) return null;
   if (!skinLodMat) skinLodMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0 });
-  let lod = null;
-  try { lod = flatSkinnedLOD(THREE, hi, skinLodMat, skinLodBase); } catch (e) { console.warn('[perf] skinLOD', e); }
-  if (!lod) return null;
   const L = {
-    hi, lod, on: false, far,
+    hi, lod: null, on: false, far, failed: false,
+    bake() {
+      if (L.lod || L.failed) return L.lod;
+      try { L.lod = flatSkinnedLOD(THREE, hi, skinLodMat, skinLodBase); } catch (e) { console.warn('[perf] skinLOD', e); }
+      if (!L.lod) L.failed = true;
+      return L.lod;
+    },
     update(d) {
       const want = L.on ? d > far - 2 : d > far;
       if (want === L.on) return;
+      if (want && !L.bake()) return;   // 못 구우면 원래 메시 그대로
       L.on = want;
       for (let k = 0; k < hi.length; k++) hi[k].visible = !want;
-      lod.visible = want;
-      lod.castShadow = want && hi[0].castShadow;
+      L.lod.visible = want;
+      L.lod.castShadow = want && hi[0].castShadow;
     }
   };
+  lodQueue.push(L);
+  bakeIdle();
   return L;
+}
+
+/* ── 5) createWarmup: 첫 화면 뒤에 붙는 물체를 "준비된 다음에" 보여 준다 (나타나는 순간 화면이 멈추지 않게) ──
+   첫 화면 뒤에 성·손님·동물 등이 장면에 붙으면, 처음 그리는 프레임에서 셰이더 수십 개를 컴파일하고 텍스처를 올리느라
+   0.2~0.5초씩 멈췄다. 그래서
+     · Object3D.add 를 살짝 감싸 "새로 붙은 것"을 기록하고(arm() 뒤부터), 그리기 직전에(begin) 그 안의 재질 중
+       프로그램이 아직 없는 것만 renderer.compile 로 몇 개씩(프레임당 budgetMs) 준비시킨다.
+       KHR_parallel_shader_compile 이 있으면 컴파일은 GPU 쪽에서 따로 돌고, 다 됐는지는 막히지 않고 물어볼 수 있다.
+     · 준비가 끝날 때까지 그 메시들은 그리는 동안만 잠깐 숨긴다 (모듈이 정한 visible 은 건드리지 않음 — end() 에서 되돌린다).
+     · 셰이더가 다 되면 텍스처를 프레임마다 조금씩 올린(initTexture) 뒤 보여 준다.
+     · 점광원 개수가 바뀌면 three 는 장면의 모든 셰이더를 다시 짠다. 그래서 나중에 붙을 점광원 수(reserveLights)만큼
+       세기 0 인 자리표시 빛을 처음부터 두고, 진짜 점광원이 붙을 때마다 하나씩 뺀다 → 개수가 끝까지 같다.
+   graphics.js 의 render() 가 부른다: warm.begin() → cull.begin() → 그리기 → cull.end() → warm.end() */
+let WARM_HOOK = null;
+export function createWarmup({ THREE, renderer, scene, camera, getTarget = () => null, getShadowTarget = () => null, reserveLights = 0, budgetMs = 5 }) {
+  const props = renderer.properties;
+  const proto = THREE.Object3D.prototype;
+  if (!proto.__warmAdd0) {
+    const add0 = proto.add;
+    proto.__warmAdd0 = add0;
+    proto.add = function (...objs) {
+      const r = add0.apply(this, objs);
+      if (WARM_HOOK) for (let i = 0; i < objs.length; i++) WARM_HOOK(objs[i]);
+      return r;
+    };
+  }
+  const recent = [];
+  /* 자리표시 점광원 — 아주 멀리, 세기 0, 거리 1 */
+  const reserve = [];
+  if (!PERF_OFF) for (let i = 0; i < reserveLights; i++) {
+    const L = new THREE.PointLight(0x000000, 0, 1, 2);
+    L.name = 'warm_reserve_light'; L.userData.__reserve = true; L.position.set(0, -900, 0);
+    scene.add(L); reserve.push(L);
+  }
+  /* renderer.compile(obj, camera, targetScene) 은 부를 때마다 targetScene 전체를 훑어 빛을 모은다.
+     빛 목록만 돌려주는 대리 장면을 넘겨 그 비용을 없앤다 (안개·환경맵은 원래 장면 것을 그대로 본다).
+     그림자 패스는 안개 없는 장면으로 그리므로 fog=null 인 대리 장면을 따로 둔다 */
+  const lights = [];
+  const litScene = Object.create(scene);
+  litScene.traverseVisible = cb => { for (let i = 0; i < lights.length; i++) cb(lights[i]); };
+  const shadowScene = Object.create(litScene);
+  shadowScene.fog = null;
+  function gatherLights() {
+    lights.length = 0;
+    scene.traverseVisible(o => { if (o.isLight) lights.push(o); });
+  }
+
+  const counted = new WeakSet();   // 이미 센 진짜 점광원
+  const variants = new WeakMap();  // 재질 → 준비한 변형(인스턴싱·스킨 등) 집합
+  const queued = new WeakSet();    // 이미 훑은 메시
+  const jobs = [];                 // { meshes, progs:Set, tex:[], t0, pending, progOk }
+  const compileQ = [];             // { o, job, shadow, mats, v }
+  const held = new Set();
+  const hidden = [];
+  const st = { jobs: 0, held: 0, compiled: 0, shadow: 0, textures: 0, lightsLeft: reserve.length };
+
+  /* 같은 재질이라도 메시 종류(인스턴싱·스킨·모프)·지오메트리 속성에 따라 프로그램이 다르다 */
+  function variantOf(x) {
+    const g = x.geometry, a = g ? g.attributes : {};
+    return (x.isInstancedMesh ? (x.instanceColor ? 'ic' : 'i') : '') + (x.isSkinnedMesh ? 's' : '') +
+      (g && g.morphAttributes && (g.morphAttributes.position || g.morphAttributes.normal || g.morphAttributes.color) ? 'm' : '') +
+      (x.isPoints ? 'p' : x.isLine ? 'l' : x.isSprite ? 'S' : '') +
+      (a.tangent ? 't' : '') + (a.uv1 ? '1' : '') + (a.color && a.color.itemSize === 4 ? 'a' : '');
+  }
+  function hasVariant(m, v) { const s = variants.get(m); return !!s && s.has(v); }
+  function addVariant(m, v) { let s = variants.get(m); if (!s) variants.set(m, s = new Set()); s.add(v); }
+
+  /* 그림자 지도용 깊이 재질 — three(WebGLShadowMap)가 고르는 것과 성질이 같으면 같은 프로그램을 쓴다 */
+  const SHADOW_SIDE = { [THREE.FrontSide]: THREE.BackSide, [THREE.BackSide]: THREE.FrontSide, [THREE.DoubleSide]: THREE.DoubleSide };
+  const depthMats = new Map();
+  function depthFor(m) {
+    const side = m.shadowSide !== null && m.shadowSide !== undefined ? m.shadowSide : SHADOW_SIDE[m.side];
+    const disp = !!(m.displacementMap && m.displacementScale !== 0);
+    const k = `${!!m.map}|${!!m.alphaMap}|${m.alphaTest > 0}|${side}|${disp}`;
+    let d = depthMats.get(k);
+    if (!d) {
+      d = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+      d.map = m.map || null; d.alphaMap = m.alphaMap || null; d.alphaTest = m.alphaTest; d.side = side;
+      if (disp) { d.displacementMap = m.displacementMap; d.displacementScale = m.displacementScale; }
+      depthMats.set(k, d);
+    }
+    return d;
+  }
+
+  function visibleChain(o) { for (; o; o = o.parent) if (!o.visible) return false; return true; }
+  function texReady(t) {
+    if (!t.image || t.isRenderTargetTexture || t.isVideoTexture || t.version === 0) return true;
+    const tp = props.get(t);
+    return tp.__webglInit === true && tp.__version === t.version;
+  }
+  function texOf(m, out) {
+    for (const k in m) { const v = m[k]; if (v && v.isTexture && !texReady(v)) out.push(v); }
+    if (m.uniforms) for (const k in m.uniforms) { const u = m.uniforms[k]; const v = u && u.value; if (v && v.isTexture && !texReady(v)) out.push(v); }
+  }
+  function scan(o, job) {
+    o.traverse(x => {
+      if (x.isPointLight && !x.userData.__reserve && !counted.has(x) && visibleChain(x)) {
+        counted.add(x);
+        const p = reserve.pop();
+        if (p) { p.removeFromParent(); st.lightsLeft = reserve.length; }
+      }
+      if (!x.material || !(x.isMesh || x.isPoints || x.isLine || x.isSprite) || queued.has(x)) return;
+      queued.add(x);
+      const nt = job.tex.length, v = variantOf(x);
+      /* 스킨 메시의 뼈 텍스처도 미리 만들어 올린다 (처음 그릴 때 만들면 그 프레임이 길어진다) */
+      if (x.isSkinnedMesh && x.skeleton) {
+        if (!x.skeleton.boneTexture) x.skeleton.computeBoneTexture();
+        if (x.skeleton.boneTexture && !texReady(x.skeleton.boneTexture)) job.tex.push(x.skeleton.boneTexture);
+      }
+      const ms = Array.isArray(x.material) ? x.material : [x.material];
+      const need = [];
+      for (const m of ms) {
+        if (!m) continue;
+        texOf(m, job.tex);   // 이미 그려진 재질이라도 텍스처가 새것일 수 있다 (옷 색 바꾸기 등)
+        if (x.isMesh && x.castShadow) {   // 그림자용 프로그램
+          const d = depthFor(m);
+          if (!hasVariant(d, v)) {
+            addVariant(d, v);
+            const proxy = Object.create(x);   // 스킨·인스턴스·지오메트리는 원래 메시 것, 재질만 깊이 재질
+            proxy.material = d;
+            compileQ.push({ o: proxy, job, shadow: true, mats: [d], v });
+          }
+        }
+        if (!hasVariant(m, v)) need.push(m);
+      }
+      if (need.length) compileQ.push({ o: x, job, shadow: false, mats: need, v });
+      if (need.length || job.tex.length > nt) job.meshes.push(x);
+    });
+  }
+  function collect() {
+    if (!recent.length) return;
+    const list = recent.splice(0);
+    const set = new Set(list);
+    const job = { meshes: [], progs: new Set(), tex: [], t0: performance.now(), pending: 0, progOk: false };
+    const q0 = compileQ.length;
+    for (const o of list) {
+      /* 장면에 붙어 있고, 같은 묶음에 조상이 없을 때만 (조상 쪽에서 통째로 훑는다) */
+      let p = o.parent, under = false, inScene = false;
+      for (; p; p = p.parent) { if (set.has(p)) { under = true; break; } if (p === scene) { inScene = true; break; } }
+      if (under || !inScene) continue;
+      scan(o, job);
+    }
+    job.pending = compileQ.length - q0;
+    if (!job.meshes.length && !job.pending) return;
+    jobs.push(job);
+    /* 점광원을 품은 메시는 숨기지 않는다 (숨기면 빛 개수가 바뀌어 모든 셰이더를 다시 짠다) */
+    for (const m of job.meshes) if (!(m.children.length && m.getObjectByProperty('isLight', true))) held.add(m);
+  }
+  let one = null;
+  const duck = { traverse(cb) { cb(one); }, traverseVisible() {} };
+  function compileSome(t0) {
+    if (!compileQ.length) return;
+    gatherLights();
+    const prev = renderer.getRenderTarget();
+    try {
+      while (compileQ.length && performance.now() - t0 < budgetMs) {
+        const it = compileQ.shift();
+        it.job.pending--;
+        if (!it.shadow && it.mats.every(m => hasVariant(m, it.v))) continue;   // 앞에서 같은 재질·변형을 이미 준비함
+        let tg;
+        if (it.shadow) { tg = getShadowTarget() || getTarget(); if (!tg) continue; }   // 그림자 패스는 그림자 지도(렌더 타깃)에 그린다
+        else tg = getTarget();   // 후처리를 쓰면 장면은 렌더 타깃에 그린다 → 톤매핑·색공간 정의가 달라진다
+        renderer.setRenderTarget(tg);
+        one = it.o;
+        /* 재질 하나만 바꿔 넣은 대리 메시로 컴파일 (배열 재질 메시는 준비할 재질만) */
+        if (!it.shadow && Array.isArray(it.o.material)) {
+          for (const m of it.mats) { one = Object.create(it.o); one.material = m; renderer.compile(duck, camera, litScene); const p = props.get(m).currentProgram; if (p) it.job.progs.add(p); addVariant(m, it.v); }
+        } else {
+          renderer.compile(duck, camera, it.shadow ? shadowScene : litScene);
+          for (const m of it.mats) { const p = props.get(m).currentProgram; if (p) it.job.progs.add(p); addVariant(m, it.v); }
+        }
+        if (it.shadow) st.shadow++; else st.compiled++;
+      }
+    } catch (e) { console.warn('[warmup]', e); compileQ.length = 0; for (const j of jobs) j.pending = 0; }
+    one = null;
+    renderer.setRenderTarget(prev);
+  }
+  function progsReady(job) {
+    if (job.progOk) return true;
+    if (job.pending > 0) return false;
+    for (const p of job.progs) if (!p.isReady()) return false;
+    return (job.progOk = true);
+  }
+  function step(t0) {
+    /* 텍스처는 컴파일 중인 셰이더가 하나도 없을 때만 올린다 — GPU 쪽이 컴파일로 바쁠 때 올리면
+       1024 텍스처 하나에 20~50 ms 씩 막혔다 (한가할 때는 1 ms) */
+    let allOk = !compileQ.length;
+    for (const job of jobs) if (!progsReady(job)) allOk = false;
+    for (let j = 0; j < jobs.length; j++) {
+      const job = jobs[j];
+      const old = performance.now() - job.t0 > 5000;   // 어떤 이유로든 5초 넘게 걸리면 그냥 보여 준다
+      if (!old) {
+        if (!job.progOk || !allOk) continue;
+        while (job.tex.length && performance.now() - t0 < budgetMs) {
+          const t = job.tex.pop();
+          if (texReady(t)) continue;
+          try { renderer.initTexture(t); st.textures++; } catch (e) { /* 무시 */ }
+        }
+        if (job.tex.length) continue;
+      }
+      for (const m of job.meshes) held.delete(m);
+      jobs.splice(j--, 1);
+    }
+    st.jobs = jobs.length; st.held = held.size;
+  }
+
+  /* 숨어 있거나 멀어서 아직 한 번도 안 그려진 물체(다른 탈것·무기·먼 마을)의 텍스처를 한가할 때 미리 올린다.
+     안 그러면 처음 보이는 순간(탈것 바꾸기·멀리 이동) 그 프레임에 몰아서 올리느라 끊긴다 */
+  const idleTex = [];
+  function preloadTextures() {
+    const seen = new Set();
+    scene.traverse(o => {
+      const ms = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : null;
+      if (ms) for (const m of ms) if (m) { const out = []; texOf(m, out); for (const t of out) if (!seen.has(t)) { seen.add(t); idleTex.push(t); } }
+    });
+    st.idleTex = idleTex.length;
+  }
+  function begin() {
+    if (!WARM_HOOK) return;
+    const t0 = performance.now();
+    collect();
+    compileSome(t0);
+    step(t0);
+    if (idleTex.length && !jobs.length && !compileQ.length) {   // 한 프레임에 하나씩, 할 일이 없을 때만
+      const t = idleTex.pop();
+      if (!texReady(t)) try { renderer.initTexture(t); st.textures++; } catch (e) { /* 무시 */ }
+    }
+    for (const m of held) if (m.visible) { m.visible = false; hidden.push(m); }
+  }
+  function end() {
+    for (let i = 0; i < hidden.length; i++) hidden[i].visible = true;
+    hidden.length = 0;
+  }
+  /* 첫 화면이 뜬 다음부터 기록한다 (그 전 것은 처음 compileAll 이 한꺼번에 준비한다) */
+  function arm() { if (!PERF_OFF) WARM_HOOK = o => { if (recent.length > 20000) recent.length = 0; recent.push(o); }; }   // 문서 뷰처럼 안 그리는 동안 끝없이 쌓이지 않게
+  /* 처음 화면용: 장면 전체를 (렌더 타깃 기준으로) 비동기 컴파일 */
+  function compileAll() {
+    if (!renderer.compileAsync) return Promise.resolve();
+    const prev = renderer.getRenderTarget();
+    renderer.setRenderTarget(getTarget());
+    try { return renderer.compileAsync(scene, camera); } finally { renderer.setRenderTarget(prev); }
+  }
+  return { begin, end, arm, compileAll, preloadTextures, stats: () => ({ ...st, idleLeft: idleTex.length }) };
 }

@@ -2761,8 +2761,10 @@ async function initDrive() {
 
   /* ── 그래픽 (graphics.js) — 빛 번짐·색 보정·땅안개·물·햇살 줄기, 화질 자동 조절 (음악 버튼 옆 "화질") ── */
   const { createGraphics } = await import('./graphics.js');
+  /* reserveLights: 첫 화면 뒤에 붙는 점광원 수 — 성문 횃불 1 · 마을 등불 2 (village-props) · 축제 1 · 행사 1.
+     점광원 개수가 바뀌면 모든 셰이더를 다시 짜서 0.3초씩 멈췄다. 처음부터 자리를 잡아 두고 진짜 빛이 붙으면 하나씩 뺀다 (perf.js createWarmup) */
   const gfx = await createGraphics({ THREE, renderer, scene, camera, sun, hemi, sky, getPlayerPos: () => activePos(),
-    getNight: () => night, getSeason: () => seasons.season });
+    getNight: () => night, getSeason: () => seasons.season, reserveLights: 5 });
 
   function loop() {
     requestAnimationFrame(loop);
@@ -2794,7 +2796,7 @@ async function initDrive() {
     started = true;
     performance.mark('assets-ready');
     for (const u of DEFERRED_MODULES) import(u).catch(() => {});   // 파일만 미리 받는다 (만드는 건 첫 프레임 뒤)
-    const warm = renderer.compileAsync ? renderer.compileAsync(scene, camera).catch(() => {}) : Promise.resolve();
+    const warm = gfx.warm.compileAll().catch(() => {});   // 후처리 렌더 타깃 기준으로 (화면 기준이면 톤매핑 정의가 달라 첫 프레임에 다시 컴파일했다)
     Promise.race([warm, new Promise(r => setTimeout(r, 2500))]).then(reveal);
   }
   function reveal() {
@@ -2802,6 +2804,7 @@ async function initDrive() {
     bar.style.width = '100%'; pctEl.textContent = '100%';
     setTimeout(() => load.classList.add('done'), 260);
     loop();
+    gfx.warm.arm();   // 이제부터 장면에 붙는 것은 셰이더·텍스처를 몇 프레임에 나눠 준비한 다음 보여 준다 (perf.js)
     /* 첫 프레임이 실제로 그려진 다음(rAF 두 번) 나머지를 만들기 시작한다.
        탭이 뒤에 있으면 rAF 가 돌지 않으므로 1초 타이머로도 시작한다 (뒤 탭에서도 받아 두게) */
     let kicked = false;
@@ -2835,6 +2838,8 @@ async function initDrive() {
     await run('audio', loadAudio);
     await Promise.all([people, beasts, kidsP]);
     performance.mark('deferred-done');
+    gfx.settle();   // 이제부터 화질 자동 조절이 프레임을 잰다 (로딩 중 느린 프레임으로 화질을 낮추지 않게)
+    if (gfx.state().quality !== 'low') setTimeout(() => gfx.warm.preloadTextures(), 1500);   // (휴대폰·저화질 제외) 안 보이던 탈것·무기·먼 곳 텍스처를 한 프레임에 하나씩 미리 올린다
   }
   manager.onLoad = start;
   if (mgrPending === 0) start();   // 이미 다 받았으면 기다리지 않는다 (예전엔 여기서 4초를 헛기다렸다)
