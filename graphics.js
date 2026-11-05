@@ -116,9 +116,9 @@ export async function createGraphics({ THREE, renderer, scene, camera, getNight 
   let stored = null;
   try { stored = localStorage.getItem(STORE); } catch (e) { /* 저장소가 막혀도 동작 */ }
   const qParam = new URLSearchParams(location.search).get('gfx');
-  /* 저사양 짐작: 코어 4개 이하이거나 메모리 4GB 이하면 '보통'으로 시작한다 (빠르면 아래 자동 조절이 '높음'으로 올린다) */
-  const weak = (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) || (navigator.deviceMemory && navigator.deviceMemory <= 4);
-  const startQ = mobile ? 'low' : weak ? 'mid' : 'high';
+  /* 데스크톱도 '보통'으로 시작한다 — '높음'(2배 해상도·MSAA 4배·햇살 줄기)은 Retina 노트북에서 화면 채우기만으로 버벅인다.
+     여유가 있으면(두 번 연속 58fps 넘게) 아래 자동 조절이 '높음'으로 올린다 */
+  const startQ = mobile ? 'low' : 'mid';
   let auto = true, q = startQ;
   const pick = quality || qParam || stored;
   if (pick && QUALITY[pick]) { q = pick; auto = false; }
@@ -408,11 +408,11 @@ export async function createGraphics({ THREE, renderer, scene, camera, getNight 
       perf.acc = 0; perf.n = 0;
       /* 첫 화면 뒤 불러오기(손님·성·동물…)가 끝나기 전(settle() 3초 뒤, 늦어도 15초)은 재지 않는다 — 그동안 느린 건 로딩 탓이다.
          바꾼 뒤엔 3초 기다린다. 내리는 건 두 번(약 3초) 연속 느릴 때만.
-         high → mid: 42fps 아래 / mid → low: 30fps 아래 (그리기 호출이 많아 CPU가 병목일 땐 low로 가도 크게 안 빨라진다)
+         high → mid: 52fps 아래 / mid → low: 40fps 아래 (42·30 은 버벅임이 보이는데도 내리지 않았다) (그리기 호출이 많아 CPU가 병목일 땐 low로 가도 크게 안 빨라진다)
          올리기(휴대폰 제외): '높음'보다 낮은데 두 번 연속 58fps 넘게 여유가 있으면 한 단계 올린다. 올렸다가 다시 내려가면 더는 올리지 않는다 */
       if (auto && now > perf.settleAt && now - perf.lastChange > 3000) {
         const i = ORDER.indexOf(q);
-        if (perf.avg > (q === 'high' ? 1000 / 42 : 1000 / 30)) {
+        if (perf.avg > (q === 'high' ? 1000 / 52 : 1000 / 40)) {
           perf.fast = 0;
           if (i < ORDER.length - 1 && ++perf.slow >= 2) {   // 두 번 연속 느릴 때만 (한 번 끊긴 걸로 내리지 않게)
             perf.slow = 0;
