@@ -506,9 +506,10 @@ export function createFishing({
   /* 연못 안 풀(InstancedMesh) 을 숨긴다 — 물 위로 풀이 삐죽 나오지 않게 */
   if (hideGrass) {
     scene.traverse(o => {
-      if (!o.isInstancedMesh || o.count < 3000 || o.parent === group) return;
+      if (!o.isInstancedMesh || (o.count < 3000 && !o.userData.grassTotal) || o.parent === group) return;
       let n = 0; const e = o.instanceMatrix.array;
-      for (let i = 0; i < o.count; i++) {
+      const total = o.userData.grassTotal || o.count;   // 풀 구역(portfolio.js)은 거리에 따라 count 를 줄이므로 전체 개수로 돈다
+      for (let i = 0; i < total; i++) {
         const x = e[i * 16 + 12], z = e[i * 16 + 14];
         for (const p of ponds) {
           if (Math.abs(x - p.x) > p.r + 0.7 || Math.abs(z - p.z) > p.r + 0.7) continue;

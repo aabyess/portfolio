@@ -29,9 +29,9 @@
 import { createFarCull, createWarmup, PERF_OFF } from './perf.js';
 
 const QUALITY = {
-  low:  { pr: 1.25, post: false, shadow: 1024, bloomScale: 0,   rays: false, msaa: 0, fxaa: false, grain: 0 },
-  mid:  { pr: 1.5,  post: true,  shadow: 2048, bloomScale: 0.5, rays: false, msaa: 0, fxaa: true,  grain: 0 },
-  high: { pr: 2,    post: true,  shadow: 2048, bloomScale: 1,   rays: true,  msaa: 4, fxaa: false, grain: 0.022 }
+  low:  { far: 70,  pr: 1.25, post: false, shadow: 1024, bloomScale: 0,   rays: false, msaa: 0, fxaa: false, grain: 0 },
+  mid:  { far: 95,  pr: 1.5,  post: true,  shadow: 2048, bloomScale: 0.5, rays: false, msaa: 0, fxaa: true,  grain: 0 },
+  high: { far: 0,   pr: 2,    post: true,  shadow: 2048, bloomScale: 1,   rays: true,  msaa: 4, fxaa: false, grain: 0.022 }
 };
 const ORDER = ['high', 'mid', 'low'];
 const LABEL = { high: '높음', mid: '보통', low: '낮음' };
@@ -116,9 +116,9 @@ export async function createGraphics({ THREE, renderer, scene, camera, getNight 
   let stored = null;
   try { stored = localStorage.getItem(STORE); } catch (e) { /* 저장소가 막혀도 동작 */ }
   const qParam = new URLSearchParams(location.search).get('gfx');
-  /* 저사양 짐작: 코어 4개 이하이거나 메모리 4GB 이하면 '보통'으로 시작한다 (빠르면 아래 자동 조절이 '높음'으로 올린다) */
-  const weak = (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) || (navigator.deviceMemory && navigator.deviceMemory <= 4);
-  const startQ = mobile ? 'low' : weak ? 'mid' : 'high';
+  /* 데스크톱도 '보통'으로 시작한다 — '높음'(2배 해상도·MSAA 4배·햇살 줄기)은 Retina 노트북에서 화면 채우기만으로 버벅인다.
+     여유가 있으면(두 번 연속 58fps 넘게) 아래 자동 조절이 '높음'으로 올린다 */
+  const startQ = mobile ? 'low' : 'mid';
   let auto = true, q = startQ;
   const pick = quality || qParam || stored;
   if (pick && QUALITY[pick]) { q = pick; auto = false; }
@@ -408,11 +408,11 @@ export async function createGraphics({ THREE, renderer, scene, camera, getNight 
       perf.acc = 0; perf.n = 0;
       /* 첫 화면 뒤 불러오기(손님·성·동물…)가 끝나기 전(settle() 3초 뒤, 늦어도 15초)은 재지 않는다 — 그동안 느린 건 로딩 탓이다.
          바꾼 뒤엔 3초 기다린다. 내리는 건 두 번(약 3초) 연속 느릴 때만.
-         high → mid: 42fps 아래 / mid → low: 30fps 아래 (그리기 호출이 많아 CPU가 병목일 땐 low로 가도 크게 안 빨라진다)
+         high → mid: 52fps 아래 / mid → low: 40fps 아래 (42·30 은 버벅임이 보이는데도 내리지 않았다) (그리기 호출이 많아 CPU가 병목일 땐 low로 가도 크게 안 빨라진다)
          올리기(휴대폰 제외): '높음'보다 낮은데 두 번 연속 58fps 넘게 여유가 있으면 한 단계 올린다. 올렸다가 다시 내려가면 더는 올리지 않는다 */
       if (auto && now > perf.settleAt && now - perf.lastChange > 3000) {
         const i = ORDER.indexOf(q);
-        if (perf.avg > (q === 'high' ? 1000 / 42 : 1000 / 30)) {
+        if (perf.avg > (q === 'high' ? 1000 / 52 : 1000 / 40)) {
           perf.fast = 0;
           if (i < ORDER.length - 1 && ++perf.slow >= 2) {   // 두 번 연속 느릴 때만 (한 번 끊긴 걸로 내리지 않게)
             perf.slow = 0;
@@ -433,6 +433,10 @@ export async function createGraphics({ THREE, renderer, scene, camera, getNight 
     measure(performance.now());
     renderer.info.reset();
     timeU.value += dt;
+    /* 그리기 반경: 화질별로 안개 끝에 상한을 둔다 (한낮 150 m 면 마을 전체를 그린다). sky.update 가 매 프레임 near/far 를
+       새로 쓰므로 여기서 줄여도 쌓이지 않는다. 안개 끝 너머는 perf.js 컬링·풀 구역이 알아서 빼므로 그리는 양이 같이 준다 */
+    const FAR = QUALITY[q].far;
+    if (FAR && scene.fog && scene.fog.far > FAR) { const k = FAR / scene.fog.far; scene.fog.far = FAR; scene.fog.near *= k; }
     scanWater();
     updateLook(dt);
     /* low: 그림자 지도를 두 프레임에 한 번만 다시 그린다 (그림자 패스 그리기 호출이 절반) */
