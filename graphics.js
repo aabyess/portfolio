@@ -29,9 +29,9 @@
 import { createFarCull, createWarmup, PERF_OFF } from './perf.js';
 
 const QUALITY = {
-  low:  { pr: 1.25, post: false, shadow: 1024, bloomScale: 0,   rays: false, msaa: 0, fxaa: false, grain: 0 },
-  mid:  { pr: 1.5,  post: true,  shadow: 2048, bloomScale: 0.5, rays: false, msaa: 0, fxaa: true,  grain: 0 },
-  high: { pr: 2,    post: true,  shadow: 2048, bloomScale: 1,   rays: true,  msaa: 4, fxaa: false, grain: 0.022 }
+  low:  { far: 70,  pr: 1.25, post: false, shadow: 1024, bloomScale: 0,   rays: false, msaa: 0, fxaa: false, grain: 0 },
+  mid:  { far: 95,  pr: 1.5,  post: true,  shadow: 2048, bloomScale: 0.5, rays: false, msaa: 0, fxaa: true,  grain: 0 },
+  high: { far: 0,   pr: 2,    post: true,  shadow: 2048, bloomScale: 1,   rays: true,  msaa: 4, fxaa: false, grain: 0.022 }
 };
 const ORDER = ['high', 'mid', 'low'];
 const LABEL = { high: '높음', mid: '보통', low: '낮음' };
@@ -433,6 +433,10 @@ export async function createGraphics({ THREE, renderer, scene, camera, getNight 
     measure(performance.now());
     renderer.info.reset();
     timeU.value += dt;
+    /* 그리기 반경: 화질별로 안개 끝에 상한을 둔다 (한낮 150 m 면 마을 전체를 그린다). sky.update 가 매 프레임 near/far 를
+       새로 쓰므로 여기서 줄여도 쌓이지 않는다. 안개 끝 너머는 perf.js 컬링·풀 구역이 알아서 빼므로 그리는 양이 같이 준다 */
+    const FAR = QUALITY[q].far;
+    if (FAR && scene.fog && scene.fog.far > FAR) { const k = FAR / scene.fog.far; scene.fog.far = FAR; scene.fog.near *= k; }
     scanWater();
     updateLook(dt);
     /* low: 그림자 지도를 두 프레임에 한 번만 다시 그린다 (그림자 패스 그리기 호출이 절반) */

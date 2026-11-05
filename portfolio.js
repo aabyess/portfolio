@@ -995,18 +995,50 @@ async function initDrive() {
         spots.push([gx, gz]);
       }
     }
-    const grass = new THREE.InstancedMesh(tuft, gm, spots.length);
+    /* 성능: 예전엔 지도 전체 풀(약 7.6만 포기, 91만 삼각형)이 InstancedMesh 하나라 등 뒤·안개 너머까지 매 프레임 다 그렸다.
+       CH m 구역으로 나눠 ① 화면 밖 구역은 three 기본 시야 컬링으로 빠지고 ② 그릴 때(onBeforeRender) 카메라에서 먼 구역은
+       앞쪽 일부만 그린다(구역 안 순서를 섞어 두어 앞쪽 n개 = 고르게 성긴 풀). 안개 끝 너머 구역은 0개.
+       전체 개수는 userData.grassTotal (fishing.js 가 연못 안 풀을 지울 때 쓴다) */
+    const CH = 14, G_NEAR = 24, G_FAR = 72, G_MIN = 0.3;
+    const nCX = Math.ceil(HX * 2 / CH), nCZ = Math.ceil(HZ * 2 / CH);
+    const buckets = Array.from({ length: nCX * nCZ }, () => []);
+    for (const s of spots) {
+      const cx = Math.min(nCX - 1, Math.max(0, Math.floor((s[0] + HX) / CH)));
+      const cz = Math.min(nCZ - 1, Math.max(0, Math.floor((s[1] + HZ) / CH)));
+      buckets[cz * nCX + cx].push(s);
+    }
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
     const tint = new THREE.Color();
-    spots.forEach(([x, z], i) => {
-      e.set((Math.random() - .5) * 0.2, Math.random() * Math.PI * 2, (Math.random() - .5) * 0.2);
-      const k = 0.75 + Math.random() * 0.55;
-      m4.compose(ps.set(x, heightAt(x, z), z), q.setFromEuler(e), sc.set(k, k * (0.85 + Math.random() * 0.4), k));
-      grass.setMatrixAt(i, m4);
-      grass.setColorAt(i, tint.setScalar(0.88 + Math.random() * 0.24));
+    buckets.forEach((list, bi) => {
+      if (!list.length) return;
+      for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; }
+      const grass = new THREE.InstancedMesh(tuft, gm, list.length);
+      grass.name = 'grass-chunk';
+      let minY = Infinity, maxY = -Infinity;
+      list.forEach(([x, z], i) => {
+        e.set((Math.random() - .5) * 0.2, Math.random() * Math.PI * 2, (Math.random() - .5) * 0.2);
+        const k = 0.75 + Math.random() * 0.55, y = heightAt(x, z);
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+        m4.compose(ps.set(x, y, z), q.setFromEuler(e), sc.set(k, k * (0.85 + Math.random() * 0.4), k));
+        grass.setMatrixAt(i, m4);
+        grass.setColorAt(i, tint.setScalar(0.88 + Math.random() * 0.24));
+      });
+      const x0 = -HX + (bi % nCX) * CH, z0 = -HZ + Math.floor(bi / nCX) * CH;
+      const total = list.length;
+      grass.userData.grassTotal = total;
+      /* 경계 구: 구역 사각형 + 바람에 흔들리는 폭 (계산을 미리 해 두면 count 를 바꿔도 컬링이 흔들리지 않는다) */
+      grass.boundingSphere = new THREE.Sphere(new THREE.Vector3(x0 + CH / 2, (minY + maxY) / 2 + 0.3, z0 + CH / 2),
+        Math.hypot(CH / 2 + 0.6, CH / 2 + 0.6, (maxY - minY) / 2 + 0.6));
+      grass.onBeforeRender = (r, s, cam) => {
+        const dx = Math.max(x0 - cam.position.x, 0, cam.position.x - (x0 + CH));
+        const dz = Math.max(z0 - cam.position.z, 0, cam.position.z - (z0 + CH));
+        const d = Math.hypot(dx, dz), fogFar = scene.fog ? scene.fog.far : Infinity;
+        const f = d >= fogFar ? 0 : d <= G_NEAR ? 1 : Math.max(G_MIN, 1 - (d - G_NEAR) / (G_FAR - G_NEAR) * (1 - G_MIN));
+        grass.count = Math.round(total * f);
+      };
+      grass.receiveShadow = true;
+      scene.add(grass);
     });
-    grass.receiveShadow = true;
-    scene.add(grass);
   }
 
   /* ── 날리는 낙엽 ── */
